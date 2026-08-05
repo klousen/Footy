@@ -6,6 +6,15 @@ export const FIRST_NAMES = [
   "Rafael", "Mateo", "Kwame", "Diego", "Sven", "Ibrahim", "Nico", "Tomás",
 ];
 
+// Für Partner:innen und andere Nebenfiguren - unabhängig vom Geschlecht des
+// eigenen Spielers wird bewusst aus einem gemischten Namenspool gezogen
+// (siehe `randomPartnerName`), statt nur männlich klingende Namen zu ziehen.
+export const FEMALE_FIRST_NAMES = [
+  "Mia", "Lena", "Sofia", "Emma", "Lea", "Amira", "Nora", "Elif", "Jana",
+  "Carla", "Zoe", "Isabel", "Fatima", "Klara", "Valentina", "Anja", "Sara",
+  "Ines", "Priya", "Aylin", "Camila", "Meike", "Layla", "Nika", "Marisol",
+];
+
 export const LAST_NAMES = [
   "Berger", "Winkler", "Kessler", "Vogt", "Brandt", "Sommer", "Hartmann",
   "Reiter", "Kessling", "Adeyemi", "Rossi", "Fischer", "Novak", "Petrov",

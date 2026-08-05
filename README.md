@@ -30,14 +30,25 @@ im höheren Alter.
   wer über längere Zeit kaum spielt, gerät in eine sichtbare Bankphase -
   kann sich aber per Entscheidung zurückkämpfen oder einen Neuanfang bei
   einem anderen Verein wagen. Rollenwechsel im Kader (Stammspieler ↔ Bank)
-  werden im Karriereverlauf klar vermerkt.
+  werden im Karriereverlauf klar vermerkt. Die Vereinsstärke der Angebote
+  folgt einer nachvollziehbaren Kurve, die sich direkt an der Saison-Bilanz
+  orientiert (überragende Saison → deutlich stärkere Vereine als eine solide
+  Saison), und der Einladungstext nennt konkret die Zahlen der vorherigen
+  Saison, damit klar wird, warum sich gerade jetzt wer meldet.
 - **Echte Aufstiegschancen**: "Die große Chance" gibt dir als Rotations-
   oder Bankspieler die Möglichkeit, dich in einem wichtigen Spiel in die
   Stammelf zu spielen - mit spürbarem, mehrere Saisons anhaltendem Effekt.
   Dazu individuelle Auszeichnungen (Torschützenkönig, Spieler der Saison,
   Talent der Saison) als eigene Titel, und eine Nationalmannschaftskarriere
   mit echten Länderspiel-Einsätzen, die sich zur Kapitänsbinde der
-  Nationalelf steigern kann.
+  Nationalelf steigern kann. Eine Einladung gibt es realistischerweise fast
+  nur für Erstliga-Spieler (Liga-2 nur bei einer wirklich außergewöhnlichen
+  Saison); gelungene Länderspiele wirken sich zusätzlich zu Bekanntheit und
+  Caps auch auf Attribute und Führungsstärke aus - der Nationalmannschafts-
+  Impact bleibt also nicht mehr folgenlos. Die Chance auf eine echte
+  Top-Karriere ist außerdem höher als früher: eine steilere Wachstumskurve
+  in Jugend/Durchbruch und ein seltener "Wunderkind"-Bonus bei der
+  Potenzial-Vergabe sorgen dafür, dass Weltklasse-Niveau erreichbarer ist.
 - **Echtheitsgetreuer Auf- und Abstieg**: Am Ende jeder Saison wird die
   komplette Tabelle von Liga 1 und Liga 2 simuliert - die schwächsten Vereine
   aus Liga 1 steigen ab, die stärksten aus Liga 2 steigen auf (Anzahl je nach
@@ -45,7 +56,16 @@ im höheren Alter.
 - **Sofortiges Feedback**: Jede Entscheidung zeigt direkt im Anschluss, was
   sie bewirkt hat - Ergebnistext, die Gesamtstärke vorher/nachher (der
   direkte fußballerische Impact) sowie alle Attribut-, Charakter- und
-  Stat-Änderungen - bevor es weitergeht.
+  Stat-Änderungen - bevor es weitergeht. Der Attribut-Effekt einer Wahl fällt
+  bewusst deutlicher aus als reines Saisonwachstum, damit sich Entscheidungen
+  sofort spürbar auf die Gesamtstärke auswirken.
+- **Gesamtstärke im Mittelpunkt**: Die Gesamtstärke (1-99) wird - ähnlich wie
+  bei FIFA Ultimate Team - in klar erkennbare Stufen eingeordnet (Amateur,
+  Ausbaufähig, Solide, Star, Weltklasse, Ikone) mit eigener Farbgebung und
+  einem Trendpfeil, der die Entwicklung seit der letzten Saison zeigt. Ein
+  Wechsel zu einem deutlich stärkeren Verein bringt sofort ein besseres
+  Trainingsumfeld mit: kleiner sofortiger Attributschub plus beschleunigtes
+  Wachstum für die nächsten Saisons.
 - **Charakter & Ruf (Gedächtnis für Entscheidungen)**: Vier Werte -
   Arbeitsmoral, Disziplin, Medienimage, Führungsstärke - merken sich, wie du
   dich über die Karriere hinweg verhältst, und sind im Dashboard sichtbar.
@@ -68,6 +88,9 @@ im höheren Alter.
   Länderspiele, Vermögen, Vereinstreue, Familie, Verletzungshistorie, ...)
   und es gibt eine Reihe positiver wie negativer **Erfolge/Achievements**
   (z. B. "Torjäger", "Vereinstreue", "Verletzungsanfällig", "Vielwechsler").
+  Neu erreichte Erfolge werden nicht erst am Karriereende erwähnt, sondern
+  direkt in dem Saisonrückblick angezeigt, in dem sie erreicht wurden -
+  kontextualisiert mit Beschreibung.
 - **Mehrjährige Geschichten (Storylines)**: Manche Entscheidungen stoßen eine
   Ereignis-Reihe an, die sich über mehrere Saisons fortsetzt und garantiert
   (nicht zufällig) weitergeht, sobald das nächste Kapitel fällig ist - inkl.
@@ -77,17 +100,22 @@ im höheren Alter.
   schweren Verletzung, der Aufstieg zur Vereinsikone bei langer Vereinstreue,
   ein eskalierender Zoff mit dem Trainer und ein wachsender Marken-Deal -
   jede mit mehreren Ausgängen, je nachdem wie du dich entscheidest.
-- **Lebensereignisse**: Neben dem Sport können eigene Beziehungen entstehen
-  - erste Liebe, Beziehungskrisen (mit Trennungsrisiko), Verlobung, Hochzeit
-  (groß & öffentlich oder klein & privat), Nachwuchs und Ärger mit den
-  Schwiegereltern. Dazu karrierephasen-passende Zufallsereignisse mit
-  positiven wie negativen Ausgängen (Skandal, Erbschaft, Steuerprobleme,
-  Fan-Liebling, Mentorenrolle im Alter, Trainerschein, Testimonial-Spiel,
-  ...). Über 60 Events insgesamt, inklusive vieler fußballspezifischer
-  Momente (Trainerwechsel, Taktikumstellung, Stadtderby, Pokal-Kraftakt,
-  Hattrick-Chance, Sportgericht, Spieler des Monats, Torjägerrennen,
-  U-Nationalmannschaft, Standardsituationen, ...). Die Anzahl Ereignisse
-  pro Saison schwankt bewusst (4-6), und kürzlich gezogene Events werden für
+- **Lebensereignisse**: Neben dem Sport können ab 18 eigene Beziehungen
+  entstehen - erste Liebe, Beziehungskrisen (mit Trennungsrisiko), Verlobung,
+  Hochzeit (groß & öffentlich oder klein & privat), Nachwuchs und Ärger mit
+  den Schwiegereltern. Partnernamen werden aus einem gemischten Namenspool
+  gezogen, nicht nur männlich klingende Namen. Eine stabile Partnerschaft
+  bleibt nicht folgenlos: sie gibt spürbaren Rückhalt für die sportliche
+  Leistung (Ehe > Verlobung > Beziehung). Dazu karrierephasen-passende
+  Zufallsereignisse mit positiven wie negativen Ausgängen (Skandal,
+  Erbschaft, Steuerprobleme, Fan-Liebling, Mentorenrolle im Alter,
+  Trainerschein, Testimonial-Spiel, ...). Über 60 Events insgesamt,
+  inklusive vieler fußballspezifischer Momente (Trainerwechsel,
+  Taktikumstellung, Stadtderby, Pokal-Kraftakt, Hattrick-Chance,
+  Sportgericht, Spieler des Monats, Torjägerrennen, U-Nationalmannschaft,
+  Standardsituationen, ...). Die Anzahl Ereignisse pro Saison ist bewusst
+  knapp gehalten (3-5) und schwankt leicht, damit jede einzelne Entscheidung
+  mehr Gewicht für die Karriere hat - kürzlich gezogene Events werden für
   einige Saisons unwahrscheinlicher, damit sich weniger wiederholt.
   Event-Texte werden zudem erst unmittelbar vor der Anzeige mit dem dann
   aktuellen Spielerstand erzeugt - ein Vereinswechsel mitten in der Saison

@@ -1,5 +1,5 @@
 import type { Player, SeasonStats } from "../engine/types";
-import { formatMoney } from "./labels";
+import { formatMoney, overallTier } from "./labels";
 
 export function SeasonSummary({
   stats,
@@ -14,6 +14,7 @@ export function SeasonSummary({
   const seasonIndex = player.seasonHistory.findIndex((s) => s === stats);
   const previous = seasonIndex > 0 ? player.seasonHistory[seasonIndex - 1] : null;
   const overallDelta = previous ? stats.overallRating - previous.overallRating : null;
+  const tier = overallTier(stats.overallRating);
 
   return (
     <div className="screen summary-screen">
@@ -24,7 +25,7 @@ export function SeasonSummary({
 
       <div className="stat-strip">
         <SummaryStat
-          label="Gesamtstärke"
+          label={`Gesamtstärke · ${tier.label}`}
           value={`${stats.overallRating}${overallDelta ? ` (${overallDelta > 0 ? "+" : ""}${overallDelta})` : ""}`}
         />
         <SummaryStat label="Spiele" value={String(stats.matches)} />
@@ -50,6 +51,20 @@ export function SeasonSummary({
         <p className="muted">
           Karten: {stats.yellowCards}× Gelb{stats.redCards > 0 ? `, ${stats.redCards}× Rot` : ""}
         </p>
+      )}
+
+      {stats.newAchievements.length > 0 && (
+        <div className="panel">
+          <h3>🏅 Neue Erfolge dieser Saison</h3>
+          <div className="achievement-grid">
+            {stats.newAchievements.map((a) => (
+              <div key={a.id} className={`achievement-badge ${a.positive ? "positive" : "negative"}`}>
+                <strong>{a.label}</strong>
+                <span>{a.description}</span>
+              </div>
+            ))}
+          </div>
+        </div>
       )}
 
       <div className="panel">

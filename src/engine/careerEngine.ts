@@ -69,14 +69,23 @@ export function createPlayer(
   base[focusAttr] += 8;
 
   const potential: Attributes = {
-    technik: randInt(55, 95),
-    tempo: randInt(55, 95),
-    physis: randInt(55, 95),
-    mentalitaet: randInt(55, 95),
-    intelligenz: randInt(50, 90),
-    charisma: randInt(45, 90),
+    technik: randInt(60, 97),
+    tempo: randInt(60, 97),
+    physis: randInt(60, 97),
+    mentalitaet: randInt(60, 97),
+    intelligenz: randInt(55, 92),
+    charisma: randInt(50, 92),
   };
   potential[focusAttr] = clamp(potential[focusAttr] + 8, 0, 99);
+
+  // Seltener "Wunderkind"-Bonus: ein echtes Jahrhunderttalent, das eine
+  // realistische Chance auf eine absolute Top-Karriere mitbringt - macht "das
+  // Zeug zum Weltklasse-Spieler" spürbar wahrscheinlicher als bisher.
+  if (rng() < 0.08) {
+    for (const key of ATTRIBUTE_KEYS) {
+      potential[key] = clamp(potential[key] + randInt(6, 12), 0, 99);
+    }
+  }
 
   const league = buildLeagueState(countryId, rng);
 
@@ -138,6 +147,8 @@ export function createPlayer(
       traits: { arbeitsmoral: 50, disziplin: 50, medienimage: 50, fuehrung: 50 },
       activeStorylines: [],
       completedStorylines: [],
+      trainingBoostSeasons: 0,
+      unlockedAchievementIds: [],
     },
   };
 }
@@ -211,9 +222,10 @@ export function pickSeasonTemplateIds(
   seasonNumber: number,
   count?: number
 ): string[] {
-  // Ohne explizite Vorgabe schwankt die Anzahl Ereignisse pro Saison (4-6) - fühlt
-  // sich weniger vorhersehbar an, ähnlich unregelmäßig wie ein echtes Spieljahr.
-  const targetCount = count ?? 4 + Math.floor(rng() * 3);
+  // Ohne explizite Vorgabe schwankt die Anzahl Ereignisse pro Saison (3-5) - bewusst
+  // knapper gehalten, damit jede einzelne Entscheidung mehr Gewicht hat, statt in
+  // vielen kleinen Nebensächlichkeiten unterzugehen.
+  const targetCount = count ?? 3 + Math.floor(rng() * 3);
   const fullPool = eligibleTemplates(player, usedTemplateIds);
   const chosen: string[] = [];
   const usedCategoriesThisSeason = new Map<string, number>();
@@ -297,6 +309,28 @@ export function buildEventFromId(id: string, player: Player, league: LeagueState
 // Effekte einer Entscheidung anwenden
 // ---------------------------------------------------------------------------
 
+/**
+ * Verstärkt die Attribut-Wirkung einer einzelnen Entscheidung spürbar (mind.
+ * +1 Punkt zusätzlich in Richtung des Vorzeichens, größere Deltas skalieren
+ * weiter mit) - damit sich der direkte Effekt einer Entscheidung auf die
+ * Gesamtstärke sofort bemerkbar macht, statt in Mikro-Schritten unterzugehen.
+ * Das saisonale Alterswachstum (siehe `ageUpPlayer`) bleibt davon unberührt.
+ */
+function scaleDecisionAttributeDelta(n: number): number {
+  if (n === 0) return 0;
+  const magnified = Math.round(Math.abs(n) * 1.4);
+  return Math.sign(n) * Math.max(Math.abs(n) + 1, magnified);
+}
+
+function scaleAttributeEffects(effects: EventChoice["effects"]): EventChoice["effects"] {
+  if (!effects.attributes) return effects;
+  const scaledAttrs: Partial<Attributes> = {};
+  for (const key of Object.keys(effects.attributes) as AttributeKey[]) {
+    scaledAttrs[key] = scaleDecisionAttributeDelta(effects.attributes[key] ?? 0);
+  }
+  return { ...effects, attributes: scaledAttrs };
+}
+
 export function applyChoice(state: GameState, choice: EventChoice): EventChoice["effects"] {
   const player = state.player;
   if (!player) return {};
@@ -306,6 +340,7 @@ export function applyChoice(state: GameState, choice: EventChoice): EventChoice[
     const success = rng() < choice.followUpChance.chance;
     effects = success ? choice.followUpChance.success : choice.followUpChance.failure;
   }
+  effects = scaleAttributeEffects(effects);
 
   applyEffects(player, effects, state.seasonNumber);
   return effects;
@@ -464,7 +499,17 @@ export function simulateSeason(player: Player, seasonNumber: number, league: Lea
   // Disziplin wirkt sich leicht auf die Konstanz der Leistungen aus (professionelle
   // Lebensführung vs. Party-Image) - ein spürbarer, aber kein dominanter Faktor.
   const disziplinFactor = (player.traits.disziplin - 50) / 250; // -0.2 .. +0.2
-  const ratingBase = 6.0 + (overall - clubStrength) / 45 + form * 0.6 + disziplinFactor;
+  // Ein stabiles Privatleben zahlt sich sportlich aus: eine feste Partnerschaft
+  // gibt Rückhalt, eine Ehe am meisten - kein riesiger Hebel, aber ein spürbarer.
+  const relationshipFactor =
+    player.relationshipStatus === "verheiratet"
+      ? 0.12
+      : player.relationshipStatus === "verlobt"
+      ? 0.08
+      : player.relationshipStatus === "in_beziehung"
+      ? 0.05
+      : 0;
+  const ratingBase = 6.0 + (overall - clubStrength) / 45 + form * 0.6 + disziplinFactor + relationshipFactor;
   const avgRating = clamp(ratingBase + (rng() - 0.5) * 0.6, 3.5, 9.5);
 
   const attackWeight = { TW: 0.02, IV: 0.15, AV: 0.35, ZM: 0.55, FS: 0.85, ST: 1.0 }[player.position];
@@ -575,6 +620,7 @@ export function simulateSeason(player: Player, seasonNumber: number, league: Lea
     reputationGain: repGain,
     score,
     scoreTier,
+    newAchievements: [],
     scoreFactors,
   };
 
@@ -616,10 +662,10 @@ function computeSeasonScore(input: {
 // ---------------------------------------------------------------------------
 
 function growthFactor(age: number): number {
-  if (age <= 17) return 1.5;
-  if (age <= 21) return 1.1;
-  if (age <= 24) return 0.7;
-  if (age <= 29) return 0.25;
+  if (age <= 17) return 2.0;
+  if (age <= 21) return 1.5;
+  if (age <= 24) return 0.9;
+  if (age <= 29) return 0.3;
   if (age <= 32) return -0.35;
   if (age <= 35) return -0.9;
   return -1.6;
@@ -631,13 +677,18 @@ export function ageUpPlayer(player: Player): void {
   // oder bremst das Wachstum spürbar (0.8x bei sehr niedriger, 1.2x bei sehr hoher
   // Arbeitsmoral) - der direkteste "Impact" vergangener Entscheidungen auf die Werte.
   const workEthicMultiplier = clamp(0.8 + (player.traits.arbeitsmoral / 100) * 0.4, 0.8, 1.2);
+  // Ein kürzlicher Wechsel zu einem deutlich stärkeren Verein bringt ein besseres
+  // Trainingsumfeld mit - das beschleunigt das Wachstum für einige Saisons spürbar.
+  const trainingEnvironmentMultiplier = player.trainingBoostSeasons > 0 ? 1.35 : 1;
   for (const key of ATTRIBUTE_KEYS) {
     const current = player.attributes[key];
     const potential = player.potential[key];
     let delta: number;
     if (factor > 0) {
       const room = potential - current;
-      delta = Math.round(factor * workEthicMultiplier * (0.5 + rng() * 0.6) * clamp(room / 12, 0.15, 1.6));
+      delta = Math.round(
+        factor * workEthicMultiplier * trainingEnvironmentMultiplier * (0.5 + rng() * 0.6) * clamp(room / 12, 0.15, 1.6)
+      );
       delta = Math.max(0, delta);
     } else {
       delta = Math.round(factor * (0.5 + rng() * 0.6));
@@ -651,6 +702,7 @@ export function ageUpPlayer(player: Player): void {
   player.morale = clamp(player.morale + (player.morale < 50 ? 5 : 0), 0, 100);
   player.seasonsSinceTransferEvent += 1;
   if (player.roleProtectionSeasons > 0) player.roleProtectionSeasons -= 1;
+  if (player.trainingBoostSeasons > 0) player.trainingBoostSeasons -= 1;
 
   if (player.injury) {
     const remaining = player.injury.weeksOut - 16; // Sommerpause heilt viel
@@ -669,9 +721,14 @@ export function ageUpPlayer(player: Player): void {
 // Vertrag / Rollenpflege zwischen den Saisons
 // ---------------------------------------------------------------------------
 
-/** Zielstärke, die ein Spieler mit gegebener Bekanntheit für einen neuen Verein "verdient". */
-function targetStrengthForReputation(reputation: number): number {
-  return clamp(35 + reputation * 0.6, 30, 95);
+/**
+ * Zielstärke, die ein Spieler mit gegebener Bekanntheit und Gesamtstärke für
+ * einen neuen Verein "verdient" - die Gesamtstärke (1-99) fließt bewusst mit
+ * dem größeren Gewicht ein, damit die eigentliche Spielstärke, nicht nur die
+ * Bekanntheit, darüber entscheidet, wie attraktiv die Angebote ausfallen.
+ */
+function targetStrengthForReputation(reputation: number, overall: number): number {
+  return clamp(20 + reputation * 0.25 + overall * 0.55, 30, 96);
 }
 
 function squadRoleForOverall(overall: number, clubStrength: number): SquadRole {
@@ -835,15 +892,24 @@ function buildClubOfferEvent(player: Player, league: LeagueState, reason: ClubOf
   const overall = overallRating(player);
   const currentStrength = player.club.strength;
   const pool = [...league.tier1, ...league.tier2];
+  const lastStats = player.seasonHistory[player.seasonHistory.length - 1];
 
   let targetStrength: number;
   let excludeCurrent: boolean;
   let count = 3;
   if (reason === "pro-debut") {
-    targetStrength = targetStrengthForReputation(player.reputation);
+    targetStrength = targetStrengthForReputation(player.reputation, overall);
     excludeCurrent = false;
   } else if (reason === "opportunity") {
-    targetStrength = clamp(currentStrength + 10 + rng() * 15, 30, 96);
+    // Klare, nachvollziehbare Kurve: je besser die letzte Saison bewertet wurde,
+    // desto deutlicher der Sprung in der Vereinsstärke der Angebote.
+    const [minJump, maxJump] =
+      lastStats?.scoreTier === "Überragende Saison"
+        ? [20, 35]
+        : lastStats?.scoreTier === "Starke Saison"
+        ? [10, 20]
+        : [3, 12];
+    targetStrength = clamp(currentStrength + minJump + rng() * (maxJump - minJump), 30, 96);
     excludeCurrent = true;
   } else {
     targetStrength = clamp(currentStrength - 18, 22, 90);
@@ -889,12 +955,19 @@ function buildClubOfferEvent(player: Player, league: LeagueState, reason: ClubOf
       ? "Interesse von anderen Vereinen"
       : "Unruhige Zeiten auf der Bank";
 
+  // Konkreter Bezug zur letzten Saison, damit klar wird, WARUM sich gerade jetzt
+  // Vereine melden - keine anonyme Zufalls-Einladung, sondern eine nachvollziehbare
+  // Folge der eigenen Leistung.
+  const lastSeasonRef = lastStats
+    ? `Nach ${lastStats.seasonLabel} (${lastStats.scoreTier}, Ø ${lastStats.avgRating}, ${lastStats.goals} Tore/${lastStats.assists} Vorlagen) `
+    : "";
+
   const description =
     reason === "pro-debut"
       ? `Nach starken Jahren in der Jugend ist es Zeit für den Sprung in den Profifußball. Gleich ${count} Vereine bieten dir einen Profivertrag an.`
       : reason === "opportunity"
-      ? `Deine starken Leistungen bei ${player.club.name} sind Scouts nicht entgangen. ${count} Vereine erkundigen sich nach dir.`
-      : `Bei ${player.club.name} kommst du kaum noch zum Einsatz. Der Verein wäre offen für einen Wechsel - ${count} Vereine haben bereits angefragt.`;
+      ? `${lastSeasonRef}sind Scouts auf ${player.name} bei ${player.club.name} aufmerksam geworden. ${count} Vereine erkundigen sich nach dir.`
+      : `Bei ${player.club.name} kommst du kaum noch zum Einsatz (${player.consecutiveBenchSeasons} Saison(en) auf der Bank). Der Verein wäre offen für einen Wechsel - ${count} Vereine haben bereits angefragt.`;
 
   return {
     id: `cluboffer-${player.age}-${reason}-${Math.round(rng() * 1e6)}`,
@@ -990,8 +1063,22 @@ export function applyClubOfferChoice(player: Player, league: LeagueState, event:
     `Gehalt: ${formatMoney(wage)} / Jahr`,
     `Rolle im Kader: ${newRole}`,
   ];
-  if (chosen.strength > oldStrength + 3) deltaLines.push("Vereinsstärke deutlich höher als zuvor");
-  else if (chosen.strength < oldStrength - 3) deltaLines.push("Vereinsstärke niedriger, dafür bessere Aussichten auf Spielzeit");
+
+  // Ein Wechsel zu einem spürbar stärkeren Verein bringt sofort ein besseres
+  // Trainingsumfeld mit - nicht nur eine höhere Zahl auf dem Papier: kleiner
+  // sofortiger Attributschub plus beschleunigtes Wachstum für die nächsten
+  // Saisons (siehe `ageUpPlayer`).
+  const strengthGap = chosen.strength - oldStrength;
+  if (strengthGap > 3) {
+    const bumpKeys = ATTRIBUTE_KEYS.filter(() => rng() < 0.5);
+    for (const key of bumpKeys.length > 0 ? bumpKeys : [ATTRIBUTE_KEYS[0]]) {
+      player.attributes[key] = clamp(player.attributes[key] + 1, 1, 99);
+    }
+    player.trainingBoostSeasons = Math.max(player.trainingBoostSeasons, strengthGap > 15 ? 3 : 2);
+    deltaLines.push("Besseres Trainingsumfeld: Wachstum für die nächsten Saisons spürbar beschleunigt");
+  } else if (chosen.strength < oldStrength - 3) {
+    deltaLines.push("Vereinsstärke niedriger, dafür bessere Aussichten auf Spielzeit");
+  }
 
   return { choiceId, text, kind, deltaLines };
 }

@@ -9,4 +9,6 @@ export {
   RELATIONSHIP_LABEL,
   TRAIT_LABEL,
   TRAIT_ORDER,
+  overallTier,
 } from "../engine/labels";
+export type { OverallTier } from "../engine/labels";

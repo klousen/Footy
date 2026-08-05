@@ -134,6 +134,8 @@ export interface SeasonStats {
   score: number;
   scoreTier: string;
   scoreFactors: ScoreFactor[];
+  /** In dieser Saison neu freigeschaltete Erfolge - für kontextualisiertes Feedback direkt im Saisonrückblick. */
+  newAchievements: Achievement[];
 }
 
 export interface LogEntry {
@@ -316,6 +318,10 @@ export interface Player {
   activeStorylines: StoryThread[];
   /** IDs abgeschlossener Ereignis-Reihen (verhindert erneuten Start derselben Geschichte). */
   completedStorylines: string[];
+  /** Solange > 0, wächst das Wachstum durch das bessere Trainingsumfeld eines Top-Vereins schneller. */
+  trainingBoostSeasons: number;
+  /** IDs bereits freigeschalteter Erfolge - für die "neu"-Erkennung im Saisonrückblick. */
+  unlockedAchievementIds: string[];
 }
 
 export interface Achievement {

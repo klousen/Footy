@@ -128,6 +128,14 @@ export default function App() {
     if (clubEntry) player.log.push(clubEntry);
     const promotionEntry = applyLeaguePromotionRelegation(player, league);
     if (promotionEntry) player.log.push(promotionEntry);
+
+    // Erfolge kontextualisiert direkt im Saisonrückblick zeigen, statt sie erst am
+    // Karriereende zu erwähnen - jede Saison wird auf neu erreichte Erfolge geprüft.
+    const allAchievements = computeAchievements(player);
+    const newAchievements = allAchievements.filter((a) => !player.unlockedAchievementIds.includes(a.id));
+    player.unlockedAchievementIds = [...player.unlockedAchievementIds, ...newAchievements.map((a) => a.id)];
+    stats.newAchievements = newAchievements;
+
     setGame({
       ...current,
       player: { ...player },

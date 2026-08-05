@@ -247,7 +247,8 @@ input:focus {
   border: 1px solid var(--panel-border);
   border-radius: 12px;
   padding: 10px 16px;
-  min-width: 76px;
+  min-width: 86px;
+  transition: background 0.3s ease, border-color 0.3s ease;
 }
 
 .overall-number {
@@ -261,6 +262,74 @@ input:focus {
   color: var(--muted);
   text-transform: uppercase;
   letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+
+.overall-trend {
+  margin-top: 4px;
+  font-size: 0.72rem;
+  font-weight: 600;
+}
+
+.overall-trend.up {
+  color: var(--accent);
+}
+
+.overall-trend.down {
+  color: var(--danger);
+}
+
+/* FUT-artige Stufen für die Gesamtstärke - je höher, desto edler die Optik. */
+.overall-badge.tier-amateur {
+  background: linear-gradient(160deg, #2a2f36, var(--panel));
+  border-color: #3a4048;
+}
+.overall-badge.tier-amateur .overall-number {
+  color: #9aa4af;
+}
+
+.overall-badge.tier-bronze {
+  background: linear-gradient(160deg, #3d2a1c, var(--panel));
+  border-color: #8a5a34;
+}
+.overall-badge.tier-bronze .overall-number {
+  color: #cd7f32;
+}
+
+.overall-badge.tier-silver {
+  background: linear-gradient(160deg, #2c333d, var(--panel));
+  border-color: #9aa7b5;
+}
+.overall-badge.tier-silver .overall-number {
+  color: #c9d3dd;
+}
+
+.overall-badge.tier-gold {
+  background: linear-gradient(160deg, #3d3319, var(--panel));
+  border-color: #d4af37;
+}
+.overall-badge.tier-gold .overall-number {
+  color: #f2c94c;
+}
+
+.overall-badge.tier-elite {
+  background: linear-gradient(160deg, #3a1f3d, var(--panel));
+  border-color: #b96ce0;
+}
+.overall-badge.tier-elite .overall-number {
+  color: #d199f0;
+}
+
+.overall-badge.tier-icon {
+  background: linear-gradient(160deg, #3d321a, #2a1c33);
+  border-color: #f2c94c;
+  box-shadow: 0 0 14px rgba(242, 201, 76, 0.35);
+}
+.overall-badge.tier-icon .overall-number {
+  background: linear-gradient(90deg, #f2c94c, #f0a4e0);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
 }
 
 .stat-strip {

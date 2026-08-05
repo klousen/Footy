@@ -62,3 +62,22 @@ export const SQUAD_ROLE_RANK: Record<string, number> = {
   Rotation: 3,
   Stammspieler: 4,
 };
+
+/**
+ * FUT-artige Einordnung der Gesamtstärke (1-99) in klar erkennbare Stufen mit
+ * eigener Farbgebung - macht Fortschritt auf einen Blick sichtbar, nicht nur
+ * als nackte Zahl.
+ */
+export interface OverallTier {
+  label: string;
+  className: string;
+}
+
+export function overallTier(overall: number): OverallTier {
+  if (overall >= 90) return { label: "Ikone", className: "icon" };
+  if (overall >= 80) return { label: "Weltklasse", className: "elite" };
+  if (overall >= 70) return { label: "Star", className: "gold" };
+  if (overall >= 60) return { label: "Solide", className: "silver" };
+  if (overall >= 50) return { label: "Ausbaufähig", className: "bronze" };
+  return { label: "Amateur", className: "amateur" };
+}

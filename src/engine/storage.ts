@@ -19,6 +19,8 @@ export function loadGame(): GameState | null {
     if (state.player) {
       state.player.activeStorylines ??= [];
       state.player.completedStorylines ??= [];
+      state.player.trainingBoostSeasons ??= 0;
+      state.player.unlockedAchievementIds ??= [];
     }
     return state;
   } catch {

@@ -6,7 +6,7 @@ import { leagueNameForTier } from "../engine/leagueEngine";
 import { AttributeBars } from "./AttributeBars";
 import { TraitBars } from "./TraitBars";
 import { StoryThreads } from "./StoryThreads";
-import { formatMoney, RELATIONSHIP_LABEL } from "./labels";
+import { formatMoney, overallTier, RELATIONSHIP_LABEL } from "./labels";
 import { Timeline } from "./Timeline";
 
 export function Dashboard({
@@ -24,6 +24,10 @@ export function Dashboard({
   const overall = overallRating(player);
   const lastStats = player.seasonHistory[player.seasonHistory.length - 1];
   const leagueName = leagueNameForTier(league, player.club.tier);
+  const tier = overallTier(overall);
+  // Entwicklung seit dem letzten Saisonabschluss (vor dem Alterswachstum) - macht die
+  // Weiterentwicklung durch Training/Entscheidungen direkt auf dem Dashboard sichtbar.
+  const trend = lastStats ? overall - lastStats.overallRating : null;
 
   return (
     <div className="screen dashboard">
@@ -35,9 +39,14 @@ export function Dashboard({
             {league.flag} {league.countryName})
           </p>
         </div>
-        <div className="overall-badge">
+        <div className={`overall-badge tier-${tier.className}`}>
           <span className="overall-number">{overall}</span>
-          <span className="overall-caption">Gesamtstärke</span>
+          <span className="overall-caption">{tier.label}</span>
+          {trend !== null && trend !== 0 && (
+            <span className={`overall-trend ${trend > 0 ? "up" : "down"}`}>
+              {trend > 0 ? "▲" : "▼"} {Math.abs(trend)}
+            </span>
+          )}
         </div>
       </div>
 

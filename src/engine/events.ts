@@ -1,12 +1,16 @@
 import type { EventTemplate, Player } from "./types";
-import { clamp, FIRST_NAMES, LAST_NAMES } from "./data";
+import { clamp, FEMALE_FIRST_NAMES, FIRST_NAMES, LAST_NAMES } from "./data";
 
 // Hilfsfunktion für lesbaren Vereinsnamen im Text
 const club = (p: Player) => p.club.name;
 
+// Gemischter Namenspool für Partner:innen - unabhängig vom Geschlecht des
+// Spielers, damit nicht ausschließlich männliche Partnernamen vorkommen.
+const PARTNER_NAME_POOL = [...FIRST_NAMES, ...FEMALE_FIRST_NAMES];
+
 // Hilfsfunktion: zufälliger Vorname für neue Beziehungen
 function randomPartnerName(rng: () => number): string {
-  return FIRST_NAMES[Math.floor(rng() * FIRST_NAMES.length)];
+  return PARTNER_NAME_POOL[Math.floor(rng() * PARTNER_NAME_POOL.length)];
 }
 
 // Hilfsfunktion: zufälliger voller Name für Storyline-Nebenfiguren (z.B. Rivalen)
@@ -630,7 +634,15 @@ export const EVENT_TEMPLATES: EventTemplate[] = [
     minAge: 18,
     maxAge: 38,
     weight: 2,
-    condition: (p) => p.reputation > 40,
+    // Der Nationaltrainer beobachtet praktisch nur die erste Liga - ein Liga-2-Spieler
+    // braucht schon eine wirklich außergewöhnliche Saison (Ø-Note 8+), um trotzdem
+    // aufzufallen. Reine Liga-2-Routine reicht nicht für eine Nominierung.
+    condition: (p) => {
+      if (p.reputation <= 40) return false;
+      if (p.club.tier === 1) return true;
+      const last = p.seasonHistory[p.seasonHistory.length - 1];
+      return !!last && last.avgRating >= 8;
+    },
     build: (p) => {
       const isDebut = p.nationalTeamCaps === 0;
       return {
@@ -647,10 +659,12 @@ export const EVENT_TEMPLATES: EventTemplate[] = [
             followUpChance: {
               chance: 0.6,
               success: {
-                reputation: 10,
+                reputation: 14,
                 fitness: -6,
                 morale: 8,
                 capsDelta: 3,
+                attributes: { mentalitaet: 1, physis: 1 },
+                traitDeltas: { fuehrung: 1 },
                 logText: isDebut
                   ? "hat sein/ihr Debüt für die Nationalmannschaft gegeben und überzeugt."
                   : "kam erneut für die Nationalmannschaft zum Einsatz und überzeugte.",
@@ -833,7 +847,7 @@ export const EVENT_TEMPLATES: EventTemplate[] = [
   {
     id: "erste_liebe",
     category: "beziehung",
-    minAge: 16,
+    minAge: 18,
     maxAge: 22,
     weight: 2,
     condition: (p) => p.relationshipStatus === "single",
