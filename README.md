@@ -25,12 +25,19 @@ im höheren Alter.
   Jugendakademie-Platz an; beim Sprung in den Profifußball und bei späteren
   Wechseln stehen jeweils drei echte Vereine mit Liga, Vereinsstärke und
   voraussichtlicher Kaderrolle zur Auswahl.
-- **Lebendige Wechselmechanik**: Bei starker Form melden sich immer wieder
-  neue Vereine (mit Cooldown, damit es nicht inflationär wird); wer über
-  längere Zeit kaum spielt, gerät in eine sichtbare Bankphase - kann sich
-  aber per Entscheidung zurückkämpfen oder einen Neuanfang bei einem anderen
-  Verein wagen. Rollenwechsel im Kader (Stammspieler ↔ Bank) werden im
-  Karriereverlauf klar vermerkt.
+- **Lebendige Wechselmechanik**: Schon eine solide Saison reicht, damit
+  Scouts aufmerksam werden (bei starker/überragender Saison fast sicher);
+  wer über längere Zeit kaum spielt, gerät in eine sichtbare Bankphase -
+  kann sich aber per Entscheidung zurückkämpfen oder einen Neuanfang bei
+  einem anderen Verein wagen. Rollenwechsel im Kader (Stammspieler ↔ Bank)
+  werden im Karriereverlauf klar vermerkt.
+- **Echte Aufstiegschancen**: "Die große Chance" gibt dir als Rotations-
+  oder Bankspieler die Möglichkeit, dich in einem wichtigen Spiel in die
+  Stammelf zu spielen - mit spürbarem, mehrere Saisons anhaltendem Effekt.
+  Dazu individuelle Auszeichnungen (Torschützenkönig, Spieler der Saison,
+  Talent der Saison) als eigene Titel, und eine Nationalmannschaftskarriere
+  mit echten Länderspiel-Einsätzen, die sich zur Kapitänsbinde der
+  Nationalelf steigern kann.
 - **Echtheitsgetreuer Auf- und Abstieg**: Am Ende jeder Saison wird die
   komplette Tabelle von Liga 1 und Liga 2 simuliert - die schwächsten Vereine
   aus Liga 1 steigen ab, die stärksten aus Liga 2 steigen auf (Anzahl je nach

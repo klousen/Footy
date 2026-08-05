@@ -623,23 +623,77 @@ export const EVENT_TEMPLATES: EventTemplate[] = [
     id: "nationalmannschaft_einladung",
     category: "nationalmannschaft",
     minAge: 18,
-    maxAge: 37,
+    maxAge: 38,
     weight: 2,
     condition: (p) => p.reputation > 40,
+    build: (p) => {
+      const isDebut = p.nationalTeamCaps === 0;
+      return {
+        category: "nationalmannschaft",
+        title: isDebut ? "Einladung zur Nationalmannschaft" : "Erneute Berufung in die Nationalmannschaft",
+        description: isDebut
+          ? "Der Nationaltrainer beruft dich erstmals für ein Länderspiel-Camp - eine große Ehre, aber auch zusätzliche Belastung."
+          : `Nach starken Leistungen bei ${club(p)} wirst du erneut für die Nationalmannschaft nominiert (bisher ${p.nationalTeamCaps} Länderspiele).`,
+        choices: [
+          {
+            id: "folgen",
+            label: "Der Einladung folgen",
+            effects: {},
+            followUpChance: {
+              chance: 0.6,
+              success: {
+                reputation: 10,
+                fitness: -6,
+                morale: 8,
+                capsDelta: 3,
+                logText: isDebut
+                  ? "hat sein/ihr Debüt für die Nationalmannschaft gegeben und überzeugt."
+                  : "kam erneut für die Nationalmannschaft zum Einsatz und überzeugte.",
+                logKind: "milestone",
+              },
+              failure: {
+                reputation: 2,
+                fitness: -6,
+                morale: -2,
+                capsDelta: 1,
+                logText: isDebut
+                  ? "hat sein/ihr Debüt für die Nationalmannschaft gegeben, kam aber nur sporadisch zum Einsatz."
+                  : "kam im Nationalmannschafts-Camp nur sporadisch zum Einsatz.",
+                logKind: "info",
+              },
+            },
+          },
+          {
+            id: "absagen",
+            label: "Wegen Belastung absagen",
+            effects: { fitness: 4, reputation: -3, logText: "hat eine Nationalmannschaftseinladung wegen Belastung abgesagt.", logKind: "info" },
+          },
+        ],
+      };
+    },
+  },
+  {
+    id: "nationalmannschaft_kapitaen",
+    category: "nationalmannschaft",
+    minAge: 24,
+    maxAge: 38,
+    weight: 1,
+    unique: true,
+    condition: (p) => p.nationalTeamCaps >= 15 && p.traits.fuehrung >= 65,
     build: () => ({
       category: "nationalmannschaft",
-      title: "Einladung zur Nationalmannschaft",
-      description: "Der Nationaltrainer beruft dich erstmals für ein Länderspiel-Camp - eine große Ehre, aber auch zusätzliche Belastung.",
+      title: "Kapitän der Nationalmannschaft",
+      description: "Nach zahlreichen starken Länderspielen und als anerkannte Führungspersönlichkeit bietet dir der Nationaltrainer die Kapitänsbinde an.",
       choices: [
         {
-          id: "folgen",
-          label: "Der Einladung folgen",
-          effects: { reputation: 8, fitness: -6, morale: 6, logText: "wurde in die Nationalmannschaft berufen.", logKind: "milestone" },
+          id: "annehmen",
+          label: "Die Kapitänsbinde annehmen",
+          effects: { reputation: 10, nationalTeamCaptain: true, traitDeltas: { fuehrung: 5 }, logText: "wurde zum Kapitän der Nationalmannschaft ernannt.", logKind: "milestone" },
         },
         {
-          id: "absagen",
-          label: "Wegen Belastung absagen",
-          effects: { fitness: 4, reputation: -3, logText: "hat eine Nationalmannschaftseinladung wegen Belastung abgesagt.", logKind: "info" },
+          id: "ablehnen",
+          label: "Höflich ablehnen",
+          effects: { morale: 2, logText: "hat die Kapitänsbinde der Nationalmannschaft vorerst abgelehnt.", logKind: "info" },
         },
       ],
     }),
@@ -1540,7 +1594,7 @@ export const EVENT_TEMPLATES: EventTemplate[] = [
         {
           id: "folgen",
           label: "Der Einladung folgen",
-          effects: { reputation: 5, fitness: -3, morale: 4, logText: "wurde in eine U-Nationalmannschaft berufen.", logKind: "positive" },
+          effects: { reputation: 5, fitness: -3, morale: 4, capsDelta: 2, logText: "wurde in eine U-Nationalmannschaft berufen.", logKind: "positive" },
         },
         {
           id: "absagen",
@@ -1701,6 +1755,58 @@ export const EVENT_TEMPLATES: EventTemplate[] = [
           id: "technik",
           label: "Auf Technik statt Härte setzen",
           effects: { attributes: { technik: 1 }, logText: "hat auf Technik statt auf harte Zweikämpfe gesetzt.", logKind: "info" },
+        },
+      ],
+    }),
+  },
+
+  // ---------------------------------------------------------------------
+  // AUFSTIEG: die Chance, sich sportlich zu beweisen
+  // ---------------------------------------------------------------------
+  {
+    id: "bewaehrungschance",
+    category: "taktik",
+    minAge: 17,
+    maxAge: 34,
+    weight: 3,
+    condition: (p) =>
+      p.stage !== "jugend" &&
+      (p.contract.squadRole === "Ersatzbank" ||
+        p.contract.squadRole === "Ergänzungsspieler" ||
+        p.contract.squadRole === "Rotation"),
+    build: (p) => ({
+      category: "taktik",
+      title: "Die große Chance",
+      description: `Der gesetzte Stammspieler auf deiner Position fällt aus - ${club(p)} braucht dich in einem wichtigen Spiel. Jetzt zählt jeder Ballkontakt.`,
+      choices: [
+        {
+          id: "nutzen",
+          label: "Die Chance beim Schopfe packen",
+          effects: {},
+          followUpChance: {
+            chance: 0.5,
+            success: {
+              reputation: 8,
+              clubRelation: 8,
+              morale: 10,
+              squadRoleOverride: "Stammspieler",
+              roleProtectionSeasons: 2,
+              traitDeltas: { arbeitsmoral: 2 },
+              logText: "hat die große Chance genutzt und sich in die Stammelf gespielt!",
+              logKind: "milestone",
+            },
+            failure: {
+              morale: -6,
+              clubRelation: -4,
+              logText: "hat die große Chance nicht nutzen können und verschwindet wieder in der Rotation.",
+              logKind: "negative",
+            },
+          },
+        },
+        {
+          id: "vorsichtig",
+          label: "Auf Nummer sicher spielen, keine Fehler riskieren",
+          effects: { clubRelation: 2, logText: "hat sich in der großen Chance auf Nummer sicher zurückgehalten.", logKind: "info" },
         },
       ],
     }),

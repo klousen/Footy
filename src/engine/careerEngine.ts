@@ -128,6 +128,8 @@ export function createPlayer(
       wantsTransfer: false,
       seasonsSinceTransferEvent: 0,
       consecutiveBenchSeasons: 0,
+      roleProtectionSeasons: 0,
+      nationalTeamCaptain: false,
       clubChangesCount: 0,
       totalInjuryWeeks: 0,
       relationshipStatus: "single",
@@ -181,8 +183,10 @@ function stageForAge(age: number): CareerStage {
 // Saison-Events zusammenstellen
 // ---------------------------------------------------------------------------
 
-/** Wie viele Saisons ein Template "abkühlt", bevor es wieder mit vollem Gewicht gezogen werden kann. */
-const TEMPLATE_COOLDOWN_SEASONS = 3;
+/** Wie viele Saisons ein Template nach dem harten Sperrfenster noch "nachklingt" (reduziertes Gewicht). */
+const TEMPLATE_COOLDOWN_SEASONS = 4;
+/** Hartes Sperrfenster: ein Template kann frühestens nach so vielen Saisons erneut gezogen werden. */
+const TEMPLATE_HARD_MIN_GAP = 2;
 
 /**
  * Wählt aus, WELCHE Templates diese Saison an die Reihe kommen - baut aber
@@ -191,9 +195,12 @@ const TEMPLATE_COOLDOWN_SEASONS = 3;
  * im Text immer den zum Anzeigezeitpunkt aktuellen Verein zeigt, auch wenn
  * innerhalb derselben Saison zwischendurch ein Wechsel stattfand.
  *
- * `recentTemplateSeasons` wird mutiert: kürzlich gezogene Templates werden für
- * die nächsten `TEMPLATE_COOLDOWN_SEASONS` Saisons deutlich unwahrscheinlicher,
- * damit sich Ereignisse spürbar seltener wiederholen.
+ * `recentTemplateSeasons` wird mutiert: kürzlich gezogene Templates sind für
+ * `TEMPLATE_HARD_MIN_GAP` Saisons komplett gesperrt und danach bis
+ * `TEMPLATE_COOLDOWN_SEASONS` noch deutlich unwahrscheinlicher, damit sich
+ * Ereignisse spürbar seltener wiederholen. Ist der dadurch gefilterte Pool zu
+ * klein für die Ziel-Anzahl, greift eine Notfall-Rückfalllogik, damit eine
+ * Saison nie leerläuft.
  */
 export function pickSeasonTemplateIds(
   player: Player,
@@ -205,9 +212,17 @@ export function pickSeasonTemplateIds(
   // Ohne explizite Vorgabe schwankt die Anzahl Ereignisse pro Saison (4-6) - fühlt
   // sich weniger vorhersehbar an, ähnlich unregelmäßig wie ein echtes Spieljahr.
   const targetCount = count ?? 4 + Math.floor(rng() * 3);
-  const pool = eligibleTemplates(player, usedTemplateIds);
+  const fullPool = eligibleTemplates(player, usedTemplateIds);
   const chosen: string[] = [];
   const usedCategoriesThisSeason = new Map<string, number>();
+
+  // Hartes Sperrfenster: kürzlich gezogene Templates komplett ausschließen, außer
+  // der Pool würde dadurch zu klein für die gewünschte Anzahl Events.
+  const cooledDown = fullPool.filter((t) => {
+    const lastSeason = recentTemplateSeasons[t.id];
+    return lastSeason === undefined || seasonNumber - lastSeason >= TEMPLATE_HARD_MIN_GAP;
+  });
+  const pool = cooledDown.length >= targetCount ? cooledDown : fullPool;
   const localPool = [...pool];
 
   for (let i = 0; i < targetCount && localPool.length > 0; i++) {
@@ -215,10 +230,10 @@ export function pickSeasonTemplateIds(
       // Kategorie-Wiederholungen innerhalb derselben Saison abschwächen
       const usedCount = usedCategoriesThisSeason.get(t.category) ?? 0;
       const categoryFactor = 1 / (1 + usedCount * 1.5);
-      // Kürzlich gezogene Templates deutlich seltener wiederholen (Cooldown)
+      // Auch nach dem harten Sperrfenster klingt die Wahrscheinlichkeit noch nach
       const lastSeason = recentTemplateSeasons[t.id];
       const recencyFactor =
-        lastSeason === undefined ? 1 : clamp((seasonNumber - lastSeason) / TEMPLATE_COOLDOWN_SEASONS, 0.08, 1);
+        lastSeason === undefined ? 1 : clamp((seasonNumber - lastSeason) / TEMPLATE_COOLDOWN_SEASONS, 0.05, 1);
       return t.weight * categoryFactor * recencyFactor;
     });
     const totalWeight = weights.reduce((a, b) => a + b, 0);
@@ -303,6 +318,12 @@ function applyEffects(player: Player, effects: EventChoice["effects"], season: n
   if (effects.relationshipStatus) player.relationshipStatus = effects.relationshipStatus;
   if (effects.partnerName !== undefined) player.partnerName = effects.partnerName;
   if (effects.childrenDelta) player.children = Math.max(0, player.children + effects.childrenDelta);
+  if (effects.capsDelta) player.nationalTeamCaps = Math.max(0, player.nationalTeamCaps + effects.capsDelta);
+  if (effects.roleProtectionSeasons) {
+    player.roleProtectionSeasons = Math.max(player.roleProtectionSeasons, effects.roleProtectionSeasons);
+  }
+  if (effects.nationalTeamCaptain) player.nationalTeamCaptain = true;
+  if (effects.squadRoleOverride) player.contract.squadRole = effects.squadRoleOverride;
   if (effects.traitDeltas) {
     for (const key of Object.keys(effects.traitDeltas) as TraitKey[]) {
       const delta = effects.traitDeltas[key] ?? 0;
@@ -349,6 +370,9 @@ export function summarizeEffects(effects: EventChoice["effects"]): string[] {
   }
   if (effects.relationshipStatus) lines.push(`Beziehungsstatus: ${RELATIONSHIP_LABEL[effects.relationshipStatus]}`);
   if (effects.childrenDelta) lines.push(`Kinder ${signed(effects.childrenDelta)}`);
+  if (effects.capsDelta) lines.push(`Länderspiele ${signed(effects.capsDelta)}`);
+  if (effects.roleProtectionSeasons) lines.push(`Kaderrolle für ${effects.roleProtectionSeasons} Saison(en) abgesichert`);
+  if (effects.squadRoleOverride) lines.push(`Neue Kaderrolle: ${effects.squadRoleOverride}`);
   if (effects.traitDeltas) {
     for (const key of TRAIT_ORDER) {
       const delta = effects.traitDeltas[key];
@@ -432,12 +456,38 @@ export function simulateSeason(player: Player, seasonNumber: number, league: Lea
     if (extra && !trophies.includes(extra)) trophies.push(extra);
   }
 
+  // Individuelle Auszeichnungen: eine echte Chance, sich unabhängig vom Team
+  // sportlich zu beweisen und nach oben zu arbeiten.
+  const isAttacker = player.position === "ST" || player.position === "FS";
+  if (isAttacker && goals >= 14 && rng() < 0.15 + clamp((overall - clubStrength) / 150, 0, 0.35)) {
+    trophies.push("Torschützenkönig");
+  }
+  if (avgRating >= 7.6 && rng() < 0.12 + clamp((overall - clubStrength) / 200, 0, 0.25)) {
+    trophies.push("Spieler der Saison");
+  }
+  if (player.stage === "jugend" || player.stage === "durchbruch") {
+    if (overall >= clubStrength - 5 && rng() < 0.1) trophies.push("Talent der Saison");
+  }
+
   player.careerTotals.matches += matches;
   player.careerTotals.goals += goals;
   player.careerTotals.assists += assists;
   player.careerTotals.yellowCards += yellowCards;
   player.careerTotals.redCards += redCards;
   player.careerTotals.trophies.push(...trophies);
+
+  for (const trophy of trophies) {
+    const isIndividual = trophy === "Torschützenkönig" || trophy === "Spieler der Saison" || trophy === "Talent der Saison";
+    player.log.push({
+      season: seasonNumber,
+      age: player.age,
+      text: isIndividual
+        ? `${player.name} wird als "${trophy}" ausgezeichnet - eine individuelle Krönung der Saison.`
+        : `${player.name} gewinnt mit ${player.club.name} die/den ${trophy}.`,
+      kind: "milestone",
+    });
+    if (isIndividual) player.reputation = clamp(player.reputation + 8, 0, 100);
+  }
 
   // Gehaltssystem: Grundgehalt wird garantiert ausgezahlt, dazu leistungsabhängige
   // Prämien für Tore/Vorlagen, starke Bewertungen und Titel.
@@ -562,6 +612,7 @@ export function ageUpPlayer(player: Player): void {
   player.fitness = clamp(player.fitness + 12, 40, 100); // Sommerpause / Erholung
   player.morale = clamp(player.morale + (player.morale < 50 ? 5 : 0), 0, 100);
   player.seasonsSinceTransferEvent += 1;
+  if (player.roleProtectionSeasons > 0) player.roleProtectionSeasons -= 1;
 
   if (player.injury) {
     const remaining = player.injury.weeksOut - 16; // Sommerpause heilt viel
@@ -621,7 +672,12 @@ export function resolveClubSituation(player: Player, league: LeagueState): LogEn
 
   const overall = overallRating(player);
   const oldRole = player.contract.squadRole;
-  const newRole = squadRoleForOverall(overall, player.club.strength);
+  let newRole = squadRoleForOverall(overall, player.club.strength);
+  // Eine erfolgreich genutzte Bewährungschance schützt die Kaderrolle noch einige
+  // Saisons vor dem Abrutschen unter "Rotation" - der Durchbruch bleibt spürbar.
+  if (player.roleProtectionSeasons > 0 && SQUAD_ROLE_RANK[newRole] < SQUAD_ROLE_RANK["Rotation"]) {
+    newRole = "Rotation";
+  }
   player.contract.squadRole = newRole;
 
   if (newRole === "Ersatzbank" || newRole === "Ergänzungsspieler") {
@@ -730,8 +786,10 @@ export function shouldTriggerTransferOpportunity(player: Player): boolean {
   const cooldown = player.wantsTransfer ? 1 : 2;
   if (player.seasonsSinceTransferEvent < cooldown) return false;
   const last = player.seasonHistory[player.seasonHistory.length - 1];
-  const goodForm = last ? last.avgRating >= 6.9 : false;
-  const chance = player.wantsTransfer ? 0.85 : 0.4;
+  // Solide Saison reicht schon aus, um Scouts auf sich aufmerksam zu machen - nicht
+  // erst eine Ausnahmesaison. Eine "Starke"/"Überragende" Saison macht es fast sicher.
+  const goodForm = last ? last.avgRating >= 6.3 || last.scoreTier === "Starke Saison" || last.scoreTier === "Überragende Saison" : false;
+  const chance = player.wantsTransfer ? 0.85 : last?.scoreTier === "Überragende Saison" ? 0.75 : 0.55;
   return (goodForm || player.wantsTransfer) && rng() < chance;
 }
 
@@ -975,6 +1033,8 @@ export function computeAchievements(player: Player): Achievement[] {
     { id: "gebildet", label: "Kluger Kopf", description: "Hohes Bildungsniveau (80+) neben dem Profialltag gepflegt.", positive: true, condition: player.education >= 80 },
     { id: "familienmensch", label: "Familienmensch", description: "Verheiratet mit mindestens einem Kind.", positive: true, condition: player.relationshipStatus === "verheiratet" && player.children >= 1 },
     { id: "kapitaen", label: "Führungsspieler", description: "Wurde zum Mannschaftskapitän ernannt.", positive: true, condition: wasCaptain },
+    { id: "nationalkapitaen", label: "Nationalmannschaftskapitän", description: "Führte die Nationalmannschaft aufs Feld.", positive: true, condition: player.nationalTeamCaptain },
+    { id: "individuelle_krone", label: "Individuelle Krönung", description: "Mindestens einmal als Torschützenkönig oder Spieler der Saison ausgezeichnet.", positive: true, condition: t.trophies.some((tr) => tr === "Torschützenkönig" || tr === "Spieler der Saison") },
     { id: "verletzungsanfaellig", label: "Verletzungsanfällig", description: "Über 60 Wochen der Karriere verletzt ausgefallen.", positive: false, condition: player.totalInjuryWeeks >= 60 },
     { id: "vielwechsler", label: "Vielwechsler", description: "Vier oder mehr Vereinswechsel - nie richtig sesshaft geworden.", positive: false, condition: player.clubChangesCount >= 4 },
     { id: "kartenkoenig", label: "Kartenkönig", description: "Über 80 Gelbe Karten oder 5 Platzverweise kassiert.", positive: false, condition: t.yellowCards >= 80 || t.redCards >= 5 },

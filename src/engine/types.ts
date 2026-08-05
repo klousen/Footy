@@ -161,6 +161,14 @@ export interface EffectDelta {
   /** `null` setzt explizit "keine Partnerschaft mehr" (Trennung). */
   partnerName?: string | null;
   childrenDelta?: number;
+  /** Länderspiel-Einsätze (Nationalmannschaft), addiert auf `Player.nationalTeamCaps`. */
+  capsDelta?: number;
+  /** Schützt die Kaderrolle für N weitere Saisons vor dem Abrutschen unter "Rotation". */
+  roleProtectionSeasons?: number;
+  /** Ernennt zum Kapitän der Nationalmannschaft. */
+  nationalTeamCaptain?: boolean;
+  /** Setzt die Kaderrolle sofort direkt (z.B. Durchbruch nach einer Bewährungschance). */
+  squadRoleOverride?: SquadRole;
   /** Verändert Charakterwerte (Arbeitsmoral, Disziplin, Medienimage, Führung). */
   traitDeltas?: Partial<Record<TraitKey, number>>;
   logText?: string;
@@ -255,6 +263,10 @@ export interface Player {
   seasonsSinceTransferEvent: number;
   /** Aufeinanderfolgende Saisons auf/nahe der Bank (für Bankphasen-Mechanik). */
   consecutiveBenchSeasons: number;
+  /** Solange > 0, rutscht die Kaderrolle nicht unter "Rotation" ab (Bewährungschance). */
+  roleProtectionSeasons: number;
+  /** Wurde bereits Kapitän der Nationalmannschaft (schaltet u.a. ein Achievement frei). */
+  nationalTeamCaptain: boolean;
   /** Anzahl tatsächlich vollzogener Vereinswechsel (für Legacy-Faktoren/Achievements). */
   clubChangesCount: number;
   /** Aufsummierte Verletzungswochen über die gesamte Karriere. */
