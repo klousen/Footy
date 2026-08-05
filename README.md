@@ -38,23 +38,40 @@ im höheren Alter.
 - **Sofortiges Feedback**: Jede Entscheidung zeigt direkt im Anschluss, was
   sie bewirkt hat - Ergebnistext plus konkrete Attribut-/Stat-Änderungen -
   bevor es weitergeht.
+- **Gehaltssystem**: Der Vertrag zahlt jede Saison ein Grundgehalt plus
+  Leistungsboni (Tore, Vorlagen, starke Bewertungen, Titel) aufs Vermögen
+  ein. Gehaltsverhandlungen (hart pokern, moderat nachfragen oder auf dem
+  Beziehungskonto verzichten), Vereinswechsel und Aufstiege wirken sich
+  direkt auf die Höhe aus.
+- **Mehrfaktorielles Scoring**: Am Saisonende gibt es eine Saison-Bilanz
+  (sportliche Leistung, Torbeteiligungen, Titel, Entwicklung, Disziplin,
+  Auf-/Abstieg) mit Punktzahl und Einordnung. Am Karriereende wird der
+  Legacy-Score in all seine Faktoren aufgeschlüsselt (Tore, Vorlagen, Titel,
+  Länderspiele, Vermögen, Vereinstreue, Familie, Verletzungshistorie, ...)
+  und es gibt eine Reihe positiver wie negativer **Erfolge/Achievements**
+  (z. B. "Torjäger", "Vereinstreue", "Verletzungsanfällig", "Vielwechsler").
+- **Lebensereignisse**: Neben dem Sport können eigene Beziehungen entstehen
+  - erste Liebe, Beziehungskrisen (mit Trennungsrisiko), Verlobung, Hochzeit
+  (groß & öffentlich oder klein & privat), Nachwuchs und Ärger mit den
+  Schwiegereltern. Dazu karrierephasen-passende Zufallsereignisse mit
+  positiven wie negativen Ausgängen (Skandal, Erbschaft, Steuerprobleme,
+  Fan-Liebling, Mentorenrolle im Alter, Trainerschein, Testimonial-Spiel,
+  ...). Die Anzahl Ereignisse pro Saison schwankt bewusst (4-6).
 - **Vollständige Karriere**: von der Jugend (14) über Durchbruch, Etablierung
   und Veteranenjahre bis zum Karriereende.
-- **Mehrere Entscheidungen pro Saison**: Training, Alltag/Lifestyle, Medien,
-  Sponsoring, Vertragsverhandlungen, Verletzungsmanagement, entscheidende
-  Spielmomente und Nationalmannschaft.
 - **Echte Konsequenzen**: Entscheidungen wirken sich auf Attribute, Moral,
-  Fitness, Vereinsbeziehung, Bekanntheit und Vermögen aus - inklusive
-  Risiko/Ertrags-Abwägungen mit Erfolgs-/Misserfolgschance.
+  Fitness, Vereinsbeziehung, Bekanntheit, Gehalt und Vermögen aus -
+  inklusive Risiko/Ertrags-Abwägungen mit Erfolgs-/Misserfolgschance.
 - **Automatische Saison-Simulation**: Spiele, Tore, Vorlagen, Bewertungen,
   Tabellenplatz und Titel werden auf Basis der Attribute, Vereinsstärke, Moral
   und Fitness simuliert.
 - **Alterung & Entwicklung**: Attribute wachsen in der Jugend/Frühkarriere und
   bauen im höheren Alter wieder ab - abhängig vom individuellen Potenzial
   jedes Spielers.
-- **Karriereende & Vermächtnis**: Am Ende gibt es einen Legacy-Score, einen
-  Karriere-Titel (z. B. "Publikumsliebling", "Weltklasse-Legende") und einen
-  Ausblick auf den Karriereweg danach (Trainer, TV-Experte, Jugendarbeit, ...).
+- **Karriereende & Vermächtnis**: Legacy-Score mit Faktoren-Aufschlüsselung,
+  Achievement-Badges, ein Karriere-Titel (z. B. "Publikumsliebling",
+  "Weltklasse-Legende") und ein Ausblick auf den Karriereweg danach
+  (Trainer, TV-Experte, Jugendarbeit, ...).
 
 Spielernamen sind frei erfunden. Länder, Ligen und die Anzahl/Herkunft der
 Vereine je Liga sind real recherchiert (Saison 2026/27); dargestellt werden

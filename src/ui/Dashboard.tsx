@@ -4,7 +4,7 @@ import { POSITION_LABEL } from "../engine/types";
 import { overallRating } from "../engine/careerEngine";
 import { leagueNameForTier } from "../engine/leagueEngine";
 import { AttributeBars } from "./AttributeBars";
-import { formatMoney } from "./labels";
+import { formatMoney, RELATIONSHIP_LABEL } from "./labels";
 import { Timeline } from "./Timeline";
 
 export function Dashboard({
@@ -49,6 +49,12 @@ export function Dashboard({
         <Stat label="Bekanntheit" value={`${player.reputation}%`} />
         <Stat label="Vereinsbeziehung" value={`${player.clubRelation}%`} />
         <Stat label="Vermögen" value={formatMoney(player.wealth)} />
+        <Stat
+          label="Privatleben"
+          value={
+            RELATIONSHIP_LABEL[player.relationshipStatus] + (player.children > 0 ? ` · ${player.children} Kind(er)` : "")
+          }
+        />
       </div>
 
       <div className="panel">

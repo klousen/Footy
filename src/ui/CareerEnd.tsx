@@ -1,20 +1,27 @@
-import type { Player } from "../engine/types";
-import { formatMoney } from "./labels";
+import type { Achievement, Player, ScoreFactor } from "../engine/types";
+import { formatMoney, RELATIONSHIP_LABEL } from "./labels";
 
 export function CareerEnd({
   player,
   legacyScore,
   legacyTier,
+  legacyFactors,
+  achievements,
   epilogue,
   onNewCareer,
 }: {
   player: Player;
   legacyScore?: number;
   legacyTier?: string;
+  legacyFactors?: ScoreFactor[];
+  achievements?: Achievement[];
   epilogue?: string;
   onNewCareer: () => void;
 }) {
   const t = player.careerTotals;
+  const positiveAchievements = (achievements ?? []).filter((a) => a.positive);
+  const negativeAchievements = (achievements ?? []).filter((a) => !a.positive);
+
   return (
     <div className="screen career-end-screen">
       <div className="hero">
@@ -43,10 +50,54 @@ export function CareerEnd({
           <span>
             {t.yellowCards}× Gelb, {t.redCards}× Rot
           </span>
+          <span>Vereinswechsel</span>
+          <span>{player.clubChangesCount}</span>
+          <span>Privatleben</span>
+          <span>
+            {RELATIONSHIP_LABEL[player.relationshipStatus]}
+            {player.children > 0 ? ` · ${player.children} Kind(er)` : ""}
+          </span>
           <span>Vermögen</span>
           <span>{formatMoney(player.wealth)}</span>
         </div>
       </div>
+
+      {legacyFactors && legacyFactors.length > 0 && (
+        <div className="panel">
+          <h3>Legacy-Score im Detail</h3>
+          <ul className="score-factors">
+            {legacyFactors.map((f, i) => (
+              <li key={i}>
+                <span>{f.label}</span>
+                <span className={f.points >= 0 ? "factor-positive" : "factor-negative"}>
+                  {f.points > 0 ? "+" : ""}
+                  {f.points}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {(positiveAchievements.length > 0 || negativeAchievements.length > 0) && (
+        <div className="panel">
+          <h3>Erfolge & Kapitel dieser Karriere</h3>
+          <div className="achievement-grid">
+            {positiveAchievements.map((a) => (
+              <div key={a.id} className="achievement-badge positive">
+                <strong>{a.label}</strong>
+                <span>{a.description}</span>
+              </div>
+            ))}
+            {negativeAchievements.map((a) => (
+              <div key={a.id} className="achievement-badge negative">
+                <strong>{a.label}</strong>
+                <span>{a.description}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       <button className="btn btn-primary" onClick={onNewCareer}>
         Neue Karriere starten

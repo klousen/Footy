@@ -1,4 +1,5 @@
 import type { Player, SeasonStats } from "../engine/types";
+import { formatMoney } from "./labels";
 
 export function SeasonSummary({
   stats,
@@ -24,6 +25,7 @@ export function SeasonSummary({
         <SummaryStat label="Vorlagen" value={String(stats.assists)} />
         <SummaryStat label="Ø Bewertung" value={String(stats.avgRating)} />
         <SummaryStat label="Tabelle" value={`${stats.leaguePosition}.`} />
+        <SummaryStat label="Einkommen" value={formatMoney(stats.income)} />
       </div>
 
       {stats.trophies.length > 0 && (
@@ -42,6 +44,24 @@ export function SeasonSummary({
           Karten: {stats.yellowCards}× Gelb{stats.redCards > 0 ? `, ${stats.redCards}× Rot` : ""}
         </p>
       )}
+
+      <div className="panel">
+        <div className="score-header">
+          <h3>Saison-Bilanz</h3>
+          <span className="score-badge">{stats.score} Pkt. · {stats.scoreTier}</span>
+        </div>
+        <ul className="score-factors">
+          {stats.scoreFactors.map((f, i) => (
+            <li key={i}>
+              <span>{f.label}</span>
+              <span className={f.points >= 0 ? "factor-positive" : "factor-negative"}>
+                {f.points > 0 ? "+" : ""}
+                {f.points}
+              </span>
+            </li>
+          ))}
+        </ul>
+      </div>
 
       <div className="panel">
         <h3>Was sonst geschah</h3>

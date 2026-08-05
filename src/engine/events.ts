@@ -1,8 +1,13 @@
 import type { EventTemplate, Player } from "./types";
-import { clamp } from "./data";
+import { clamp, FIRST_NAMES } from "./data";
 
 // Hilfsfunktion für lesbaren Vereinsnamen im Text
 const club = (p: Player) => p.club.name;
+
+// Hilfsfunktion: zufälliger Vorname für neue Beziehungen
+function randomPartnerName(rng: () => number): string {
+  return FIRST_NAMES[Math.floor(rng() * FIRST_NAMES.length)];
+}
 
 export const EVENT_TEMPLATES: EventTemplate[] = [
   // ---------------------------------------------------------------------
@@ -719,6 +724,507 @@ export const EVENT_TEMPLATES: EventTemplate[] = [
           id: "nein",
           label: "Um den Stammplatz kämpfen",
           effects: { clubRelation: -2, morale: -1, logText: "hat sich gegen eine Leihe entschieden.", logKind: "info" },
+        },
+      ],
+    }),
+  },
+
+  // ---------------------------------------------------------------------
+  // GEHALT
+  // ---------------------------------------------------------------------
+  {
+    id: "gehaltsverhandlung",
+    category: "vertrag",
+    minAge: 19,
+    maxAge: 37,
+    weight: 2,
+    condition: (p) => p.reputation > 35 && p.contract.yearsLeft >= 1,
+    build: (p) => ({
+      category: "vertrag",
+      title: "Gehaltsverhandlung",
+      description: `Dein Berater sieht nach den letzten Leistungen bei ${club(p)} Potenzial für mehr Gehalt und will nachverhandeln.`,
+      choices: [
+        {
+          id: "hart",
+          label: "Hart verhandeln lassen",
+          effects: {},
+          followUpChance: {
+            chance: 0.55,
+            success: { wageMultiplier: 1.35, reputation: 2, logText: "hat nach zähen Verhandlungen ein deutlich höheres Gehalt durchgesetzt.", logKind: "positive" },
+            failure: { clubRelation: -10, morale: -4, logText: "ist mit einer harten Gehaltsforderung gescheitert - das Verhältnis zum Verein ist abgekühlt.", logKind: "negative" },
+          },
+        },
+        {
+          id: "moderat",
+          label: "Moderat nachfragen",
+          effects: { wageMultiplier: 1.12, clubRelation: -1, logText: "hat sich auf eine moderate Gehaltserhöhung geeinigt.", logKind: "positive" },
+        },
+        {
+          id: "verzichten",
+          label: "Auf eine Erhöhung verzichten",
+          effects: { clubRelation: 5, morale: 2, logText: "hat auf eine Gehaltserhöhung verzichtet und sich damit beim Verein beliebt gemacht.", logKind: "info" },
+        },
+      ],
+    }),
+  },
+
+  // ---------------------------------------------------------------------
+  // BEZIEHUNG & FAMILIE
+  // ---------------------------------------------------------------------
+  {
+    id: "erste_liebe",
+    category: "beziehung",
+    minAge: 16,
+    maxAge: 22,
+    weight: 2,
+    condition: (p) => p.relationshipStatus === "single",
+    build: (_p, ctx) => {
+      const name = randomPartnerName(ctx.rng);
+      return {
+        category: "beziehung",
+        title: "Erste große Liebe",
+        description: `Du lernst ${name} kennen - und plötzlich dreht sich nicht mehr alles nur um Fußball.`,
+        choices: [
+          {
+            id: "verlieben",
+            label: `Sich auf die Beziehung mit ${name} einlassen`,
+            effects: {
+              relationshipStatus: "in_beziehung",
+              partnerName: name,
+              morale: 8,
+              fitness: -2,
+              logText: `ist jetzt mit ${name} zusammen.`,
+              logKind: "positive",
+            },
+          },
+          {
+            id: "fokus",
+            label: "Sich voll auf den Sport konzentrieren",
+            effects: { attributes: { mentalitaet: 1 }, logText: "hat sich vorerst gegen eine Beziehung und für den Sport entschieden.", logKind: "info" },
+          },
+        ],
+      };
+    },
+  },
+  {
+    id: "beziehung_neu",
+    category: "beziehung",
+    minAge: 20,
+    maxAge: 34,
+    weight: 1,
+    condition: (p) => p.relationshipStatus === "single",
+    build: (_p, ctx) => {
+      const name = randomPartnerName(ctx.rng);
+      return {
+        category: "beziehung",
+        title: "Neue Bekanntschaft",
+        description: `Über gemeinsame Freunde lernst du ${name} kennen. Es funkt sofort.`,
+        choices: [
+          {
+            id: "verlieben",
+            label: `Kontakt zu ${name} vertiefen`,
+            effects: { relationshipStatus: "in_beziehung", partnerName: name, morale: 7, logText: `hat mit ${name} eine neue Beziehung begonnen.`, logKind: "positive" },
+          },
+          {
+            id: "nein",
+            label: "Erstmal Single bleiben",
+            effects: { logText: "hat sich vorerst gegen eine neue Beziehung entschieden.", logKind: "info" },
+          },
+        ],
+      };
+    },
+  },
+  {
+    id: "beziehungskonflikt",
+    category: "beziehung",
+    minAge: 18,
+    maxAge: 36,
+    weight: 2,
+    condition: (p) => p.relationshipStatus === "in_beziehung" || p.relationshipStatus === "verlobt" || p.relationshipStatus === "verheiratet",
+    build: (p) => ({
+      category: "beziehung",
+      title: "Stress in der Beziehung",
+      description: `Die vielen Reisen, Trainingslager und der Rummel um deine Person belasten die Beziehung mit ${p.partnerName ?? "deiner Partnerin/deinem Partner"}.`,
+      choices: [
+        {
+          id: "zeit",
+          label: "Bewusst Zeit investieren",
+          effects: { morale: 4, fitness: -3, logText: "hat gezielt Zeit in die Beziehung investiert.", logKind: "positive" },
+        },
+        {
+          id: "schleifen",
+          label: "Erstmal weiterlaufen lassen",
+          effects: {},
+          followUpChance: {
+            chance: 0.55,
+            success: { morale: 2, logText: "hat die Beziehungskrise ohne große Aussprache überstanden.", logKind: "info" },
+            failure: {
+              relationshipStatus: "single",
+              partnerName: null,
+              morale: -10,
+              reputation: -2,
+              logText: "hat sich getrennt - die Beziehung ist an der Belastung durch die Karriere zerbrochen.",
+              logKind: "negative",
+            },
+          },
+        },
+        {
+          id: "trennen",
+          label: "Die Beziehung beenden",
+          effects: { relationshipStatus: "single", partnerName: null, morale: -6, logText: "hat die Beziehung beendet, um sich auf die Karriere zu konzentrieren.", logKind: "negative" },
+        },
+      ],
+    }),
+  },
+  {
+    id: "heiratsantrag",
+    category: "beziehung",
+    minAge: 21,
+    maxAge: 36,
+    weight: 1,
+    condition: (p) => p.relationshipStatus === "in_beziehung",
+    build: (p) => ({
+      category: "beziehung",
+      title: "Der große Antrag",
+      description: `Du überlegst, ${p.partnerName ?? "deiner Partnerin/deinem Partner"} einen Heiratsantrag zu machen.`,
+      choices: [
+        {
+          id: "antrag",
+          label: "Den Antrag machen",
+          effects: { relationshipStatus: "verlobt", morale: 10, reputation: 2, logText: `hat sich mit ${p.partnerName ?? "der großen Liebe"} verlobt.`, logKind: "milestone" },
+        },
+        {
+          id: "warten",
+          label: "Noch warten",
+          effects: { logText: "wartet mit dem Antrag noch ab.", logKind: "info" },
+        },
+      ],
+    }),
+  },
+  {
+    id: "hochzeit",
+    category: "beziehung",
+    minAge: 22,
+    maxAge: 37,
+    weight: 2,
+    condition: (p) => p.relationshipStatus === "verlobt",
+    build: (p) => ({
+      category: "beziehung",
+      title: "Die Hochzeit",
+      description: `Es ist so weit: Du heiratest ${p.partnerName ?? "deine große Liebe"}. Groß und öffentlich feiern oder klein und privat?`,
+      choices: [
+        {
+          id: "gross",
+          label: "Große Promi-Hochzeit",
+          effects: {
+            relationshipStatus: "verheiratet",
+            wealth: -25000,
+            reputation: 12,
+            morale: 12,
+            logText: `hat ${p.partnerName ?? "die große Liebe"} in einer aufwendigen Promi-Hochzeit geheiratet - Magazine haben exklusive Fotorechte gekauft.`,
+            logKind: "milestone",
+          },
+        },
+        {
+          id: "klein",
+          label: "Kleine, private Feier",
+          effects: {
+            relationshipStatus: "verheiratet",
+            wealth: -5000,
+            morale: 10,
+            clubRelation: 2,
+            logText: `hat ${p.partnerName ?? "die große Liebe"} im kleinen Kreis geheiratet - einige Teamkollegen waren gerührt eingeladen.`,
+            logKind: "milestone",
+          },
+        },
+      ],
+    }),
+  },
+  {
+    id: "schwiegereltern",
+    category: "beziehung",
+    minAge: 20,
+    maxAge: 36,
+    weight: 1,
+    condition: (p) => p.relationshipStatus === "verlobt" || p.relationshipStatus === "verheiratet",
+    build: () => ({
+      category: "beziehung",
+      title: "Die Schwiegereltern",
+      description: "Das erste große Familienessen mit den Schwiegereltern steht an.",
+      choices: [
+        {
+          id: "diplomatisch",
+          label: "Charmant und diplomatisch auftreten",
+          effects: { reputation: 2, morale: 3, logText: "hat die Schwiegereltern für sich gewonnen.", logKind: "positive" },
+        },
+        {
+          id: "locker",
+          label: "Einfach man selbst sein",
+          effects: {},
+          followUpChance: {
+            chance: 0.6,
+            success: { morale: 3, logText: "kam bei den Schwiegereltern gut an, ganz ohne sich zu verstellen.", logKind: "positive" },
+            failure: { morale: -2, logText: "hat sich beim Familienessen einen kleinen Fauxpas erlaubt.", logKind: "negative" },
+          },
+        },
+      ],
+    }),
+  },
+  {
+    id: "kind_geboren",
+    category: "beziehung",
+    minAge: 23,
+    maxAge: 39,
+    weight: 1,
+    condition: (p) => p.relationshipStatus === "verheiratet" || p.relationshipStatus === "verlobt",
+    build: (p) => ({
+      category: "beziehung",
+      title: "Nachwuchs",
+      description: `${p.partnerName ?? "Deine Partnerin/dein Partner"} und du werdet Eltern!`,
+      choices: [
+        {
+          id: "elternzeit",
+          label: "Die ersten Wochen bewusst auskosten",
+          effects: { morale: 15, fitness: -5, childrenDelta: 1, logText: "ist Elternteil geworden und hat sich bewusst Zeit für die Familie genommen.", logKind: "milestone" },
+        },
+        {
+          id: "training",
+          label: "Schnell zurück ins Training",
+          effects: { morale: 6, attributes: { physis: 1 }, childrenDelta: 1, logText: "ist Elternteil geworden, war aber schon nach kurzer Zeit zurück im Training.", logKind: "milestone" },
+        },
+      ],
+    }),
+  },
+
+  // ---------------------------------------------------------------------
+  // VETERAN / SPÄTPHASE (30+)
+  // ---------------------------------------------------------------------
+  {
+    id: "veteran_mentor",
+    category: "meilenstein",
+    minAge: 30,
+    maxAge: 40,
+    weight: 2,
+    build: (p) => ({
+      category: "meilenstein",
+      title: "Rolle als Mentor",
+      description: `Junge Talente bei ${club(p)} bitten dich immer wieder um Rat.`,
+      choices: [
+        {
+          id: "investieren",
+          label: "Zeit in die jungen Spieler investieren",
+          effects: { attributes: { mentalitaet: 1, charisma: 1 }, clubRelation: 5, fitness: -2, logText: "hat sich als Mentor für die jungen Spieler im Kader engagiert.", logKind: "positive" },
+        },
+        {
+          id: "fokus",
+          label: "Sich auf die eigene Fitness konzentrieren",
+          effects: { attributes: { physis: 1 }, logText: "hat sich lieber auf die eigene Fitness konzentriert.", logKind: "info" },
+        },
+      ],
+    }),
+  },
+  {
+    id: "veteran_trainerschein",
+    category: "meilenstein",
+    minAge: 30,
+    maxAge: 40,
+    weight: 1,
+    build: () => ({
+      category: "meilenstein",
+      title: "Trainerschein-Lehrgang",
+      description: "Der Verband bietet berufsbegleitende Trainerlehrgänge an - eine Investition in die Zeit nach der Karriere.",
+      choices: [
+        {
+          id: "ja",
+          label: "Lehrgang beginnen",
+          effects: { educationPoints: 10, attributes: { intelligenz: 1 }, fitness: -3, logText: "hat mit einem Trainerschein-Lehrgang begonnen.", logKind: "positive" },
+        },
+        {
+          id: "nein",
+          label: "Sich voll auf die aktive Karriere konzentrieren",
+          effects: { logText: "hat sich gegen den Trainerschein-Lehrgang entschieden.", logKind: "info" },
+        },
+      ],
+    }),
+  },
+  {
+    id: "veteran_abschiedsspiel",
+    category: "meilenstein",
+    minAge: 33,
+    maxAge: 40,
+    weight: 1,
+    unique: true,
+    condition: (p) => p.clubRelation > 60,
+    build: (p) => ({
+      category: "meilenstein",
+      title: "Testimonial-Spiel",
+      description: `${club(p)} bietet dir zu Ehren deiner langen Karriere ein Testimonial-Spiel an.`,
+      choices: [
+        {
+          id: "ja",
+          label: "Angebot annehmen",
+          effects: { wealth: 20000, reputation: 8, morale: 10, logText: "wurde mit einem Testimonial-Spiel für die lange Karriere geehrt.", logKind: "milestone" },
+        },
+        {
+          id: "nein",
+          label: "Lieber bescheiden bleiben",
+          effects: { clubRelation: 3, logText: "hat auf ein großes Testimonial-Spiel verzichtet.", logKind: "info" },
+        },
+      ],
+    }),
+  },
+
+  // ---------------------------------------------------------------------
+  // ZUFALLSEREIGNISSE (positiv & negativ, unabhängig von der Karrierephase)
+  // ---------------------------------------------------------------------
+  {
+    id: "fan_liebling",
+    category: "medien",
+    minAge: 18,
+    maxAge: 40,
+    weight: 1,
+    condition: (p) => p.reputation > 30,
+    build: () => ({
+      category: "medien",
+      title: "Fan-Liebling",
+      description: "Die Fans wählen dich in einer Umfrage zum Publikumsliebling der Saison.",
+      choices: [
+        {
+          id: "annehmen",
+          label: "Die Ehre genießen",
+          effects: { reputation: 6, morale: 8, logText: "wurde von den Fans zum Publikumsliebling gewählt.", logKind: "positive" },
+        },
+      ],
+    }),
+  },
+  {
+    id: "erbschaft",
+    category: "lifestyle",
+    minAge: 18,
+    maxAge: 40,
+    weight: 1,
+    build: () => ({
+      category: "lifestyle",
+      title: "Unerwartetes Erbe",
+      description: "Ein entfernter Verwandter hinterlässt dir ein kleines Vermögen.",
+      choices: [
+        {
+          id: "annehmen",
+          label: "Erbe annehmen",
+          effects: { wealth: 25000, logText: "hat unerwartet eine Erbschaft gemacht.", logKind: "positive" },
+        },
+      ],
+    }),
+  },
+  {
+    id: "steuerproblem",
+    category: "lifestyle",
+    minAge: 20,
+    maxAge: 40,
+    weight: 1,
+    condition: (p) => p.wealth > 20000,
+    build: () => ({
+      category: "lifestyle",
+      title: "Ärger mit dem Finanzamt",
+      description: "Dein Finanzberater hat Fehler gemacht - eine Steuernachzahlung steht an.",
+      choices: [
+        {
+          id: "zahlen",
+          label: "Nachzahlung begleichen",
+          effects: { wealth: -20000, morale: -3, logText: "musste eine unangenehme Steuernachzahlung leisten.", logKind: "negative" },
+        },
+        {
+          id: "anwalt",
+          label: "Anwalt einschalten und anfechten",
+          effects: {},
+          followUpChance: {
+            chance: 0.4,
+            success: { wealth: -5000, logText: "hat die Steuernachforderung mit anwaltlicher Hilfe deutlich reduziert.", logKind: "positive" },
+            failure: { wealth: -24000, morale: -4, logText: "hat den Steuerstreit verloren und zusätzlich Anwaltskosten gezahlt.", logKind: "negative" },
+          },
+        },
+      ],
+    }),
+  },
+  {
+    id: "skandal_boulevard",
+    category: "medien",
+    minAge: 18,
+    maxAge: 38,
+    weight: 1,
+    build: () => ({
+      category: "medien",
+      title: "Boulevard-Schlagzeile",
+      description: "Eine Boulevardzeitung bringt eine reißerische, halb erfundene Geschichte über dein Privatleben.",
+      choices: [
+        {
+          id: "rechtlich",
+          label: "Rechtlich dagegen vorgehen",
+          effects: { wealth: -8000, reputation: 3, logText: "ist rechtlich gegen eine Boulevard-Geschichte vorgegangen.", logKind: "info" },
+        },
+        {
+          id: "kontern",
+          label: "Selbstironisch in den sozialen Medien kontern",
+          effects: {},
+          followUpChance: {
+            chance: 0.5,
+            success: { reputation: 6, morale: 3, logText: "hat eine Boulevard-Schlagzeile mit Humor gekontert und Sympathien gesammelt.", logKind: "positive" },
+            failure: { reputation: -5, logText: "ist mit einem missglückten Konter zur Schlagzeile selbst zum Gespött geworden.", logKind: "negative" },
+          },
+        },
+        {
+          id: "ignorieren",
+          label: "Ignorieren",
+          effects: { reputation: -2, logText: "hat eine Boulevard-Schlagzeile einfach ignoriert.", logKind: "negative" },
+        },
+      ],
+    }),
+  },
+  {
+    id: "autounfall_schreck",
+    category: "lifestyle",
+    minAge: 18,
+    maxAge: 38,
+    weight: 1,
+    build: () => ({
+      category: "lifestyle",
+      title: "Schreckmoment im Straßenverkehr",
+      description: "Auf dem Weg zum Training kommt dir ein Auto gefährlich nah - ein Unfall wird nur knapp vermieden.",
+      choices: [
+        {
+          id: "weiter",
+          label: "Durchatmen und weiterfahren",
+          effects: {},
+          followUpChance: {
+            chance: 0.75,
+            success: { morale: -1, logText: "kam mit dem Schrecken davon.", logKind: "info" },
+            failure: { injuryWeeksOut: 4, injuryLabel: "Schleudertrauma", morale: -5, logText: "hat bei einem doch nicht ganz vermiedenen Unfall eine Verletzung davongetragen.", logKind: "negative" },
+          },
+        },
+      ],
+    }),
+  },
+  {
+    id: "modelvertrag",
+    category: "sponsoring",
+    minAge: 19,
+    maxAge: 36,
+    weight: 1,
+    condition: (p) => p.attributes.charisma > 55,
+    build: () => ({
+      category: "sponsoring",
+      title: "Angebot als Werbegesicht",
+      description: "Eine Modeagentur will dich als Gesicht einer neuen Kampagne buchen.",
+      choices: [
+        {
+          id: "ja",
+          label: "Zusagen",
+          effects: { wealth: 20000, reputation: 5, fitness: -2, logText: "wurde als Werbegesicht einer Modekampagne gebucht.", logKind: "positive" },
+        },
+        {
+          id: "nein",
+          label: "Ablehnen und beim Sport bleiben",
+          effects: { attributes: { mentalitaet: 1 }, logText: "hat ein Modelangebot ausgeschlagen.", logKind: "info" },
         },
       ],
     }),

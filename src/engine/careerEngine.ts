@@ -1,4 +1,5 @@
 import type {
+  Achievement,
   Attributes,
   AttributeKey,
   CareerStage,
@@ -11,12 +12,13 @@ import type {
   LogEntry,
   Player,
   Position,
+  ScoreFactor,
   SeasonStats,
   SquadRole,
 } from "./types";
 import { POSITION_WEIGHTS } from "./types";
 import { clamp } from "./data";
-import { ATTRIBUTE_LABEL, ATTRIBUTE_ORDER, formatMoney, SQUAD_ROLE_RANK } from "./labels";
+import { ATTRIBUTE_LABEL, ATTRIBUTE_ORDER, formatMoney, RELATIONSHIP_LABEL, SQUAD_ROLE_RANK } from "./labels";
 import { eligibleTemplates } from "./events";
 import type { CountryId } from "./leagues";
 import {
@@ -125,6 +127,11 @@ export function createPlayer(
       wantsTransfer: false,
       seasonsSinceTransferEvent: 0,
       consecutiveBenchSeasons: 0,
+      clubChangesCount: 0,
+      totalInjuryWeeks: 0,
+      relationshipStatus: "single",
+      partnerName: null,
+      children: 0,
     },
   };
 }
@@ -172,13 +179,16 @@ function stageForAge(age: number): CareerStage {
 // Saison-Events zusammenstellen
 // ---------------------------------------------------------------------------
 
-export function buildSeasonEvents(player: Player, usedTemplateIds: Set<string>, count = 5): GameEvent[] {
+export function buildSeasonEvents(player: Player, usedTemplateIds: Set<string>, count?: number): GameEvent[] {
+  // Ohne explizite Vorgabe schwankt die Anzahl Ereignisse pro Saison (4-6) - fühlt
+  // sich weniger vorhersehbar an, ähnlich unregelmäßig wie ein echtes Spieljahr.
+  const targetCount = count ?? 4 + Math.floor(rng() * 3);
   const pool = eligibleTemplates(player, usedTemplateIds);
   const chosen: GameEvent[] = [];
   const usedCategoriesThisSeason = new Map<string, number>();
   const localPool = [...pool];
 
-  for (let i = 0; i < count && localPool.length > 0; i++) {
+  for (let i = 0; i < targetCount && localPool.length > 0; i++) {
     // Gewichtung: Kategorie-Wiederholungen innerhalb der Saison abschwächen
     const weights = localPool.map((t) => {
       const usedCount = usedCategoriesThisSeason.get(t.category) ?? 0;
@@ -239,9 +249,16 @@ function applyEffects(player: Player, effects: EventChoice["effects"], season: n
   if (effects.educationPoints) player.education = clamp(player.education + effects.educationPoints, 0, 100);
   if (effects.clubRelation) player.clubRelation = clamp(player.clubRelation + effects.clubRelation, 0, 100);
   if (effects.wantsTransfer !== undefined) player.wantsTransfer = effects.wantsTransfer;
+  if (effects.wageMultiplier) {
+    player.contract.wagePerYear = Math.round((player.contract.wagePerYear * effects.wageMultiplier) / 100) * 100;
+  }
+  if (effects.relationshipStatus) player.relationshipStatus = effects.relationshipStatus;
+  if (effects.partnerName !== undefined) player.partnerName = effects.partnerName;
+  if (effects.childrenDelta) player.children = Math.max(0, player.children + effects.childrenDelta);
   if (effects.injuryWeeksOut) {
     if (effects.injuryWeeksOut > 0) {
       player.injury = { label: effects.injuryLabel ?? "Verletzung", weeksOut: (player.injury?.weeksOut ?? 0) + effects.injuryWeeksOut };
+      player.totalInjuryWeeks += effects.injuryWeeksOut;
     } else if (player.injury) {
       const remaining = player.injury.weeksOut + effects.injuryWeeksOut;
       player.injury = remaining <= 0 ? null : { ...player.injury, weeksOut: remaining };
@@ -272,6 +289,12 @@ export function summarizeEffects(effects: EventChoice["effects"]): string[] {
   if (effects.clubRelation) lines.push(`Vereinsbeziehung ${signed(effects.clubRelation)}`);
   if (effects.educationPoints) lines.push(`Bildung ${signed(effects.educationPoints)}`);
   if (effects.wealth) lines.push(`Vermögen ${effects.wealth > 0 ? "+" : ""}${formatMoney(effects.wealth)}`);
+  if (effects.wageMultiplier && effects.wageMultiplier !== 1) {
+    const pct = Math.round((effects.wageMultiplier - 1) * 100);
+    lines.push(`Gehalt ${pct > 0 ? "+" : ""}${pct}%`);
+  }
+  if (effects.relationshipStatus) lines.push(`Beziehungsstatus: ${RELATIONSHIP_LABEL[effects.relationshipStatus]}`);
+  if (effects.childrenDelta) lines.push(`Kinder ${signed(effects.childrenDelta)}`);
   if (effects.injuryWeeksOut) {
     lines.push(
       effects.injuryWeeksOut > 0
@@ -351,6 +374,32 @@ export function simulateSeason(player: Player, seasonNumber: number, league: Lea
   player.careerTotals.redCards += redCards;
   player.careerTotals.trophies.push(...trophies);
 
+  // Gehaltssystem: Grundgehalt wird garantiert ausgezahlt, dazu leistungsabhängige
+  // Prämien für Tore/Vorlagen, starke Bewertungen und Titel.
+  const performanceBonus = Math.round(
+    goals * 400 + assists * 250 + (avgRating >= 7.2 ? 6000 : 0) + trophies.length * 15000
+  );
+  const income = player.contract.wagePerYear + performanceBonus;
+  player.wealth += income;
+
+  // Reputation wächst mit guten Leistungen
+  const repGain = clamp(Math.round((avgRating - 6) * 3 + goals * 0.4 + assists * 0.2), -6, 12);
+  player.reputation = clamp(player.reputation + repGain, 0, 100);
+
+  // Verein-Beziehung leicht Richtung Mitte tendieren lassen
+  if (avgRating >= 7) player.clubRelation = clamp(player.clubRelation + 3, 0, 100);
+  if (avgRating < 5.5) player.clubRelation = clamp(player.clubRelation - 4, 0, 100);
+
+  const { score, tier: scoreTier, factors: scoreFactors } = computeSeasonScore({
+    avgRating,
+    goals,
+    assists,
+    trophies,
+    repGain,
+    yellowCards,
+    redCards,
+  });
+
   const stats: SeasonStats = {
     seasonLabel: `Saison ${2026 + seasonNumber}/${(2026 + seasonNumber + 1).toString().slice(-2)}`,
     age: player.age,
@@ -367,19 +416,44 @@ export function simulateSeason(player: Player, seasonNumber: number, league: Lea
     redCards,
     promoted: false,
     relegated: false,
+    income,
+    reputationGain: repGain,
+    score,
+    scoreTier,
+    scoreFactors,
   };
 
   player.seasonHistory.push(stats);
 
-  // Reputation wächst mit guten Leistungen
-  const repGain = clamp(Math.round((avgRating - 6) * 3 + goals * 0.4 + assists * 0.2), -6, 12);
-  player.reputation = clamp(player.reputation + repGain, 0, 100);
-
-  // Verein-Beziehung leicht Richtung Mitte tendieren lassen
-  if (avgRating >= 7) player.clubRelation = clamp(player.clubRelation + 3, 0, 100);
-  if (avgRating < 5.5) player.clubRelation = clamp(player.clubRelation - 4, 0, 100);
-
   return stats;
+}
+
+/** Mehrfaktorielle Saison-Bilanz. Auf-/Abstieg wird separat nachgetragen (siehe `applyLeaguePromotionRelegation`). */
+function computeSeasonScore(input: {
+  avgRating: number;
+  goals: number;
+  assists: number;
+  trophies: string[];
+  repGain: number;
+  yellowCards: number;
+  redCards: number;
+}): { score: number; tier: string; factors: ScoreFactor[] } {
+  const factors: ScoreFactor[] = [
+    { label: "Sportliche Leistung (Ø Bewertung)", points: Math.round(input.avgRating * 12) },
+    { label: "Torbeteiligungen", points: Math.round(input.goals * 6 + input.assists * 4) },
+    { label: "Titel", points: input.trophies.length * 50 },
+    { label: "Entwicklung (Bekanntheit)", points: input.repGain * 3 },
+    { label: "Disziplin", points: -Math.round(input.yellowCards * 2 + input.redCards * 15) },
+  ];
+
+  const score = factors.reduce((s, f) => s + f.points, 0);
+  let tier = "Durchwachsene Saison";
+  if (score >= 180) tier = "Überragende Saison";
+  else if (score >= 120) tier = "Starke Saison";
+  else if (score >= 70) tier = "Solide Saison";
+  else if (score < 20) tier = "Schwierige Saison";
+
+  return { score, tier, factors };
 }
 
 // ---------------------------------------------------------------------------
@@ -526,6 +600,14 @@ export function applyLeaguePromotionRelegation(player: Player, league: LeagueSta
   if (lastStats) {
     lastStats.relegated = wasRelegated;
     lastStats.promoted = wasPromoted;
+    const points = wasRelegated ? -40 : 40;
+    lastStats.scoreFactors.push({ label: wasRelegated ? "Abstieg" : "Aufstieg", points });
+    lastStats.score += points;
+    if (lastStats.score >= 180) lastStats.scoreTier = "Überragende Saison";
+    else if (lastStats.score >= 120) lastStats.scoreTier = "Starke Saison";
+    else if (lastStats.score >= 70) lastStats.scoreTier = "Solide Saison";
+    else if (lastStats.score < 20) lastStats.scoreTier = "Schwierige Saison";
+    else lastStats.scoreTier = "Durchwachsene Saison";
   }
 
   const leagueName = leagueNameForTier(league, player.club.tier);
@@ -711,6 +793,7 @@ export function applyClubOfferChoice(player: Player, league: LeagueState, event:
   player.clubRelation = 60;
   player.wantsTransfer = false;
   player.consecutiveBenchSeasons = 0;
+  if (reason !== "pro-debut") player.clubChangesCount += 1;
 
   const leagueLabel = leagueNameForTier(league, chosen.tier);
   const kind: LogEntry["kind"] = reason === "pro-debut" ? "milestone" : reason === "pressure" ? "negative" : "positive";
@@ -746,20 +829,27 @@ export function shouldOfferRetirement(player: Player): boolean {
   return overall < peakOverall * 0.72 || player.fitness < 55;
 }
 
-export function computeLegacy(player: Player): { score: number; tier: string } {
+export function computeLegacy(player: Player): { score: number; tier: string; factors: ScoreFactor[] } {
   const t = player.careerTotals;
   const avgRatingOverall =
     player.seasonHistory.length > 0
       ? player.seasonHistory.reduce((s, x) => s + x.avgRating, 0) / player.seasonHistory.length
       : 6;
-  const score = Math.round(
-    t.goals * 4 +
-      t.assists * 2.5 +
-      t.trophies.length * 40 +
-      player.nationalTeamCaps * 6 +
-      avgRatingOverall * 25 +
-      player.reputation * 2
-  );
+
+  const factors: ScoreFactor[] = [
+    { label: "Tore", points: t.goals * 4 },
+    { label: "Vorlagen", points: Math.round(t.assists * 2.5) },
+    { label: "Titel", points: t.trophies.length * 40 },
+    { label: "Länderspiele", points: player.nationalTeamCaps * 6 },
+    { label: "Ø Bewertung Karriere", points: Math.round(avgRatingOverall * 25) },
+    { label: "Bekanntheit", points: player.reputation * 2 },
+    { label: "Vermögen", points: Math.round(player.wealth / 5000) },
+    { label: "Vereinstreue", points: player.clubChangesCount <= 1 ? 30 : player.clubChangesCount >= 4 ? -20 : 0 },
+    { label: "Familie", points: (player.relationshipStatus === "verheiratet" ? 10 : 0) + player.children * 5 },
+    { label: "Verletzungshistorie", points: player.totalInjuryWeeks >= 60 ? -30 : player.totalInjuryWeeks <= 10 ? 15 : 0 },
+  ];
+
+  const score = Math.round(factors.reduce((s, f) => s + f.points, 0));
 
   let tier = "Vereinsspieler";
   if (score >= 1600) tier = "Weltklasse-Legende";
@@ -767,7 +857,47 @@ export function computeLegacy(player: Player): { score: number; tier: string } {
   else if (score >= 600) tier = "Publikumsliebling";
   else if (score >= 300) tier = "Solider Profi";
 
-  return { score, tier };
+  return { score, tier, factors };
+}
+
+// ---------------------------------------------------------------------------
+// Achievements ("Erfolge") - werden am Karriereende einmalig berechnet
+// ---------------------------------------------------------------------------
+
+export function computeAchievements(player: Player): Achievement[] {
+  const t = player.careerTotals;
+  const avgRatingOverall =
+    player.seasonHistory.length > 0
+      ? player.seasonHistory.reduce((s, x) => s + x.avgRating, 0) / player.seasonHistory.length
+      : 6;
+  const wasCaptain = player.log.some((e) => e.text.includes("Kapitänsbinde") || e.text.includes("Mannschaftskapitän"));
+  const lowMatchSeasons = player.seasonHistory.filter((s) => s.matches < 10).length;
+
+  const defs: { id: string; label: string; description: string; positive: boolean; condition: boolean }[] = [
+    { id: "torjaeger", label: "Torjäger", description: "Über 150 Karrieretore erzielt.", positive: true, condition: t.goals >= 150 },
+    { id: "vorlagengeber", label: "Vorlagengeber", description: "Über 100 Karrierevorlagen aufgelegt.", positive: true, condition: t.assists >= 100 },
+    { id: "titelsammler", label: "Titelsammler", description: "Mindestens 5 Titel gewonnen.", positive: true, condition: t.trophies.length >= 5 },
+    { id: "weltklasse", label: "Weltklasse-Niveau", description: "Karriere-Ø-Bewertung von mindestens 7,5.", positive: true, condition: avgRatingOverall >= 7.5 },
+    { id: "nationalspieler", label: "Nationalspieler", description: "20 oder mehr Länderspiele bestritten.", positive: true, condition: player.nationalTeamCaps >= 20 },
+    { id: "vereinstreue", label: "Vereinstreue", description: "Höchstens ein Vereinswechsel in der ganzen Karriere.", positive: true, condition: player.clubChangesCount <= 1 },
+    { id: "millionaer", label: "Selfmade-Millionär", description: "Über 2 Mio. € Karrierevermögen erwirtschaftet.", positive: true, condition: player.wealth >= 2_000_000 },
+    { id: "gebildet", label: "Kluger Kopf", description: "Hohes Bildungsniveau (80+) neben dem Profialltag gepflegt.", positive: true, condition: player.education >= 80 },
+    { id: "familienmensch", label: "Familienmensch", description: "Verheiratet mit mindestens einem Kind.", positive: true, condition: player.relationshipStatus === "verheiratet" && player.children >= 1 },
+    { id: "kapitaen", label: "Führungsspieler", description: "Wurde zum Mannschaftskapitän ernannt.", positive: true, condition: wasCaptain },
+    { id: "verletzungsanfaellig", label: "Verletzungsanfällig", description: "Über 60 Wochen der Karriere verletzt ausgefallen.", positive: false, condition: player.totalInjuryWeeks >= 60 },
+    { id: "vielwechsler", label: "Vielwechsler", description: "Vier oder mehr Vereinswechsel - nie richtig sesshaft geworden.", positive: false, condition: player.clubChangesCount >= 4 },
+    { id: "kartenkoenig", label: "Kartenkönig", description: "Über 80 Gelbe Karten oder 5 Platzverweise kassiert.", positive: false, condition: t.yellowCards >= 80 || t.redCards >= 5 },
+    { id: "bankdruecker", label: "Bankdrücker", description: "In mindestens 5 Saisons kaum zum Einsatz gekommen.", positive: false, condition: lowMatchSeasons >= 5 },
+    {
+      id: "knapp_bei_kasse",
+      label: "Knapp bei Kasse",
+      description: "Trotz langer Karriere kaum finanziellen Polster aufgebaut.",
+      positive: false,
+      condition: player.age - player.birthAge >= 10 && player.wealth < 5000,
+    },
+  ];
+
+  return defs.filter((d) => d.condition).map(({ condition: _condition, ...rest }) => rest);
 }
 
 export function buildEpilogue(player: Player, tier: string): string {

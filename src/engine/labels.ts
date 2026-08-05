@@ -1,4 +1,4 @@
-import type { AttributeKey } from "./types";
+import type { AttributeKey, RelationshipStatus } from "./types";
 
 export const ATTRIBUTE_LABEL: Record<AttributeKey, string> = {
   technik: "Technik",
@@ -35,7 +35,15 @@ export const CATEGORY_LABEL: Record<string, string> = {
   taktik: "Spielgeschehen",
   nationalmannschaft: "Nationalmannschaft",
   jugend: "Jugend",
+  beziehung: "Beziehung & Familie",
   meilenstein: "Meilenstein",
+};
+
+export const RELATIONSHIP_LABEL: Record<RelationshipStatus, string> = {
+  single: "Single",
+  in_beziehung: "In einer Beziehung",
+  verlobt: "Verlobt",
+  verheiratet: "Verheiratet",
 };
 
 export const SQUAD_ROLE_RANK: Record<string, number> = {

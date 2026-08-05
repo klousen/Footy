@@ -548,6 +548,96 @@ input:focus {
   margin-top: 4px;
 }
 
+/* ---------------- Score / Bilanz ---------------- */
+
+.score-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+}
+
+.score-header h3 {
+  margin: 0;
+}
+
+.score-badge {
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--accent);
+  background: var(--accent-soft);
+  border-radius: 999px;
+  padding: 4px 10px;
+  white-space: nowrap;
+}
+
+.score-factors {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.score-factors li {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.88rem;
+  border-bottom: 1px solid var(--panel-border);
+  padding-bottom: 6px;
+}
+
+.score-factors li:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+.factor-positive {
+  color: var(--accent);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.factor-negative {
+  color: var(--danger);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---------------- Achievements ---------------- */
+
+.achievement-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 10px;
+}
+
+.achievement-badge {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  border-radius: 12px;
+  padding: 10px 12px;
+  font-size: 0.82rem;
+  border: 1px solid var(--panel-border);
+}
+
+.achievement-badge.positive {
+  background: var(--accent-soft);
+  border-color: rgba(56, 214, 122, 0.4);
+}
+
+.achievement-badge.negative {
+  background: rgba(240, 85, 79, 0.1);
+  border-color: rgba(240, 85, 79, 0.4);
+}
+
+.achievement-badge span {
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
 /* ---------------- Season summary ---------------- */
 
 .mini-log {

@@ -10,6 +10,7 @@ import {
   applyLeaguePromotionRelegation,
   buildRetirementEvent,
   buildSeasonEvents,
+  computeAchievements,
   computeLegacy,
   createPlayer,
   finalizeYouthClub,
@@ -79,7 +80,7 @@ export default function App() {
   function handleStartSeason() {
     if (!game.player || !game.leagueState) return;
     const used = new Set(game.usedTemplateIds);
-    let events = buildSeasonEvents(game.player, used, 5);
+    let events = buildSeasonEvents(game.player, used);
 
     const offerEvent = maybeInjectClubOfferEvent(game.player, game.leagueState);
     if (offerEvent) events = insertClubOfferEvent(events, offerEvent);
@@ -158,7 +159,8 @@ export default function App() {
       if (choiceId === "beenden") {
         player.retired = true;
         player.postCareerPath = pickPostCareerPath(player);
-        const { score, tier } = computeLegacy(player);
+        const { score, tier, factors } = computeLegacy(player);
+        const achievements = computeAchievements(player);
         setGame({
           ...game,
           player: { ...player },
@@ -167,6 +169,8 @@ export default function App() {
           screen: "careerEnd",
           legacyScore: score,
           legacyTier: tier,
+          legacyFactors: factors,
+          achievements,
           epilogue: buildEpilogueSafe(player, tier),
         });
       } else {
@@ -234,6 +238,8 @@ export default function App() {
           player={game.player}
           legacyScore={game.legacyScore}
           legacyTier={game.legacyTier}
+          legacyFactors={game.legacyFactors}
+          achievements={game.achievements}
           epilogue={game.epilogue}
           onNewCareer={handleNewCareerAfterEnd}
         />

@@ -91,6 +91,13 @@ export type CareerStage =
   | "veteran" // 30-34
   | "spaetphase"; // 35+
 
+export type RelationshipStatus = "single" | "in_beziehung" | "verlobt" | "verheiratet";
+
+export interface ScoreFactor {
+  label: string;
+  points: number;
+}
+
 export interface SeasonStats {
   seasonLabel: string; // z.B. "Saison 2031/32"
   age: number;
@@ -107,6 +114,14 @@ export interface SeasonStats {
   redCards: number;
   promoted: boolean;
   relegated: boolean;
+  /** Gehalt + Leistungsboni, die in dieser Saison ausgezahlt wurden. */
+  income: number;
+  /** Bekanntheits-Zuwachs in dieser Saison (für die Saison-Bilanz). */
+  reputationGain: number;
+  /** Mehrfaktorielle Saison-Bilanz. */
+  score: number;
+  scoreTier: string;
+  scoreFactors: ScoreFactor[];
 }
 
 export interface LogEntry {
@@ -128,6 +143,12 @@ export interface EffectDelta {
   clubRelation?: number;
   /** Setzt explizit, ob der Spieler offen für einen Vereinswechsel ist. */
   wantsTransfer?: boolean;
+  /** Multipliziert das aktuelle Jahresgehalt (z.B. 1.35 für +35%). */
+  wageMultiplier?: number;
+  relationshipStatus?: RelationshipStatus;
+  /** `null` setzt explizit "keine Partnerschaft mehr" (Trennung). */
+  partnerName?: string | null;
+  childrenDelta?: number;
   logText?: string;
   logKind?: LogEntry["kind"];
 }
@@ -160,6 +181,7 @@ export type EventCategory =
   | "taktik"
   | "nationalmannschaft"
   | "jugend"
+  | "beziehung"
   | "meilenstein";
 
 export interface GameEvent {
@@ -219,6 +241,20 @@ export interface Player {
   seasonsSinceTransferEvent: number;
   /** Aufeinanderfolgende Saisons auf/nahe der Bank (für Bankphasen-Mechanik). */
   consecutiveBenchSeasons: number;
+  /** Anzahl tatsächlich vollzogener Vereinswechsel (für Legacy-Faktoren/Achievements). */
+  clubChangesCount: number;
+  /** Aufsummierte Verletzungswochen über die gesamte Karriere. */
+  totalInjuryWeeks: number;
+  relationshipStatus: RelationshipStatus;
+  partnerName: string | null;
+  children: number;
+}
+
+export interface Achievement {
+  id: string;
+  label: string;
+  description: string;
+  positive: boolean;
 }
 
 export interface GameState {
@@ -234,6 +270,8 @@ export interface GameState {
   usedTemplateIds: string[];
   legacyScore?: number;
   legacyTier?: string;
+  legacyFactors?: ScoreFactor[];
+  achievements?: Achievement[];
   epilogue?: string;
 }
 
