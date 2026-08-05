@@ -15,6 +15,7 @@ import {
   computeLegacy,
   createPlayer,
   decideClubOfferInjection,
+  dueStorylineTemplateIds,
   finalizeYouthClub,
   insertAt,
   isClubOfferEvent,
@@ -89,6 +90,11 @@ export default function App() {
     // Nur IDs vormerken - der eigentliche Event-Text wird erst beim Anzeigen gebaut
     // (siehe buildEventFromId), damit er immer den dann aktuellen Verein zeigt.
     let ids = pickSeasonTemplateIds(game.player, used, recentTemplateSeasons, nextSeasonNumber);
+
+    // Fällige Storyline-Fortsetzungen werden garantiert eingeplant, nicht zufällig gezogen.
+    for (const storyId of dueStorylineTemplateIds(game.player, nextSeasonNumber)) {
+      ids = insertAt(ids, storyId, Math.min(1, ids.length));
+    }
 
     const offerReason = decideClubOfferInjection(game.player);
     if (offerReason) ids = insertAt(ids, clubOfferTemplateId(offerReason), Math.min(2, ids.length));
@@ -236,7 +242,12 @@ export default function App() {
         />
       )}
       {game.screen === "dashboard" && game.player && game.leagueState && (
-        <Dashboard player={game.player} league={game.leagueState} onStartSeason={handleStartSeason} />
+        <Dashboard
+          player={game.player}
+          league={game.leagueState}
+          seasonNumber={game.seasonNumber}
+          onStartSeason={handleStartSeason}
+        />
       )}
       {game.screen === "event" && game.player && game.currentEvent && (
         <EventCard

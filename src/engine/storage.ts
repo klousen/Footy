@@ -14,7 +14,13 @@ export function loadGame(): GameState | null {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return null;
-    return JSON.parse(raw) as GameState;
+    const state = JSON.parse(raw) as GameState;
+    // Absicherung gegen ältere Spielstände ohne die Storyline-Felder.
+    if (state.player) {
+      state.player.activeStorylines ??= [];
+      state.player.completedStorylines ??= [];
+    }
+    return state;
   } catch {
     return null;
   }

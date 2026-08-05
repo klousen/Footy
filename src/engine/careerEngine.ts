@@ -136,6 +136,8 @@ export function createPlayer(
       partnerName: null,
       children: 0,
       traits: { arbeitsmoral: 50, disziplin: 50, medienimage: 50, fuehrung: 50 },
+      activeStorylines: [],
+      completedStorylines: [],
     },
   };
 }
@@ -255,6 +257,15 @@ export function pickSeasonTemplateIds(
 }
 
 /**
+ * Fällige Fortsetzungs-Stufen laufender Storylines für diese Saison - werden
+ * (wie Vereinsangebote) garantiert in die Event-Queue einsortiert, nie über
+ * die normale Zufallsauswahl gezogen (siehe `EventTemplate.storylineOnly`).
+ */
+export function dueStorylineTemplateIds(player: Player, seasonNumber: number): string[] {
+  return player.activeStorylines.filter((t) => t.dueSeason <= seasonNumber).map((t) => t.nextTemplateId);
+}
+
+/**
  * Baut den tatsächlichen GameEvent (inkl. Beschreibungstext) erst unmittelbar
  * vor der Anzeige - mit dem dann aktuellen Spielerstand. Erkennt auch dynamisch
  * erzeugte `club_offer:*`-IDs (siehe `decideClubOfferInjection`).
@@ -276,7 +287,9 @@ export function buildEventFromId(id: string, player: Player, league: LeagueState
       choices: [{ id: "ok", label: "Weiter", effects: {} }],
     };
   }
-  const built = template.build(player, { rng });
+  // Fortsetzungs-Stufen tragen ihren Kontext (z.B. Namen) im passenden StoryThread.
+  const thread = player.activeStorylines.find((t) => t.nextTemplateId === id);
+  const built = template.build(player, { rng, storyData: thread?.data });
   return { ...built, id: `${template.id}-${player.age}-${Math.round(rng() * 1e6)}`, templateId: template.id };
 }
 
@@ -328,6 +341,23 @@ function applyEffects(player: Player, effects: EventChoice["effects"], season: n
     for (const key of Object.keys(effects.traitDeltas) as TraitKey[]) {
       const delta = effects.traitDeltas[key] ?? 0;
       player.traits[key] = clamp(player.traits[key] + delta, 0, 100);
+    }
+  }
+  if (effects.storyline) {
+    const { storylineId, label, stage, totalStages, nextTemplateId, delaySeasons, data } = effects.storyline;
+    player.activeStorylines = player.activeStorylines.filter((t) => t.storylineId !== storylineId);
+    if (nextTemplateId) {
+      player.activeStorylines.push({
+        storylineId,
+        label,
+        stage,
+        totalStages,
+        nextTemplateId,
+        dueSeason: season + (delaySeasons ?? 1),
+        data,
+      });
+    } else if (!player.completedStorylines.includes(storylineId)) {
+      player.completedStorylines.push(storylineId);
     }
   }
   if (effects.injuryWeeksOut) {
@@ -384,6 +414,14 @@ export function summarizeEffects(effects: EventChoice["effects"]): string[] {
       effects.injuryWeeksOut > 0
         ? `Verletzung: +${effects.injuryWeeksOut} Wochen Ausfall${effects.injuryLabel ? ` (${effects.injuryLabel})` : ""}`
         : `Genesung: ${Math.abs(effects.injuryWeeksOut)} Wochen früher zurück`
+    );
+  }
+  if (effects.storyline) {
+    const { label, stage, totalStages, nextTemplateId } = effects.storyline;
+    lines.push(
+      nextTemplateId
+        ? `📖 Geschichte "${label}" (${stage}/${totalStages}) geht weiter - nächstes Kapitel in einer künftigen Saison.`
+        : `📖 Geschichte "${label}" (${stage}/${totalStages}) ist abgeschlossen.`
     );
   }
   if (lines.length === 0) lines.push("Keine spürbaren Auswirkungen.");
@@ -1035,6 +1073,7 @@ export function computeAchievements(player: Player): Achievement[] {
     { id: "kapitaen", label: "Führungsspieler", description: "Wurde zum Mannschaftskapitän ernannt.", positive: true, condition: wasCaptain },
     { id: "nationalkapitaen", label: "Nationalmannschaftskapitän", description: "Führte die Nationalmannschaft aufs Feld.", positive: true, condition: player.nationalTeamCaptain },
     { id: "individuelle_krone", label: "Individuelle Krönung", description: "Mindestens einmal als Torschützenkönig oder Spieler der Saison ausgezeichnet.", positive: true, condition: t.trophies.some((tr) => tr === "Torschützenkönig" || tr === "Spieler der Saison") },
+    { id: "geschichtenerzaehler", label: "Bewegte Karriere", description: "Mindestens drei mehrjährige Geschichten bis zum Ende durchlebt.", positive: true, condition: player.completedStorylines.length >= 3 },
     { id: "verletzungsanfaellig", label: "Verletzungsanfällig", description: "Über 60 Wochen der Karriere verletzt ausgefallen.", positive: false, condition: player.totalInjuryWeeks >= 60 },
     { id: "vielwechsler", label: "Vielwechsler", description: "Vier oder mehr Vereinswechsel - nie richtig sesshaft geworden.", positive: false, condition: player.clubChangesCount >= 4 },
     { id: "kartenkoenig", label: "Kartenkönig", description: "Über 80 Gelbe Karten oder 5 Platzverweise kassiert.", positive: false, condition: t.yellowCards >= 80 || t.redCards >= 5 },

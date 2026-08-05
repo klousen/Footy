@@ -1,5 +1,5 @@
 import type { EventTemplate, Player } from "./types";
-import { clamp, FIRST_NAMES } from "./data";
+import { clamp, FIRST_NAMES, LAST_NAMES } from "./data";
 
 // Hilfsfunktion für lesbaren Vereinsnamen im Text
 const club = (p: Player) => p.club.name;
@@ -7,6 +7,11 @@ const club = (p: Player) => p.club.name;
 // Hilfsfunktion: zufälliger Vorname für neue Beziehungen
 function randomPartnerName(rng: () => number): string {
   return FIRST_NAMES[Math.floor(rng() * FIRST_NAMES.length)];
+}
+
+// Hilfsfunktion: zufälliger voller Name für Storyline-Nebenfiguren (z.B. Rivalen)
+function randomFullName(rng: () => number): string {
+  return `${FIRST_NAMES[Math.floor(rng() * FIRST_NAMES.length)]} ${LAST_NAMES[Math.floor(rng() * LAST_NAMES.length)]}`;
 }
 
 export const EVENT_TEMPLATES: EventTemplate[] = [
@@ -1936,6 +1941,729 @@ export const EVENT_TEMPLATES: EventTemplate[] = [
       ],
     }),
   },
+
+  // ---------------------------------------------------------------------
+  // STORYLINES: mehrjährige Ereignis-Reihen mit garantierter Fortsetzung
+  // (siehe EffectDelta.storyline / StoryThread). Die erste Stufe wird ganz
+  // normal zufällig gezogen, alle Folgestufen sind `storylineOnly` und
+  // werden fällig - nicht zufällig - eingespielt.
+  // ---------------------------------------------------------------------
+
+  // --- 1) Rivalität im Kabinenflur ---------------------------------------
+  {
+    id: "rivalitaet_1",
+    category: "taktik",
+    minAge: 18,
+    maxAge: 32,
+    weight: 1.4,
+    condition: (p) =>
+      p.stage !== "jugend" &&
+      !p.completedStorylines.includes("rivalitaet") &&
+      !p.activeStorylines.some((t) => t.storylineId === "rivalitaet"),
+    build: (p, ctx) => {
+      const rivalName = randomFullName(ctx.rng);
+      return {
+        category: "taktik",
+        title: "Neuzugang macht Druck",
+        description: `${club(p)} hat mit ${rivalName} einen ehrgeizigen Neuzugang genau für deine Position verpflichtet. Der Konkurrenzkampf um den Stammplatz beginnt sofort.`,
+        choices: [
+          {
+            id: "konfrontieren",
+            label: "Das direkte Gespräch mit ihm/ihr suchen",
+            effects: {
+              clubRelation: -2,
+              traitDeltas: { fuehrung: 2 },
+              logText: `hat ${rivalName} von Anfang an klar die Grenzen aufgezeigt.`,
+              logKind: "info",
+              storyline: { storylineId: "rivalitaet", label: "Rivalität im Kabinenflur", stage: 1, totalStages: 3, nextTemplateId: "rivalitaet_2", delaySeasons: 2, data: { rivalName } },
+            },
+          },
+          {
+            id: "ausarbeiten",
+            label: "Die Antwort still auf dem Platz geben",
+            effects: {
+              attributes: { mentalitaet: 1 },
+              traitDeltas: { arbeitsmoral: 2 },
+              logText: `lässt die sportlichen Argumente gegen ${rivalName} sprechen.`,
+              logKind: "info",
+              storyline: { storylineId: "rivalitaet", label: "Rivalität im Kabinenflur", stage: 1, totalStages: 3, nextTemplateId: "rivalitaet_2", delaySeasons: 2, data: { rivalName } },
+            },
+          },
+          {
+            id: "team",
+            label: "Auf den Rückhalt der Mannschaft setzen",
+            effects: {
+              clubRelation: 3,
+              morale: 2,
+              logText: `sucht im Konkurrenzkampf mit ${rivalName} den Rückhalt der Mannschaft.`,
+              logKind: "info",
+              storyline: { storylineId: "rivalitaet", label: "Rivalität im Kabinenflur", stage: 1, totalStages: 3, nextTemplateId: "rivalitaet_2", delaySeasons: 2, data: { rivalName } },
+            },
+          },
+        ],
+      };
+    },
+  },
+  {
+    id: "rivalitaet_2",
+    category: "taktik",
+    minAge: 18,
+    maxAge: 34,
+    weight: 0,
+    storylineOnly: true,
+    build: (p, ctx) => {
+      const rivalName = ctx.storyData?.rivalName ?? "dein Rivale";
+      return {
+        category: "taktik",
+        title: "Der Konflikt eskaliert",
+        description: `Die Rivalität mit ${rivalName} um den Stammplatz bei ${club(p)} sorgt mittlerweile für Gesprächsstoff - sogar die Presse hat den Konkurrenzkampf entdeckt.`,
+        choices: [
+          {
+            id: "versoehnen",
+            label: "Das offene Gespräch suchen und Frieden schließen",
+            effects: {
+              clubRelation: 6,
+              morale: 4,
+              traitDeltas: { fuehrung: 3, medienimage: 2 },
+              logText: `hat sich mit ${rivalName} versöhnt und aus dem Rivalen einen Verbündeten gemacht.`,
+              logKind: "positive",
+              storyline: { storylineId: "rivalitaet", label: "Rivalität im Kabinenflur", stage: 2, totalStages: 3, nextTemplateId: "rivalitaet_3", delaySeasons: 2, data: { rivalName, outcome: "freund" } },
+            },
+          },
+          {
+            id: "weiter_konkurrieren",
+            label: "Den Konkurrenzkampf bewusst weiter befeuern",
+            effects: {
+              attributes: { mentalitaet: 2 },
+              traitDeltas: { disziplin: -3 },
+              clubRelation: -3,
+              reputation: 2,
+              logText: `befeuert die Rivalität mit ${rivalName} bewusst weiter.`,
+              logKind: "info",
+              storyline: { storylineId: "rivalitaet", label: "Rivalität im Kabinenflur", stage: 2, totalStages: 3, nextTemplateId: "rivalitaet_3", delaySeasons: 2, data: { rivalName, outcome: "rivale" } },
+            },
+          },
+        ],
+      };
+    },
+  },
+  {
+    id: "rivalitaet_3",
+    category: "taktik",
+    minAge: 18,
+    maxAge: 36,
+    weight: 0,
+    storylineOnly: true,
+    build: (p, ctx) => {
+      const rivalName = ctx.storyData?.rivalName ?? "dein Rivale";
+      const outcome = ctx.storyData?.outcome ?? "freund";
+      if (outcome === "freund") {
+        return {
+          category: "taktik",
+          title: "Aus Rivalen wurde ein Duo",
+          description: `${rivalName} und du habt aus der anfänglichen Rivalität eine der stärksten Verbindungen der Kabine gemacht - die Chemie auf dem Platz ist inzwischen legendär bei ${club(p)}.`,
+          choices: [
+            {
+              id: "ok",
+              label: "Gemeinsam weitermachen",
+              effects: {
+                clubRelation: 8,
+                reputation: 4,
+                traitDeltas: { fuehrung: 4 },
+                logText: `hat die Rivalität mit ${rivalName} in eine enge Freundschaft verwandelt.`,
+                logKind: "milestone",
+                storyline: { storylineId: "rivalitaet", label: "Rivalität im Kabinenflur", stage: 3, totalStages: 3 },
+              },
+            },
+          ],
+        };
+      }
+      return {
+        category: "taktik",
+        title: "Der Rivale zieht weiter",
+        description: `Die Fronten zwischen dir und ${rivalName} sind nie richtig aufgetaut - am Ende löst ${club(p)} den Konflikt durch einen Wechsel von ${rivalName}.`,
+        choices: [
+          {
+            id: "ok",
+            label: "Den Platz behaupten",
+            effects: {
+              morale: 5,
+              clubRelation: 4,
+              roleProtectionSeasons: 1,
+              traitDeltas: { arbeitsmoral: 2 },
+              logText: `hat sich im Konkurrenzkampf gegen ${rivalName} durchgesetzt - der Rivale verlässt den Verein.`,
+              logKind: "milestone",
+              storyline: { storylineId: "rivalitaet", label: "Rivalität im Kabinenflur", stage: 3, totalStages: 3 },
+            },
+          },
+        ],
+      };
+    },
+  },
+
+  // --- 2) Der lange Weg zurück (Verletzungs-Comeback) ---------------------
+  {
+    id: "comeback_1",
+    category: "verletzung",
+    minAge: 19,
+    maxAge: 34,
+    weight: 1,
+    condition: (p) =>
+      !p.completedStorylines.includes("comeback") && !p.activeStorylines.some((t) => t.storylineId === "comeback"),
+    build: (p) => ({
+      category: "verletzung",
+      title: "Schwere Verletzung",
+      description: `Ein unglücklicher Zweikampf endet für dich bei ${club(p)} mit einer schweren Verletzung - die Ärzte sprechen von einer langen Pause, manche zweifeln sogar am Comeback.`,
+      choices: [
+        {
+          id: "aggressiv",
+          label: "Riskante, beschleunigte Reha wagen",
+          effects: {
+            injuryWeeksOut: 16,
+            injuryLabel: "Kreuzbandriss",
+            morale: -8,
+            traitDeltas: { arbeitsmoral: 2 },
+            logText: "hat sich schwer verletzt (Kreuzbandriss) und wagt eine riskante, beschleunigte Reha.",
+            logKind: "negative",
+            storyline: { storylineId: "comeback", label: "Der lange Weg zurück", stage: 1, totalStages: 3, nextTemplateId: "comeback_2", delaySeasons: 1, data: { risk: "aggressiv" } },
+          },
+        },
+        {
+          id: "geduldig",
+          label: "Geduldige, ärztlich empfohlene Reha",
+          effects: {
+            injuryWeeksOut: 16,
+            injuryLabel: "Kreuzbandriss",
+            morale: -5,
+            traitDeltas: { disziplin: 2 },
+            logText: "hat sich schwer verletzt (Kreuzbandriss) und setzt auf eine geduldige, ärztlich empfohlene Reha.",
+            logKind: "negative",
+            storyline: { storylineId: "comeback", label: "Der lange Weg zurück", stage: 1, totalStages: 3, nextTemplateId: "comeback_2", delaySeasons: 1, data: { risk: "geduldig" } },
+          },
+        },
+      ],
+    }),
+  },
+  {
+    id: "comeback_2",
+    category: "verletzung",
+    minAge: 19,
+    maxAge: 35,
+    weight: 0,
+    storylineOnly: true,
+    build: (p, ctx) => {
+      const risk = ctx.storyData?.risk ?? "geduldig";
+      const successChance = risk === "aggressiv" ? 0.45 : 0.7;
+      return {
+        category: "verletzung",
+        title: "Das Comeback",
+        description:
+          risk === "aggressiv"
+            ? `Du fühlst dich noch nicht ganz fit, aber ${club(p)} braucht dich - dein Comeback naht früher als eigentlich empfohlen.`
+            : `Nach monatelanger Geduld steht dein Comeback bei ${club(p)} endlich bevor - du fühlst dich stabil, die Nervosität ist trotzdem groß.`,
+        choices: [
+          {
+            id: "riskieren",
+            label: "Das Comeback jetzt wagen",
+            effects: {},
+            followUpChance: {
+              chance: successChance,
+              success: {
+                fitness: 10,
+                morale: 10,
+                attributes: { mentalitaet: 2 },
+                traitDeltas: { arbeitsmoral: 3 },
+                logText: "hat ein starkes Comeback nach der schweren Verletzung gefeiert.",
+                logKind: "positive",
+                storyline: { storylineId: "comeback", label: "Der lange Weg zurück", stage: 2, totalStages: 3, nextTemplateId: "comeback_3", delaySeasons: 1, data: { outcome: "stark" } },
+              },
+              failure: {
+                injuryWeeksOut: 6,
+                injuryLabel: "Rückschlag",
+                morale: -10,
+                logText: "erleidet beim Comeback-Versuch einen schmerzhaften Rückschlag.",
+                logKind: "negative",
+                storyline: { storylineId: "comeback", label: "Der lange Weg zurück", stage: 2, totalStages: 3, nextTemplateId: "comeback_3", delaySeasons: 1, data: { outcome: "rueckschlag" } },
+              },
+            },
+          },
+          {
+            id: "vorsichtig",
+            label: "Sich noch mehr Zeit nehmen",
+            effects: {
+              fitness: 3,
+              morale: 2,
+              logText: "verschiebt das Comeback aus Vorsicht um weitere Wochen.",
+              logKind: "info",
+              storyline: { storylineId: "comeback", label: "Der lange Weg zurück", stage: 2, totalStages: 3, nextTemplateId: "comeback_3", delaySeasons: 1, data: { outcome: "vorsichtig" } },
+            },
+          },
+        ],
+      };
+    },
+  },
+  {
+    id: "comeback_3",
+    category: "verletzung",
+    minAge: 19,
+    maxAge: 36,
+    weight: 0,
+    storylineOnly: true,
+    build: (p, ctx) => {
+      const outcome = ctx.storyData?.outcome ?? "vorsichtig";
+      if (outcome === "stark") {
+        return {
+          category: "verletzung",
+          title: "Stärker als vorher zurück",
+          description: `Die Horror-Verletzung ist Geschichte - bei ${club(p)} giltst du inzwischen als mentales Vorbild, das stärker zurückgekommen ist, als es je war.`,
+          choices: [
+            {
+              id: "ok",
+              label: "Weitermachen",
+              effects: {
+                reputation: 8,
+                clubRelation: 6,
+                traitDeltas: { arbeitsmoral: 3, fuehrung: 2 },
+                logText: "gilt nach der schweren Verletzung als mentales Vorbild - stärker zurück als je zuvor.",
+                logKind: "milestone",
+                storyline: { storylineId: "comeback", label: "Der lange Weg zurück", stage: 3, totalStages: 3 },
+              },
+            },
+          ],
+        };
+      }
+      if (outcome === "rueckschlag") {
+        return {
+          category: "verletzung",
+          title: "Der Kampf geht weiter",
+          description: `Ganz ausgestanden ist die Verletzung noch nicht - du kämpfst weiter mit den Folgen, hast dich aber nicht unterkriegen lassen.`,
+          choices: [
+            {
+              id: "ok",
+              label: "Weiterkämpfen",
+              effects: {
+                attributes: { physis: -1 },
+                traitDeltas: { arbeitsmoral: 3 },
+                clubRelation: 3,
+                logText: "kämpft nach dem Rückschlag weiter mit den Folgen der Verletzung, hat sich aber nicht unterkriegen lassen.",
+                logKind: "info",
+                storyline: { storylineId: "comeback", label: "Der lange Weg zurück", stage: 3, totalStages: 3 },
+              },
+            },
+          ],
+        };
+      }
+      return {
+        category: "verletzung",
+        title: "Der leise Weg zurück",
+        description: `Ohne großes Aufsehen, aber solide - dein Comeback bei ${club(p)} ist geglückt.`,
+        choices: [
+          {
+            id: "ok",
+            label: "Weitermachen",
+            effects: {
+              fitness: 6,
+              clubRelation: 4,
+              morale: 5,
+              logText: "ist ohne großes Aufsehen, aber solide zurück im Kader.",
+              logKind: "positive",
+              storyline: { storylineId: "comeback", label: "Der lange Weg zurück", stage: 3, totalStages: 3 },
+            },
+          },
+        ],
+      };
+    },
+  },
+
+  // --- 3) Vereinsikone ------------------------------------------------------
+  {
+    id: "ikone_1",
+    category: "meilenstein",
+    minAge: 26,
+    maxAge: 37,
+    weight: 1,
+    condition: (p) =>
+      p.clubChangesCount === 0 &&
+      p.clubRelation > 60 &&
+      p.seasonHistory.filter((s) => s.club === p.club.name).length >= 5 &&
+      !p.completedStorylines.includes("ikone") &&
+      !p.activeStorylines.some((t) => t.storylineId === "ikone"),
+    build: (p) => ({
+      category: "meilenstein",
+      title: "Die Fans singen deinen Namen",
+      description: `Nach Jahren der Treue zu ${club(p)} ist ein eigener Fangesang für dich in der Kurve entstanden - du bist längst mehr als nur ein Spieler.`,
+      choices: [
+        {
+          id: "genießen",
+          label: "Den Moment genießen und die Verbundenheit zeigen",
+          effects: {
+            clubRelation: 6,
+            reputation: 4,
+            traitDeltas: { fuehrung: 2 },
+            logText: "genießt den eigenen Fangesang sichtlich und zeigt seine/ihre Verbundenheit zum Verein.",
+            logKind: "positive",
+            storyline: { storylineId: "ikone", label: "Vereinsikone", stage: 1, totalStages: 3, nextTemplateId: "ikone_2", delaySeasons: 2 },
+          },
+        },
+        {
+          id: "bescheiden",
+          label: "Bescheiden bleiben, den Rummel kleinhalten",
+          effects: {
+            traitDeltas: { disziplin: 2 },
+            morale: 2,
+            logText: "bleibt trotz des eigenen Fangesangs bewusst bescheiden.",
+            logKind: "info",
+            storyline: { storylineId: "ikone", label: "Vereinsikone", stage: 1, totalStages: 3, nextTemplateId: "ikone_2", delaySeasons: 2 },
+          },
+        },
+      ],
+    }),
+  },
+  {
+    id: "ikone_2",
+    category: "meilenstein",
+    minAge: 26,
+    maxAge: 39,
+    weight: 0,
+    storylineOnly: true,
+    build: (p) => ({
+      category: "meilenstein",
+      title: "Der Verein plant etwas Besonderes",
+      description: `${club(p)} spielt intern mit dem Gedanken, dich mit einer besonderen Geste zu ehren - Gerüchte über ein Wandbild im Stadionviertel und ein Sondertrikot machen die Runde.`,
+      choices: [
+        {
+          id: "annehmen",
+          label: "Sich aktiv einbringen (Autogrammstunden, Fanprojekt)",
+          effects: {
+            wealth: 10000,
+            reputation: 6,
+            clubRelation: 6,
+            traitDeltas: { medienimage: 4 },
+            logText: "bringt sich aktiv in Fanprojekte und Autogrammstunden ein.",
+            logKind: "positive",
+            storyline: { storylineId: "ikone", label: "Vereinsikone", stage: 2, totalStages: 3, nextTemplateId: "ikone_3", delaySeasons: 2, data: { engaged: "aktiv" } },
+          },
+        },
+        {
+          id: "zurueckhalten",
+          label: "Lieber zurückhaltend bleiben, Fokus aufs Sportliche",
+          effects: {
+            attributes: { mentalitaet: 1 },
+            clubRelation: 3,
+            logText: "bleibt beim Rummel um die eigene Person zurückhaltend und fokussiert sich aufs Sportliche.",
+            logKind: "info",
+            storyline: { storylineId: "ikone", label: "Vereinsikone", stage: 2, totalStages: 3, nextTemplateId: "ikone_3", delaySeasons: 2, data: { engaged: "zurueckhaltend" } },
+          },
+        },
+      ],
+    }),
+  },
+  {
+    id: "ikone_3",
+    category: "meilenstein",
+    minAge: 26,
+    maxAge: 41,
+    weight: 0,
+    storylineOnly: true,
+    build: (p, ctx) => {
+      const engaged = ctx.storyData?.engaged ?? "zurueckhaltend";
+      return {
+        category: "meilenstein",
+        title: "Vereinsikone",
+        description: `Es ist offiziell: du bist zur lebenden Legende von ${club(p)} geworden - der Verein kündigt zu deinen Ehren ein Testimonial-Spiel an.`,
+        choices: [
+          {
+            id: "ok",
+            label: "Die Ehrung annehmen",
+            effects: {
+              reputation: 10,
+              wealth: engaged === "aktiv" ? 30000 : 15000,
+              clubRelation: 10,
+              traitDeltas: { fuehrung: 3, medienimage: 3 },
+              logText: `wird als lebende Vereinsikone von ${club(p)} mit einem Testimonial-Spiel geehrt.`,
+              logKind: "milestone",
+              storyline: { storylineId: "ikone", label: "Vereinsikone", stage: 3, totalStages: 3 },
+            },
+          },
+        ],
+      };
+    },
+  },
+
+  // --- 4) Zoff mit dem Trainer ----------------------------------------------
+  {
+    id: "trainerzoff_1",
+    category: "taktik",
+    minAge: 21,
+    maxAge: 34,
+    weight: 1,
+    condition: (p) =>
+      (p.stage === "etabliert" || p.stage === "veteran") &&
+      p.contract.squadRole !== "Ausbildungsspieler" &&
+      !p.completedStorylines.includes("trainerzoff") &&
+      !p.activeStorylines.some((t) => t.storylineId === "trainerzoff"),
+    build: (p) => ({
+      category: "taktik",
+      title: "Taktischer Streit",
+      description: `Nach einer öffentlichen taktischen Kontroverse mit dem Trainer von ${club(p)} wirst du überraschend auf die Bank gesetzt.`,
+      choices: [
+        {
+          id: "oeffentlich",
+          label: "Den Konflikt öffentlich über die Medien austragen",
+          effects: {
+            reputation: 3,
+            clubRelation: -8,
+            traitDeltas: { medienimage: -3, fuehrung: 2 },
+            logText: "trägt den Konflikt mit dem Trainer öffentlich über die Medien aus.",
+            logKind: "negative",
+            storyline: { storylineId: "trainerzoff", label: "Zoff mit dem Trainer", stage: 1, totalStages: 3, nextTemplateId: "trainerzoff_2", delaySeasons: 1, data: { path: "oeffentlich" } },
+          },
+        },
+        {
+          id: "intern",
+          label: "Das klärende Gespräch intern und sachlich suchen",
+          effects: {
+            clubRelation: 2,
+            traitDeltas: { disziplin: 2, fuehrung: 1 },
+            logText: "sucht das klärende Gespräch mit dem Trainer intern und sachlich.",
+            logKind: "info",
+            storyline: { storylineId: "trainerzoff", label: "Zoff mit dem Trainer", stage: 1, totalStages: 3, nextTemplateId: "trainerzoff_2", delaySeasons: 1, data: { path: "intern" } },
+          },
+        },
+      ],
+    }),
+  },
+  {
+    id: "trainerzoff_2",
+    category: "taktik",
+    minAge: 21,
+    maxAge: 35,
+    weight: 0,
+    storylineOnly: true,
+    build: (p, ctx) => {
+      const path = ctx.storyData?.path ?? "intern";
+      return {
+        category: "taktik",
+        title: "Die Situation spitzt sich zu",
+        description:
+          path === "oeffentlich"
+            ? `Die öffentliche Auseinandersetzung mit dem Trainer sorgt bei ${club(p)} für Unruhe in der Kabine - die Vereinsführung fordert eine Entscheidung.`
+            : `Trotz des klärenden Gesprächs bleibt die Situation mit dem Trainer bei ${club(p)} angespannt - eine Entscheidung steht an.`,
+        choices: [
+          {
+            id: "einlenken",
+            label: "Einlenken und sich dem Trainer unterordnen",
+            effects: {
+              clubRelation: 6,
+              traitDeltas: { disziplin: 3 },
+              morale: -2,
+              logText: "lenkt im Konflikt mit dem Trainer ein.",
+              logKind: "info",
+              storyline: { storylineId: "trainerzoff", label: "Zoff mit dem Trainer", stage: 2, totalStages: 3, nextTemplateId: "trainerzoff_3", delaySeasons: 1, data: { outcome: "versoehnt" } },
+            },
+          },
+          {
+            id: "standhaft",
+            label: "Standhaft bleiben und auf einen Wechsel pochen",
+            effects: {
+              wantsTransfer: true,
+              traitDeltas: { fuehrung: 2 },
+              clubRelation: -6,
+              logText: "bleibt im Konflikt mit dem Trainer standhaft und pocht auf einen Wechsel.",
+              logKind: "negative",
+              storyline: { storylineId: "trainerzoff", label: "Zoff mit dem Trainer", stage: 2, totalStages: 3, nextTemplateId: "trainerzoff_3", delaySeasons: 1, data: { outcome: "eskaliert" } },
+            },
+          },
+        ],
+      };
+    },
+  },
+  {
+    id: "trainerzoff_3",
+    category: "taktik",
+    minAge: 21,
+    maxAge: 36,
+    weight: 0,
+    storylineOnly: true,
+    build: (p, ctx) => {
+      const outcome = ctx.storyData?.outcome ?? "versoehnt";
+      if (outcome === "versoehnt") {
+        return {
+          category: "taktik",
+          title: "Der Burgfrieden",
+          description: `Der Konflikt mit dem Trainer bei ${club(p)} ist beigelegt - du hast dich zurück ins Team gekämpft.`,
+          choices: [
+            {
+              id: "ok",
+              label: "Weitermachen",
+              effects: {
+                squadRoleOverride: "Rotation",
+                roleProtectionSeasons: 1,
+                clubRelation: 8,
+                morale: 6,
+                traitDeltas: { disziplin: 2 },
+                logText: "hat den Konflikt mit dem Trainer beigelegt und sich zurück ins Team gekämpft.",
+                logKind: "positive",
+                storyline: { storylineId: "trainerzoff", label: "Zoff mit dem Trainer", stage: 3, totalStages: 3 },
+              },
+            },
+          ],
+        };
+      }
+      return {
+        category: "taktik",
+        title: "Der Bruch",
+        description: `Der Konflikt mit dem Trainer bei ${club(p)} ist endgültig eskaliert - der Verein signalisiert Wechselbereitschaft.`,
+        choices: [
+          {
+            id: "ok",
+            label: "Nach vorne blicken",
+            effects: {
+              wantsTransfer: true,
+              clubRelation: -10,
+              reputation: 2,
+              traitDeltas: { fuehrung: 2 },
+              logText: "eskaliert den Streit mit dem Trainer endgültig - ein Wechsel scheint nur noch eine Frage der Zeit.",
+              logKind: "negative",
+              storyline: { storylineId: "trainerzoff", label: "Zoff mit dem Trainer", stage: 3, totalStages: 3 },
+            },
+          },
+        ],
+      };
+    },
+  },
+
+  // --- 5) Der Marken-Deal ----------------------------------------------------
+  {
+    id: "marke_1",
+    category: "sponsoring",
+    minAge: 19,
+    maxAge: 36,
+    weight: 1,
+    condition: (p) =>
+      p.reputation >= 20 &&
+      !p.completedStorylines.includes("marke") &&
+      !p.activeStorylines.some((t) => t.storylineId === "marke"),
+    build: () => ({
+      category: "sponsoring",
+      title: "Eine Boutique-Marke fragt an",
+      description: "Eine aufstrebende Modemarke meldet sich mit einer ersten kleinen Kooperationsanfrage bei dir.",
+      choices: [
+        {
+          id: "ja",
+          label: "Der kleinen Kooperation zusagen",
+          effects: {
+            wealth: 8000,
+            traitDeltas: { medienimage: 2 },
+            logText: "sagt einer kleinen Modemarken-Kooperation zu.",
+            logKind: "positive",
+            storyline: { storylineId: "marke", label: "Der Marken-Deal", stage: 1, totalStages: 3, nextTemplateId: "marke_2", delaySeasons: 2 },
+          },
+        },
+        {
+          id: "nein",
+          label: "Dankend ablehnen, sich aufs Sportliche konzentrieren",
+          effects: {
+            attributes: { mentalitaet: 1 },
+            logText: "lehnt die Kooperationsanfrage dankend ab und konzentriert sich aufs Sportliche.",
+            logKind: "info",
+            storyline: { storylineId: "marke", label: "Der Marken-Deal", stage: 1, totalStages: 3 },
+          },
+        },
+      ],
+    }),
+  },
+  {
+    id: "marke_2",
+    category: "sponsoring",
+    minAge: 19,
+    maxAge: 38,
+    weight: 0,
+    storylineOnly: true,
+    build: () => ({
+      category: "sponsoring",
+      title: "Der Deal wächst",
+      description: "Die Kooperation lief gut - jetzt bietet die Marke einen deutlich größeren Vertrag als Markenbotschafter an, der aber Zeit und Fokus kostet.",
+      choices: [
+        {
+          id: "botschafter",
+          label: "Den großen Botschaftervertrag unterschreiben",
+          effects: {
+            wealth: 60000,
+            reputation: 6,
+            fitness: -4,
+            traitDeltas: { medienimage: 4 },
+            logText: "unterschreibt einen großen Vertrag als Markenbotschafter.",
+            logKind: "positive",
+            storyline: { storylineId: "marke", label: "Der Marken-Deal", stage: 2, totalStages: 3, nextTemplateId: "marke_3", delaySeasons: 2, data: { path: "botschafter" } },
+          },
+        },
+        {
+          id: "reduzieren",
+          label: "Das Engagement bewusst klein halten",
+          effects: {
+            wealth: 15000,
+            traitDeltas: { disziplin: 2 },
+            logText: "hält das Engagement für die Marke bewusst klein.",
+            logKind: "info",
+            storyline: { storylineId: "marke", label: "Der Marken-Deal", stage: 2, totalStages: 3, nextTemplateId: "marke_3", delaySeasons: 2, data: { path: "fokus" } },
+          },
+        },
+      ],
+    }),
+  },
+  {
+    id: "marke_3",
+    category: "sponsoring",
+    minAge: 19,
+    maxAge: 40,
+    weight: 0,
+    storylineOnly: true,
+    build: (_p, ctx) => {
+      const path = ctx.storyData?.path ?? "fokus";
+      if (path === "botschafter") {
+        return {
+          category: "sponsoring",
+          title: "Die eigene Kollektion",
+          description: "Der Erfolg als Markenbotschafter mündet in eine eigene, nach dir benannte Produktlinie.",
+          choices: [
+            {
+              id: "ok",
+              label: "Die Kollektion launchen",
+              effects: {
+                wealth: 120000,
+                reputation: 8,
+                clubRelation: -3,
+                traitDeltas: { medienimage: 3 },
+                logText: "bringt eine eigene, nach ihm/ihr benannte Produktlinie auf den Markt.",
+                logKind: "positive",
+                storyline: { storylineId: "marke", label: "Der Marken-Deal", stage: 3, totalStages: 3 },
+              },
+            },
+          ],
+        };
+      }
+      return {
+        category: "sponsoring",
+        title: "Der Sport zuerst",
+        description: "Das bewusst kleingehaltene Engagement für die Marke zahlt sich sportlich aus.",
+        choices: [
+          {
+            id: "ok",
+            label: "Weitermachen",
+            effects: {
+              attributes: { mentalitaet: 1 },
+              clubRelation: 4,
+              wealth: 20000,
+              logText: "hat den sportlichen Fokus über das große Geld mit der Marke gestellt.",
+              logKind: "positive",
+              storyline: { storylineId: "marke", label: "Der Marken-Deal", stage: 3, totalStages: 3 },
+            },
+          },
+        ],
+      };
+    },
+  },
 ];
 
 export function getTemplateById(id: string): EventTemplate | undefined {
@@ -1947,6 +2675,9 @@ export function eligibleTemplates(
   usedTemplateIds: Set<string>
 ): EventTemplate[] {
   return EVENT_TEMPLATES.filter((t) => {
+    // Fortsetzungs-Stufen einer Storyline werden nie zufällig gezogen, sondern
+    // ausschließlich fällig eingespielt (siehe `dueStorylineTemplateIds`).
+    if (t.storylineOnly) return false;
     if (player.age < t.minAge || player.age > t.maxAge) return false;
     if (t.unique && usedTemplateIds.has(t.id)) return false;
     if (t.condition && !t.condition(player)) return false;

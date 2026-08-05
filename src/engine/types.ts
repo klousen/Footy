@@ -171,8 +171,35 @@ export interface EffectDelta {
   squadRoleOverride?: SquadRole;
   /** Verändert Charakterwerte (Arbeitsmoral, Disziplin, Medienimage, Führung). */
   traitDeltas?: Partial<Record<TraitKey, number>>;
+  /**
+   * Startet, verlängert oder beendet eine mehrjährige Ereignis-Reihe. Ist
+   * `nextTemplateId` gesetzt, wird diese Stufe nach `delaySeasons` Saisons
+   * garantiert (nicht zufällig) eingespielt - sonst gilt die Reihe als
+   * abgeschlossen. `data` transportiert Kontext (z.B. den Namen eines
+   * Rivalen) unverändert in die Build-Funktion der nächsten Stufe.
+   */
+  storyline?: {
+    storylineId: string;
+    label: string;
+    stage: number;
+    totalStages: number;
+    nextTemplateId?: string;
+    delaySeasons?: number;
+    data?: Record<string, string>;
+  };
   logText?: string;
   logKind?: LogEntry["kind"];
+}
+
+/** Eine laufende, mehrjährige Ereignis-Reihe (siehe `EffectDelta.storyline`). */
+export interface StoryThread {
+  storylineId: string;
+  label: string;
+  stage: number;
+  totalStages: number;
+  nextTemplateId: string;
+  dueSeason: number;
+  data?: Record<string, string>;
 }
 
 /** Sofortiges Feedback nach einer Entscheidung - Text + lesbare Auswirkungen. */
@@ -223,7 +250,16 @@ export interface EventTemplate {
   weight: number;
   unique?: boolean;
   condition?: (player: Player) => boolean;
-  build: (player: Player, ctx: { rng: () => number }) => Omit<GameEvent, "id" | "templateId">;
+  /**
+   * Wird nur als garantierte Fortsetzung einer Storyline eingespielt (siehe
+   * `StoryThread`), nie über die normale zufällige Auswahl - taucht daher
+   * nicht in `eligibleTemplates()` auf.
+   */
+  storylineOnly?: boolean;
+  build: (
+    player: Player,
+    ctx: { rng: () => number; storyData?: Record<string, string> }
+  ) => Omit<GameEvent, "id" | "templateId">;
 }
 
 export interface Player {
@@ -276,6 +312,10 @@ export interface Player {
   children: number;
   /** Charakterwerte aus vergangenen Entscheidungen - siehe `TraitKey`. */
   traits: Traits;
+  /** Laufende mehrjährige Ereignis-Reihen (Rivalität, Comeback, ...) - siehe `StoryThread`. */
+  activeStorylines: StoryThread[];
+  /** IDs abgeschlossener Ereignis-Reihen (verhindert erneuten Start derselben Geschichte). */
+  completedStorylines: string[];
 }
 
 export interface Achievement {

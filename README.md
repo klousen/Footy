@@ -68,6 +68,15 @@ im höheren Alter.
   Länderspiele, Vermögen, Vereinstreue, Familie, Verletzungshistorie, ...)
   und es gibt eine Reihe positiver wie negativer **Erfolge/Achievements**
   (z. B. "Torjäger", "Vereinstreue", "Verletzungsanfällig", "Vielwechsler").
+- **Mehrjährige Geschichten (Storylines)**: Manche Entscheidungen stoßen eine
+  Ereignis-Reihe an, die sich über mehrere Saisons fortsetzt und garantiert
+  (nicht zufällig) weitergeht, sobald das nächste Kapitel fällig ist - inkl.
+  Fortschrittsanzeige ("Kapitel 2/3") im Feedback und einem eigenen
+  Dashboard-Panel "Laufende Geschichten". Aktuell: eine Rivalität mit einem
+  neuen Konkurrenten um den Stammplatz, der lange Weg zurück nach einer
+  schweren Verletzung, der Aufstieg zur Vereinsikone bei langer Vereinstreue,
+  ein eskalierender Zoff mit dem Trainer und ein wachsender Marken-Deal -
+  jede mit mehreren Ausgängen, je nachdem wie du dich entscheidest.
 - **Lebensereignisse**: Neben dem Sport können eigene Beziehungen entstehen
   - erste Liebe, Beziehungskrisen (mit Trennungsrisiko), Verlobung, Hochzeit
   (groß & öffentlich oder klein & privat), Nachwuchs und Ärger mit den
@@ -125,7 +134,7 @@ src/
     leagueEngine.ts     Liga-Aufbau, Saisontabellen, Auf-/Abstiegs-Logik
     careerEngine.ts     Spieler-Erstellung, Alterung, Verträge, Transfers,
                          Karriereende
-    events.ts           ~35 Entscheidungs-Events über alle Karrierephasen
+    events.ts           ~100 Entscheidungs-Events + 5 mehrjährige Storylines
     labels.ts           Deutsche Labels/Formatierung (auch für Feedback-Texte)
     data.ts, storage.ts Namenspools, localStorage-Persistenz
   ui/                  React-Komponenten für die einzelnen Bildschirme

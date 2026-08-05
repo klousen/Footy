@@ -5,16 +5,19 @@ import { overallRating } from "../engine/careerEngine";
 import { leagueNameForTier } from "../engine/leagueEngine";
 import { AttributeBars } from "./AttributeBars";
 import { TraitBars } from "./TraitBars";
+import { StoryThreads } from "./StoryThreads";
 import { formatMoney, RELATIONSHIP_LABEL } from "./labels";
 import { Timeline } from "./Timeline";
 
 export function Dashboard({
   player,
   league,
+  seasonNumber,
   onStartSeason,
 }: {
   player: Player;
   league: LeagueState;
+  seasonNumber: number;
   onStartSeason: () => void;
 }) {
   const [showTimeline, setShowTimeline] = useState(false);
@@ -68,6 +71,8 @@ export function Dashboard({
         <p className="muted trait-hint">Prägt sich durch deine Entscheidungen und beeinflusst Wachstum, Leistung und welche Ereignisse künftig auftauchen.</p>
         <TraitBars traits={player.traits} />
       </div>
+
+      <StoryThreads threads={player.activeStorylines} seasonNumber={seasonNumber} />
 
       <div className="panel">
         <h3>Vertrag</h3>
