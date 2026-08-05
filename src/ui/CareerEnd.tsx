@@ -1,4 +1,5 @@
 import type { Achievement, Player, ScoreFactor } from "../engine/types";
+import { buildClubTenures } from "../engine/careerEngine";
 import { formatMoney, RELATIONSHIP_LABEL } from "./labels";
 import { ShareCard } from "./ShareCard";
 
@@ -22,6 +23,7 @@ export function CareerEnd({
   const t = player.careerTotals;
   const positiveAchievements = (achievements ?? []).filter((a) => a.positive);
   const negativeAchievements = (achievements ?? []).filter((a) => !a.positive);
+  const clubTenures = buildClubTenures(player);
 
   return (
     <div className="screen career-end-screen">
@@ -65,31 +67,17 @@ export function CareerEnd({
         </div>
       </div>
 
-      {player.transferHistory.length > 0 && (
+      {clubTenures.length > 0 && (
         <div className="panel">
-          <h3>Transferhistorie</h3>
-          <ul className="transfer-history-list">
-            {player.transferHistory.map((t, i) => (
-              <li key={i} className="transfer-history-item">
-                <div className="transfer-history-head">
-                  <strong>
-                    Alter {t.age}: {t.fromClub} → {t.toClub}
-                  </strong>
-                  <span className="muted">
-                    {t.toFlag} {t.toCountry} · {t.leagueLabel}
-                  </span>
-                </div>
-                <div className="transfer-history-details">
-                  <span>Gehalt: {formatMoney(t.wagePerYear)}/Jahr</span>
-                  <span>
-                    {t.scoreAtTransfer !== null
-                      ? `Score zum Zeitpunkt: ${t.scoreAtTransfer} Pkt. (${t.scoreTierAtTransfer})`
-                      : "Score zum Zeitpunkt: Profidebüt, noch keine Profisaison bewertet"}
-                  </span>
-                  <span>
-                    Vorsaison: {t.goalsLastSeason} Tore / {t.assistsLastSeason} Vorlagen
-                  </span>
-                </div>
+          <h3>Karriereverlauf</h3>
+          <ul className="club-tenure-list">
+            {clubTenures.map((ct, i) => (
+              <li key={i} className="club-tenure-item">
+                <span className="club-tenure-age">
+                  {ct.fromAge === ct.toAge ? `${ct.fromAge}` : `${ct.fromAge}-${ct.toAge}`}
+                </span>
+                <span className="club-tenure-club">{ct.club}</span>
+                <span className="club-tenure-score">Ø {ct.avgScore} Pkt.</span>
               </li>
             ))}
           </ul>

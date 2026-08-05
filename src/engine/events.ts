@@ -13,6 +13,22 @@ function randomPartnerName(rng: () => number): string {
   return PARTNER_NAME_POOL[Math.floor(rng() * PARTNER_NAME_POOL.length)];
 }
 
+// Hilfsfunktion: zufällige Ganzzahl in [min, max] - für variablen Effekt-Impact
+// (dieselbe Entscheidung soll sich nicht jedes Mal exakt gleich anfühlen).
+function rInt(ctx: { rng: () => number }, min: number, max: number): number {
+  return min + Math.floor(ctx.rng() * (max - min + 1));
+}
+
+// Frühestes typisches Heiratsalter, gekoppelt an Bildung: wer viel in Bildung
+// investiert hat, heiratet im Schnitt später (Karrierefokus/späterer Weg),
+// wer wenig investiert hat, eher früher - Anfang 20 bleibt möglich, aber die
+// Ausnahme statt die Regel. Analog für Nachwuchs (siehe `kind_geboren`).
+function minMarriageAge(education: number): number {
+  if (education >= 65) return 27;
+  if (education <= 35) return 20;
+  return 23;
+}
+
 // Hilfsfunktion: zufälliger voller Name für Storyline-Nebenfiguren (z.B. Rivalen)
 function randomFullName(rng: () => number): string {
   return `${FIRST_NAMES[Math.floor(rng() * FIRST_NAMES.length)]} ${LAST_NAMES[Math.floor(rng() * LAST_NAMES.length)]}`;
@@ -157,23 +173,28 @@ export const EVENT_TEMPLATES: EventTemplate[] = [
     minAge: 15,
     maxAge: 38,
     weight: 3,
-    build: () => ({
-      category: "training",
-      title: "Zusätzliche Trainingseinheit",
-      description: "Der Athletiktrainer bietet eine freiwillige Extraschicht am Abend an.",
-      choices: [
-        {
-          id: "ja",
-          label: "Teilnehmen",
-          effects: { attributes: { physis: 1 }, fitness: -5, traitDeltas: { arbeitsmoral: 3 }, logText: "hat eine Extraschicht im Training absolviert.", logKind: "info" },
-        },
-        {
-          id: "nein",
-          label: "Lieber regenerieren",
-          effects: { fitness: 5, traitDeltas: { arbeitsmoral: -1 }, logText: "hat sich für Regeneration entschieden.", logKind: "info" },
-        },
-      ],
-    }),
+    build: (_p, ctx) => {
+      const gain = rInt(ctx, 1, 2);
+      const cost = rInt(ctx, 3, 7);
+      const recover = rInt(ctx, 3, 6);
+      return {
+        category: "training",
+        title: "Zusätzliche Trainingseinheit",
+        description: "Der Athletiktrainer bietet eine freiwillige Extraschicht am Abend an.",
+        choices: [
+          {
+            id: "ja",
+            label: "Teilnehmen",
+            effects: { attributes: { physis: gain }, fitness: -cost, traitDeltas: { arbeitsmoral: 3 }, logText: "hat eine intensive Extraschicht im Training absolviert.", logKind: "info" },
+          },
+          {
+            id: "nein",
+            label: "Lieber regenerieren",
+            effects: { fitness: recover, traitDeltas: { arbeitsmoral: -1 }, logText: "hat sich für Regeneration entschieden.", logKind: "info" },
+          },
+        ],
+      };
+    },
   },
   {
     id: "training_technikfokus",
@@ -181,28 +202,32 @@ export const EVENT_TEMPLATES: EventTemplate[] = [
     minAge: 15,
     maxAge: 34,
     weight: 3,
-    build: () => ({
-      category: "training",
-      title: "Individueller Trainingsschwerpunkt",
-      description: "Der Trainerstab lässt dich einen Schwerpunkt für die kommenden Wochen wählen.",
-      choices: [
-        {
-          id: "technik",
-          label: "Technik verfeinern",
-          effects: { attributes: { technik: 2 }, fitness: -2, traitDeltas: { arbeitsmoral: 2 }, logText: "hat gezielt an der Technik gefeilt.", logKind: "info" },
-        },
-        {
-          id: "tempo",
-          label: "Schnelligkeit trainieren",
-          effects: { attributes: { tempo: 2 }, fitness: -2, traitDeltas: { arbeitsmoral: 2 }, logText: "hat an der Schnelligkeit gearbeitet.", logKind: "info" },
-        },
-        {
-          id: "mental",
-          label: "Mentaltraining mit dem Sportpsychologen",
-          effects: { attributes: { mentalitaet: 2 }, morale: 2, traitDeltas: { arbeitsmoral: 2 }, logText: "hat mentale Stärke aufgebaut.", logKind: "info" },
-        },
-      ],
-    }),
+    build: (_p, ctx) => {
+      const gain = rInt(ctx, 1, 3);
+      const cost = rInt(ctx, 1, 3);
+      return {
+        category: "training",
+        title: "Individueller Trainingsschwerpunkt",
+        description: "Der Trainerstab lässt dich einen Schwerpunkt für die kommenden Wochen wählen.",
+        choices: [
+          {
+            id: "technik",
+            label: "Technik verfeinern",
+            effects: { attributes: { technik: gain }, fitness: -cost, traitDeltas: { arbeitsmoral: 2 }, logText: "hat gezielt an der Technik gefeilt.", logKind: "info" },
+          },
+          {
+            id: "tempo",
+            label: "Schnelligkeit trainieren",
+            effects: { attributes: { tempo: gain }, fitness: -cost, traitDeltas: { arbeitsmoral: 2 }, logText: "hat an der Schnelligkeit gearbeitet.", logKind: "info" },
+          },
+          {
+            id: "mental",
+            label: "Mentaltraining mit dem Sportpsychologen",
+            effects: { attributes: { mentalitaet: gain }, morale: 2, traitDeltas: { arbeitsmoral: 2 }, logText: "hat mentale Stärke aufgebaut.", logKind: "info" },
+          },
+        ],
+      };
+    },
   },
   {
     id: "lifestyle_party",
@@ -278,6 +303,31 @@ export const EVENT_TEMPLATES: EventTemplate[] = [
           id: "nein",
           label: "Lieber auf Nummer sicher gehen",
           effects: { logText: "hat auf eine riskante Investition verzichtet.", logKind: "info" },
+        },
+      ],
+    }),
+  },
+  {
+    id: "weiterbildung_nebenbei",
+    category: "lifestyle",
+    minAge: 18,
+    maxAge: 29,
+    weight: 1.5,
+    condition: (p) => p.education < 90,
+    build: (_p, ctx) => ({
+      category: "lifestyle",
+      title: "Weiterbildung neben dem Profialltag",
+      description: "Ein Fernstudienangebot würde sich zeitlich neben dem Profialltag gerade noch ausgehen.",
+      choices: [
+        {
+          id: "beginnen",
+          label: "Fernstudium beginnen",
+          effects: { educationPoints: rInt(ctx, 8, 14), fitness: -3, traitDeltas: { arbeitsmoral: 2 }, logText: "hat neben dem Profialltag ein Fernstudium begonnen.", logKind: "positive" },
+        },
+        {
+          id: "fokus",
+          label: "Sich voll auf den Sport konzentrieren",
+          effects: { attributes: { mentalitaet: 1 }, logText: "hat sich bewusst gegen ein Studium und für den vollen Fokus auf den Sport entschieden.", logKind: "info" },
         },
       ],
     }),
@@ -884,7 +934,7 @@ export const EVENT_TEMPLATES: EventTemplate[] = [
     category: "beziehung",
     minAge: 20,
     maxAge: 34,
-    weight: 1,
+    weight: 2,
     condition: (p) => p.relationshipStatus === "single",
     build: (_p, ctx) => {
       const name = randomPartnerName(ctx.rng);
@@ -952,10 +1002,14 @@ export const EVENT_TEMPLATES: EventTemplate[] = [
   {
     id: "heiratsantrag",
     category: "beziehung",
-    minAge: 21,
+    minAge: 19,
     maxAge: 36,
-    weight: 1,
-    condition: (p) => p.relationshipStatus === "in_beziehung",
+    // Höheres Gewicht, weil die Bedingung (in einer Beziehung + Mindestalter) den
+    // Pool ohnehin stark einschränkt - sonst bleibt die Beziehung oft jahrelang
+    // ohne Fortschritt hängen, weil das Gewicht gegen den riesigen Gesamtpool
+    // kaum ins Gewicht fällt.
+    weight: 3,
+    condition: (p) => p.relationshipStatus === "in_beziehung" && p.age >= minMarriageAge(p.education),
     build: (p) => ({
       category: "beziehung",
       title: "Der große Antrag",
@@ -977,7 +1031,7 @@ export const EVENT_TEMPLATES: EventTemplate[] = [
   {
     id: "hochzeit",
     category: "beziehung",
-    minAge: 22,
+    minAge: 20,
     maxAge: 37,
     weight: 2,
     condition: (p) => p.relationshipStatus === "verlobt",
@@ -1046,10 +1100,14 @@ export const EVENT_TEMPLATES: EventTemplate[] = [
   {
     id: "kind_geboren",
     category: "beziehung",
-    minAge: 23,
+    minAge: 21,
     maxAge: 39,
-    weight: 1,
-    condition: (p) => p.relationshipStatus === "verheiratet" || p.relationshipStatus === "verlobt",
+    // Höheres Gewicht aus demselben Grund wie bei "heiratsantrag" - die Bedingung
+    // grenzt den Pool bereits stark ein.
+    weight: 3,
+    condition: (p) =>
+      (p.relationshipStatus === "verheiratet" || p.relationshipStatus === "verlobt") &&
+      p.age >= minMarriageAge(p.education) + 2,
     build: (p) => ({
       category: "beziehung",
       title: "Nachwuchs",
@@ -1173,21 +1231,37 @@ export const EVENT_TEMPLATES: EventTemplate[] = [
   {
     id: "erbschaft",
     category: "lifestyle",
-    minAge: 18,
+    minAge: 22,
     maxAge: 40,
     weight: 1,
-    build: () => ({
-      category: "lifestyle",
-      title: "Unerwartetes Erbe",
-      description: "Ein entfernter Verwandter hinterlässt dir ein kleines Vermögen.",
-      choices: [
-        {
-          id: "annehmen",
-          label: "Erbe annehmen",
-          effects: { wealth: 25000, logText: "hat unerwartet eine Erbschaft gemacht.", logKind: "positive" },
-        },
-      ],
-    }),
+    build: (p) => {
+      // Wer sich gut mit Finanzen/Verträgen auskennt (Bildung), holt beim Regeln
+      // eines Nachlasses spürbar mehr heraus - eine echte Entscheidung statt
+      // reinem Zufallsgeld ohne jeden Bezug zum Spieler.
+      const financialSkill = clamp(0.35 + p.education / 200, 0.35, 0.8);
+      return {
+        category: "lifestyle",
+        title: "Unerwartetes Erbe",
+        description: "Ein entfernter Verwandter ist verstorben und hinterlässt dir ein kleines Vermögen - der Nachlass muss geregelt werden.",
+        choices: [
+          {
+            id: "verwalter",
+            label: "Einem Nachlassverwalter überlassen",
+            effects: { wealth: 15000, logText: "hat eine Erbschaft einem Nachlassverwalter überlassen.", logKind: "positive" },
+          },
+          {
+            id: "selbst",
+            label: "Sich selbst um den Nachlass kümmern",
+            effects: {},
+            followUpChance: {
+              chance: financialSkill,
+              success: { wealth: 45000, educationPoints: 1, logText: "hat den Nachlass geschickt selbst geregelt und deutlich mehr herausgeholt.", logKind: "positive" },
+              failure: { wealth: 5000, morale: -2, logText: "hat sich beim eigenständigen Regeln des Nachlasses verzettelt - am Ende blieb kaum etwas übrig.", logKind: "negative" },
+            },
+          },
+        ],
+      };
+    },
   },
   {
     id: "steuerproblem",
@@ -1259,23 +1333,33 @@ export const EVENT_TEMPLATES: EventTemplate[] = [
     minAge: 18,
     maxAge: 38,
     weight: 1,
-    build: () => ({
-      category: "lifestyle",
-      title: "Schreckmoment im Straßenverkehr",
-      description: "Auf dem Weg zum Training kommt dir ein Auto gefährlich nah - ein Unfall wird nur knapp vermieden.",
-      choices: [
-        {
-          id: "weiter",
-          label: "Durchatmen und weiterfahren",
-          effects: {},
-          followUpChance: {
-            chance: 0.75,
-            success: { morale: -1, logText: "kam mit dem Schrecken davon.", logKind: "info" },
-            failure: { injuryWeeksOut: 4, injuryLabel: "Schleudertrauma", morale: -5, logText: "hat bei einem doch nicht ganz vermiedenen Unfall eine Verletzung davongetragen.", logKind: "negative" },
+    build: (p) => {
+      // Reaktionsvermögen/Nervenstärke (Mentalität) beeinflusst, wie glimpflich der
+      // Schreckmoment ausgeht - keine reine Zufallsentscheidung ohne Spielerbezug.
+      const chance = clamp(0.6 + (p.attributes.mentalitaet - 50) / 200, 0.5, 0.85);
+      return {
+        category: "lifestyle",
+        title: "Schreckmoment im Straßenverkehr",
+        description: "Auf dem Weg zum Training kommt dir im dichten Verkehr ein Auto gefährlich nah.",
+        choices: [
+          {
+            id: "weiter",
+            label: "Ruhig bleiben und weiterfahren",
+            effects: {},
+            followUpChance: {
+              chance,
+              success: { morale: -1, logText: "kam mit dem Schrecken im Straßenverkehr davon.", logKind: "info" },
+              failure: { injuryWeeksOut: 4, injuryLabel: "Schleudertrauma", morale: -5, logText: "hat bei einem doch nicht ganz vermiedenen Unfall eine Verletzung davongetragen.", logKind: "negative" },
+            },
           },
-        },
-      ],
-    }),
+          {
+            id: "anhalten",
+            label: "Sofort anhalten und durchatmen",
+            effects: { fitness: -2, morale: -1, logText: "hat nach dem Schreckmoment im Verkehr sofort angehalten, um durchzuatmen - kein Risiko eingegangen.", logKind: "info" },
+          },
+        ],
+      };
+    },
   },
   {
     id: "modelvertrag",
@@ -1422,7 +1506,7 @@ export const EVENT_TEMPLATES: EventTemplate[] = [
     minAge: 15,
     maxAge: 36,
     weight: 2,
-    build: () => ({
+    build: (_p, ctx) => ({
       category: "training",
       title: "Standardsituationen üben",
       description: "Nach dem regulären Training bleibt Zeit für zusätzliches Freistoß- und Eckballtraining.",
@@ -1430,12 +1514,12 @@ export const EVENT_TEMPLATES: EventTemplate[] = [
         {
           id: "investieren",
           label: "Zusätzliche Stunden investieren",
-          effects: { attributes: { technik: 2 }, fitness: -3, traitDeltas: { arbeitsmoral: 2 }, logText: "hat zusätzliche Stunden ins Standardtraining investiert.", logKind: "info" },
+          effects: { attributes: { technik: rInt(ctx, 1, 3) }, fitness: -rInt(ctx, 2, 4), traitDeltas: { arbeitsmoral: 2 }, logText: "hat zusätzliche Stunden ins Standardtraining investiert.", logKind: "info" },
         },
         {
           id: "regenerieren",
           label: "Lieber regenerieren",
-          effects: { fitness: 3, logText: "hat sich für Regeneration statt Zusatztraining entschieden.", logKind: "info" },
+          effects: { fitness: rInt(ctx, 2, 5), logText: "hat sich für Regeneration statt Zusatztraining entschieden.", logKind: "info" },
         },
       ],
     }),
@@ -1731,7 +1815,7 @@ export const EVENT_TEMPLATES: EventTemplate[] = [
     minAge: 24,
     maxAge: 38,
     weight: 1,
-    build: () => ({
+    build: (_p, ctx) => ({
       category: "training",
       title: "Neue Sportwissenschafts-Methoden",
       description: "Der Verein bietet ein kostenpflichtiges High-End-Reha- und Recovery-Programm an.",
@@ -1739,12 +1823,109 @@ export const EVENT_TEMPLATES: EventTemplate[] = [
         {
           id: "investieren",
           label: "Auf eigene Kosten investieren",
-          effects: { wealth: -5000, fitness: 6, attributes: { physis: 1 }, traitDeltas: { arbeitsmoral: 2 }, logText: "hat auf eigene Kosten in modernste Sportwissenschaft investiert.", logKind: "positive" },
+          effects: { wealth: -5000, fitness: rInt(ctx, 4, 8), attributes: { physis: rInt(ctx, 1, 2) }, traitDeltas: { arbeitsmoral: 2 }, logText: "hat auf eigene Kosten in modernste Sportwissenschaft investiert.", logKind: "positive" },
         },
         {
           id: "standard",
           label: "Beim Standardprogramm bleiben",
           effects: {},
+        },
+      ],
+    }),
+  },
+  {
+    id: "videostudium",
+    category: "training",
+    minAge: 17,
+    maxAge: 38,
+    weight: 2,
+    build: (_p, ctx) => ({
+      category: "training",
+      title: "Videostudium mit dem Analysten",
+      description: "Der Videoanalyst bietet an, gegnerische Spielsysteme gemeinsam im Detail durchzugehen.",
+      choices: [
+        {
+          id: "intensiv",
+          label: "Intensiv mitarbeiten",
+          effects: { attributes: { intelligenz: rInt(ctx, 1, 3) }, traitDeltas: { arbeitsmoral: 2 }, logText: "hat sich intensiv ins Videostudium mit dem Analysten vertieft.", logKind: "info" },
+        },
+        {
+          id: "kurz",
+          label: "Kurz reinschauen, dann Feierabend",
+          effects: { attributes: { intelligenz: 1 }, morale: 1, logText: "hat nur kurz beim Videostudium reingeschaut.", logKind: "info" },
+        },
+      ],
+    }),
+  },
+  {
+    id: "krafttraining",
+    category: "training",
+    minAge: 16,
+    maxAge: 36,
+    weight: 2,
+    build: (_p, ctx) => ({
+      category: "training",
+      title: "Zusatztraining im Kraftraum",
+      description: "Der Athletikcoach schlägt ein zusätzliches Krafttraining im Kraftraum vor.",
+      choices: [
+        {
+          id: "volles_programm",
+          label: "Volles Programm durchziehen",
+          effects: { attributes: { physis: rInt(ctx, 2, 3) }, fitness: -rInt(ctx, 4, 7), traitDeltas: { arbeitsmoral: 2 }, logText: "hat ein forderndes Zusatztraining im Kraftraum durchgezogen.", logKind: "info" },
+        },
+        {
+          id: "leicht",
+          label: "Leichtes Programm, Verletzungen vorbeugen",
+          effects: { attributes: { physis: 1 }, fitness: -1, logText: "hat im Kraftraum bewusst ein leichtes Programm gewählt.", logKind: "info" },
+        },
+      ],
+    }),
+  },
+  {
+    id: "persoenlicher_fitnesscoach",
+    category: "training",
+    minAge: 20,
+    maxAge: 36,
+    weight: 1,
+    condition: (p) => p.wealth > 30000,
+    build: (_p, ctx) => ({
+      category: "training",
+      title: "Angebot eines Fitnesscoachs",
+      description: "Ein renommierter privater Fitnesscoach bietet ein individuelles Trainingsprogramm auf eigene Kosten an.",
+      choices: [
+        {
+          id: "engagieren",
+          label: "Coach engagieren",
+          effects: { wealth: -15000, attributes: { physis: rInt(ctx, 1, 2), mentalitaet: 1 }, traitDeltas: { arbeitsmoral: 2 }, logText: "hat sich einen privaten Fitnesscoach geleistet.", logKind: "positive" },
+        },
+        {
+          id: "ablehnen",
+          label: "Beim Vereinsprogramm bleiben",
+          effects: { logText: "hat auf den privaten Fitnesscoach verzichtet und bleibt beim Vereinsprogramm.", logKind: "info" },
+        },
+      ],
+    }),
+  },
+  {
+    id: "mentaltrainer_intensivwoche",
+    category: "training",
+    minAge: 25,
+    maxAge: 40,
+    weight: 1,
+    build: (_p, ctx) => ({
+      category: "training",
+      title: "Mentaltrainer-Intensivwoche",
+      description: "Ein Mentaltrainer bietet eine Intensivwoche an, um in der zweiten Karrierehälfte fokussiert zu bleiben.",
+      choices: [
+        {
+          id: "teilnehmen",
+          label: "Teilnehmen",
+          effects: { attributes: { mentalitaet: rInt(ctx, 1, 3) }, morale: 3, traitDeltas: { arbeitsmoral: 2 }, logText: "hat an einer Mentaltrainer-Intensivwoche teilgenommen.", logKind: "info" },
+        },
+        {
+          id: "erfahrung",
+          label: "Auf die eigene Erfahrung vertrauen",
+          effects: { traitDeltas: { fuehrung: 1 }, logText: "vertraut lieber auf die eigene Erfahrung als auf einen Mentaltrainer.", logKind: "info" },
         },
       ],
     }),
@@ -1905,6 +2086,30 @@ export const EVENT_TEMPLATES: EventTemplate[] = [
           id: "ablehnen",
           label: "Lieber im Hintergrund bleiben",
           effects: { logText: "überlässt die Organisation der Abwehr lieber anderen.", logKind: "info" },
+        },
+      ],
+    }),
+  },
+  {
+    id: "teamkollege_krise",
+    category: "taktik",
+    minAge: 20,
+    maxAge: 36,
+    weight: 1,
+    build: () => ({
+      category: "taktik",
+      title: "Teamkollege in der Krise",
+      description: "Ein Teamkollege steckt seit Wochen erkennbar in einer persönlichen Krise und wirkt neben der Spur - der Mannschaft entgeht das nicht.",
+      choices: [
+        {
+          id: "unterstuetzen",
+          label: "Das Gespräch suchen und unterstützen",
+          effects: { traitDeltas: { fuehrung: 3 }, clubRelation: 3, morale: 2, logText: "hat einen Teamkollegen in der Krise unterstützt und aufgefangen.", logKind: "positive" },
+        },
+        {
+          id: "raushalten",
+          label: "Sich raushalten, ist nicht das eigene Thema",
+          effects: { traitDeltas: { fuehrung: -2 }, logText: "hat sich bei der Krise eines Teamkollegen bewusst rausgehalten.", logKind: "info" },
         },
       ],
     }),

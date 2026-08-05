@@ -5,6 +5,7 @@ import type {
   CareerStage,
   ChoiceFeedback,
   ClubState,
+  ClubTenure,
   EventChoice,
   GameEvent,
   GameState,
@@ -152,7 +153,6 @@ export function createPlayer(
       completedStorylines: [],
       trainingBoostSeasons: 0,
       unlockedAchievementIds: [],
-      transferHistory: [],
     },
   };
 }
@@ -1269,26 +1269,6 @@ export function applyClubOfferChoice(
 
   const leagueLabel = leagueNameForTier(targetLeague, chosen.tier);
 
-  // Transferhistorie für den Karriererückblick - die Saison-Bilanz der letzten
-  // abgeschlossenen Saison (inkl. Tore/Vorlagen, siehe `computeSeasonScore`) zeigt,
-  // auf welchem Leistungsniveau der Wechsel stattfand. `null` beim Profidebüt ohne
-  // vorherige Profisaison.
-  const lastCompletedSeason = player.seasonHistory[player.seasonHistory.length - 1];
-  player.transferHistory.push({
-    age: player.age,
-    reason,
-    fromClub: oldName,
-    toClub: chosen.city,
-    toCountry: targetLeague.countryName,
-    toFlag: targetLeague.flag,
-    leagueLabel,
-    wagePerYear: wage,
-    scoreAtTransfer: lastCompletedSeason ? lastCompletedSeason.score : null,
-    scoreTierAtTransfer: lastCompletedSeason ? lastCompletedSeason.scoreTier : null,
-    goalsLastSeason: lastCompletedSeason ? lastCompletedSeason.goals : 0,
-    assistsLastSeason: lastCompletedSeason ? lastCompletedSeason.assists : 0,
-  });
-
   const kind: LogEntry["kind"] = reason === "pro-debut" ? "milestone" : reason === "pressure" ? "negative" : "positive";
   const text =
     reason === "pro-debut"
@@ -1368,6 +1348,29 @@ export function applyClubOfferChoice(
 // ---------------------------------------------------------------------------
 // Karriereende
 // ---------------------------------------------------------------------------
+
+/**
+ * Fasst `seasonHistory` zu zusammenhängenden Vereins-Zeiträumen zusammen - für den
+ * kompakten Karriereverlauf am Karriereende (nur Verein, Altersspanne, Ø-Saisonbilanz,
+ * bewusst ohne Gehalt/Land/Liga-Details, die im laufenden Spiel schon sichtbar waren).
+ */
+export function buildClubTenures(player: Player): ClubTenure[] {
+  const tenures: ClubTenure[] = [];
+  for (const s of player.seasonHistory) {
+    const last = tenures[tenures.length - 1];
+    if (last && last.club === s.club) {
+      last.toAge = s.age;
+      last.seasons += 1;
+      last.avgScore += s.score;
+    } else {
+      tenures.push({ club: s.club, fromAge: s.age, toAge: s.age, seasons: 1, avgScore: s.score });
+    }
+  }
+  for (const t of tenures) {
+    t.avgScore = Math.round(t.avgScore / t.seasons);
+  }
+  return tenures;
+}
 
 export function shouldOfferRetirement(player: Player): boolean {
   if (player.age >= 39) return true;

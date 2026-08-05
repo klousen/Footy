@@ -146,20 +146,29 @@ im höheren Alter.
   entstehen - erste Liebe, Beziehungskrisen (mit Trennungsrisiko), Verlobung,
   Hochzeit (groß & öffentlich oder klein & privat), Nachwuchs und Ärger mit
   den Schwiegereltern. Partnernamen werden aus einem gemischten Namenspool
-  gezogen, nicht nur männlich klingende Namen. Eine stabile Partnerschaft
+  gezogen, nicht nur männlich klingende Namen. Wie früh im Leben geheiratet
+  und Nachwuchs bekommen wird, hängt spürbar von der Bildung ab (wer viel in
+  Bildung investiert hat, heiratet im Schnitt später - Anfang 20 bleibt
+  möglich, aber die Ausnahme statt die Regel). Eine stabile Partnerschaft
   bleibt nicht folgenlos: sie gibt spürbaren Rückhalt für die sportliche
   Leistung (Ehe > Verlobung > Beziehung). Dazu karrierephasen-passende
   Zufallsereignisse mit positiven wie negativen Ausgängen (Skandal,
-  Erbschaft, Steuerprobleme, Fan-Liebling, Mentorenrolle im Alter,
-  Trainerschein, Testimonial-Spiel, ...). Über 60 Events insgesamt,
-  inklusive vieler fußballspezifischer Momente (Trainerwechsel,
-  Taktikumstellung, Stadtderby, Pokal-Kraftakt, Hattrick-Chance,
-  Sportgericht, Spieler des Monats, Torjägerrennen, U-Nationalmannschaft,
-  Standardsituationen, ...) - auch Defensivaktionen kommen vor (rettender
-  Tackle, Kopfballduell in der eigenen Box, Abwehrchef-Rolle), inklusive der
-  dort naturgemäß höheren Verletzungsgefahr; dazu ein Event für
-  Zufalls-Verletzungen aus harmlosen Zusammenprallen. Die Anzahl Ereignisse
-  pro Saison ist bewusst
+  Steuerprobleme, Fan-Liebling, Mentorenrolle im Alter, Trainerschein,
+  Testimonial-Spiel, ...); ein unerwartetes Erbe und ein Schreckmoment im
+  Straßenverkehr sind jetzt echte Entscheidungen mit Bezug zu den eigenen
+  Werten (Bildung bzw. Mentalität) statt reinem Zufallsgeld/-pech ohne
+  Spielerbezug. Über 65 Events insgesamt, inklusive vieler
+  fußballspezifischer Momente (Trainerwechsel, Taktikumstellung,
+  Stadtderby, Pokal-Kraftakt, Hattrick-Chance, Sportgericht, Spieler des
+  Monats, Torjägerrennen, U-Nationalmannschaft, Standardsituationen, ...) -
+  auch Defensivaktionen kommen vor (rettender Tackle, Kopfballduell in der
+  eigenen Box, Abwehrchef-Rolle), inklusive der dort naturgemäß höheren
+  Verletzungsgefahr; dazu ein Event für Zufalls-Verletzungen aus harmlosen
+  Zusammenprallen sowie mehr Trainings-Varianten mit zufällig schwankendem
+  Effekt (Videostudium, Krafttraining, privater Fitnesscoach,
+  Mentaltrainer, Weiterbildung neben dem Profialltag), damit sich
+  Trainingsentscheidungen weniger wiederholen und nie exakt gleich
+  ausfallen. Die Anzahl Ereignisse pro Saison ist bewusst
   knapp gehalten (3-5) und schwankt leicht, damit jede einzelne Entscheidung
   mehr Gewicht für die Karriere hat - kürzlich gezogene Events werden für
   einige Saisons unwahrscheinlicher, damit sich weniger wiederholt.
@@ -180,7 +189,11 @@ im höheren Alter.
 - **Karriereende & Vermächtnis**: Legacy-Score mit Faktoren-Aufschlüsselung,
   Achievement-Badges, ein Karriere-Titel (z. B. "Publikumsliebling",
   "Weltklasse-Legende") und ein Ausblick auf den Karriereweg danach
-  (Trainer, TV-Experte, Jugendarbeit, ...).
+  (Trainer, TV-Experte, Jugendarbeit, ...). Der Karriereverlauf zeigt dabei
+  bewusst kompakt nur das Wesentliche: eine Zeile pro Vereinsstation mit
+  Altersspanne und durchschnittlicher Saison-Bilanz (fließen Tore/
+  Torbeteiligungen bereits mit ein) - ohne Gehalts- oder Liga-Details, die
+  im laufenden Spiel schon sichtbar waren.
 - **Sharepic für soziale Medien**: Am Karriereende wird automatisch eine
   Spielerkarte im FUT-Stil erzeugt (Name, Position, Land, Gesamtstärke mit
   Tier-Farbe, Karriere-Titel, Kernstats wie Spiele/Tore/Vorlagen/Titel/

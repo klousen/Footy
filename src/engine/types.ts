@@ -72,27 +72,6 @@ export interface Contract {
   squadRole: SquadRole;
 }
 
-/**
- * Ein Eintrag der Transferhistorie - wird bei jedem tatsächlichen Vereinswechsel
- * angelegt (nicht bei "bleiben"/"kämpfen") und am Karriereende komplett angezeigt.
- * `scoreAtTransfer` ist die Saison-Bilanz der letzten abgeschlossenen Saison vor dem
- * Wechsel (fließen Tore/Vorlagen bereits mit ein, siehe `computeSeasonScore`) -
- * `null`, wenn der Wechsel vor der ersten Profisaison stattfand (z.B. Profidebüt).
- */
-export interface TransferRecord {
-  age: number;
-  reason: "pro-debut" | "opportunity" | "pressure";
-  fromClub: string;
-  toClub: string;
-  toCountry: string;
-  toFlag: string;
-  leagueLabel: string;
-  wagePerYear: number;
-  scoreAtTransfer: number | null;
-  scoreTierAtTransfer: string | null;
-  goalsLastSeason: number;
-  assistsLastSeason: number;
-}
 
 export type SquadRole =
   | "Stammspieler"
@@ -128,6 +107,16 @@ export type Traits = Record<TraitKey, number>;
 export interface ScoreFactor {
   label: string;
   points: number;
+}
+
+/** Ein zusammenhängender Zeitraum bei einem Verein - abgeleitet aus `seasonHistory`
+ * für den kompakten Karriereverlauf am Karriereende (siehe `buildClubTenures`). */
+export interface ClubTenure {
+  club: string;
+  fromAge: number;
+  toAge: number;
+  seasons: number;
+  avgScore: number;
 }
 
 export interface SeasonStats {
@@ -347,8 +336,6 @@ export interface Player {
   trainingBoostSeasons: number;
   /** IDs bereits freigeschalteter Erfolge - für die "neu"-Erkennung im Saisonrückblick. */
   unlockedAchievementIds: string[];
-  /** Jeder tatsächlich vollzogene Vereinswechsel - für die Transferhistorie am Karriereende. */
-  transferHistory: TransferRecord[];
 }
 
 export interface Achievement {
