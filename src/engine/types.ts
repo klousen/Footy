@@ -93,6 +93,16 @@ export type CareerStage =
 
 export type RelationshipStatus = "single" | "in_beziehung" | "verlobt" | "verheiratet";
 
+/**
+ * Charakterwerte, die sich aus vergangenen Entscheidungen ergeben (0-100, 50 = neutral).
+ * Anders als die sportlichen Attribute wirken sie sich nicht auf die Gesamtstärke aus,
+ * sondern auf Wachstum, Saison-Simulation, Vereinsbeziehung und darauf, welche
+ * zukünftigen Events überhaupt freigeschaltet werden - das "Gedächtnis" der Karriere.
+ */
+export type TraitKey = "arbeitsmoral" | "disziplin" | "medienimage" | "fuehrung";
+
+export type Traits = Record<TraitKey, number>;
+
 export interface ScoreFactor {
   label: string;
   points: number;
@@ -102,6 +112,8 @@ export interface SeasonStats {
   seasonLabel: string; // z.B. "Saison 2031/32"
   age: number;
   club: string;
+  /** Gesamtstärke während dieser Saison (vor dem Wachstum am Saisonende). */
+  overallRating: number;
   leagueTier: LeagueTier;
   leagueName: string;
   matches: number;
@@ -149,6 +161,8 @@ export interface EffectDelta {
   /** `null` setzt explizit "keine Partnerschaft mehr" (Trennung). */
   partnerName?: string | null;
   childrenDelta?: number;
+  /** Verändert Charakterwerte (Arbeitsmoral, Disziplin, Medienimage, Führung). */
+  traitDeltas?: Partial<Record<TraitKey, number>>;
   logText?: string;
   logKind?: LogEntry["kind"];
 }
@@ -248,6 +262,8 @@ export interface Player {
   relationshipStatus: RelationshipStatus;
   partnerName: string | null;
   children: number;
+  /** Charakterwerte aus vergangenen Entscheidungen - siehe `TraitKey`. */
+  traits: Traits;
 }
 
 export interface Achievement {

@@ -352,6 +352,16 @@ input:focus {
   transition: width 0.4s ease;
 }
 
+.trait-fill {
+  background: linear-gradient(90deg, var(--warning), #e08fd0);
+}
+
+.trait-hint {
+  margin-top: -4px;
+  margin-bottom: 4px;
+  font-size: 0.82rem;
+}
+
 .attr-value {
   text-align: right;
   font-weight: 600;

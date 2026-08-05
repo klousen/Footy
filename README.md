@@ -36,8 +36,19 @@ im höheren Alter.
   aus Liga 1 steigen ab, die stärksten aus Liga 2 steigen auf (Anzahl je nach
   Land). Betrifft es den eigenen Verein, zieht der Spieler automatisch mit.
 - **Sofortiges Feedback**: Jede Entscheidung zeigt direkt im Anschluss, was
-  sie bewirkt hat - Ergebnistext plus konkrete Attribut-/Stat-Änderungen -
-  bevor es weitergeht.
+  sie bewirkt hat - Ergebnistext, die Gesamtstärke vorher/nachher (der
+  direkte fußballerische Impact) sowie alle Attribut-, Charakter- und
+  Stat-Änderungen - bevor es weitergeht.
+- **Charakter & Ruf (Gedächtnis für Entscheidungen)**: Vier Werte -
+  Arbeitsmoral, Disziplin, Medienimage, Führungsstärke - merken sich, wie du
+  dich über die Karriere hinweg verhältst, und sind im Dashboard sichtbar.
+  Sie wirken sich messbar aus: hohe Arbeitsmoral beschleunigt das
+  Attributwachstum spürbar, niedrige Disziplin kostet Konstanz und mehr
+  Karten, ein gutes Medienimage verstärkt den Bekanntheitsgewinn, hohe
+  Führungsstärke hält die Kabine zusammen. Extremwerte schalten eigene
+  Folge-Events frei (Vorbildfunktion, Reißleine des Vereins,
+  Sponsoren-Ansturm, Medien-Vertrauenskrise, Mannschaftsrat) und fließen in
+  Legacy-Score und Achievements ein.
 - **Gehaltssystem**: Der Vertrag zahlt jede Saison ein Grundgehalt plus
   Leistungsboni (Tore, Vorlagen, starke Bewertungen, Titel) aufs Vermögen
   ein. Gehaltsverhandlungen (hart pokern, moderat nachfragen oder auf dem

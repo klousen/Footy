@@ -84,7 +84,7 @@ export const EVENT_TEMPLATES: EventTemplate[] = [
         {
           id: "schlichten",
           label: "Schlichten und Ruhe reinbringen",
-          effects: { attributes: { mentalitaet: 1, charisma: 1 }, clubRelation: 2, logText: "hat als Streitschlichter überzeugt.", logKind: "positive" },
+          effects: { attributes: { mentalitaet: 1, charisma: 1 }, clubRelation: 2, traitDeltas: { fuehrung: 3 }, logText: "hat als Streitschlichter überzeugt.", logKind: "positive" },
         },
         {
           id: "raushalten",
@@ -156,12 +156,12 @@ export const EVENT_TEMPLATES: EventTemplate[] = [
         {
           id: "ja",
           label: "Teilnehmen",
-          effects: { attributes: { physis: 1 }, fitness: -5, logText: "hat eine Extraschicht im Training absolviert.", logKind: "info" },
+          effects: { attributes: { physis: 1 }, fitness: -5, traitDeltas: { arbeitsmoral: 3 }, logText: "hat eine Extraschicht im Training absolviert.", logKind: "info" },
         },
         {
           id: "nein",
           label: "Lieber regenerieren",
-          effects: { fitness: 5, logText: "hat sich für Regeneration entschieden.", logKind: "info" },
+          effects: { fitness: 5, traitDeltas: { arbeitsmoral: -1 }, logText: "hat sich für Regeneration entschieden.", logKind: "info" },
         },
       ],
     }),
@@ -180,17 +180,17 @@ export const EVENT_TEMPLATES: EventTemplate[] = [
         {
           id: "technik",
           label: "Technik verfeinern",
-          effects: { attributes: { technik: 2 }, fitness: -2, logText: "hat gezielt an der Technik gefeilt.", logKind: "info" },
+          effects: { attributes: { technik: 2 }, fitness: -2, traitDeltas: { arbeitsmoral: 2 }, logText: "hat gezielt an der Technik gefeilt.", logKind: "info" },
         },
         {
           id: "tempo",
           label: "Schnelligkeit trainieren",
-          effects: { attributes: { tempo: 2 }, fitness: -2, logText: "hat an der Schnelligkeit gearbeitet.", logKind: "info" },
+          effects: { attributes: { tempo: 2 }, fitness: -2, traitDeltas: { arbeitsmoral: 2 }, logText: "hat an der Schnelligkeit gearbeitet.", logKind: "info" },
         },
         {
           id: "mental",
           label: "Mentaltraining mit dem Sportpsychologen",
-          effects: { attributes: { mentalitaet: 2 }, morale: 2, logText: "hat mentale Stärke aufgebaut.", logKind: "info" },
+          effects: { attributes: { mentalitaet: 2 }, morale: 2, traitDeltas: { arbeitsmoral: 2 }, logText: "hat mentale Stärke aufgebaut.", logKind: "info" },
         },
       ],
     }),
@@ -209,12 +209,12 @@ export const EVENT_TEMPLATES: EventTemplate[] = [
         {
           id: "hingehen",
           label: "Hingehen und feiern",
-          effects: { morale: 8, reputation: 2, fitness: -8, logText: "hat ausgelassen gefeiert.", logKind: "info" },
+          effects: { morale: 8, reputation: 2, fitness: -8, traitDeltas: { disziplin: -4 }, logText: "hat ausgelassen gefeiert.", logKind: "info" },
         },
         {
           id: "absagen",
           label: "Absagen und früh schlafen",
-          effects: { fitness: 5, clubRelation: 1, logText: "hat auf die Party verzichtet und sich ausgeruht.", logKind: "info" },
+          effects: { fitness: 5, clubRelation: 1, traitDeltas: { disziplin: 2, arbeitsmoral: 1 }, logText: "hat auf die Party verzichtet und sich ausgeruht.", logKind: "info" },
         },
       ],
     }),
@@ -233,12 +233,12 @@ export const EVENT_TEMPLATES: EventTemplate[] = [
         {
           id: "ja",
           label: "Konsequent umsetzen",
-          effects: { attributes: { physis: 1 }, fitness: 4, morale: -1, logText: "hat die Ernährung konsequent umgestellt.", logKind: "info" },
+          effects: { attributes: { physis: 1 }, fitness: 4, morale: -1, traitDeltas: { disziplin: 2 }, logText: "hat die Ernährung konsequent umgestellt.", logKind: "info" },
         },
         {
           id: "nein",
           label: "Beim Altbewährten bleiben",
-          effects: { morale: 1, logText: "ist bei den gewohnten Essgewohnheiten geblieben.", logKind: "info" },
+          effects: { morale: 1, traitDeltas: { disziplin: -1 }, logText: "ist bei den gewohnten Essgewohnheiten geblieben.", logKind: "info" },
         },
       ],
     }),
@@ -291,12 +291,12 @@ export const EVENT_TEMPLATES: EventTemplate[] = [
         {
           id: "diplomatisch",
           label: "Diplomatisch antworten",
-          effects: { attributes: { charisma: 1 }, clubRelation: 1, logText: "hat sich diplomatisch gegenüber der Presse geäußert.", logKind: "info" },
+          effects: { attributes: { charisma: 1 }, clubRelation: 1, traitDeltas: { medienimage: 3 }, logText: "hat sich diplomatisch gegenüber der Presse geäußert.", logKind: "info" },
         },
         {
           id: "provokant",
           label: "Provokant Klartext reden",
-          effects: { reputation: 5, clubRelation: -3, logText: "hat mit provokanten Aussagen für Schlagzeilen gesorgt.", logKind: "negative" },
+          effects: { reputation: 5, clubRelation: -3, traitDeltas: { medienimage: -3, disziplin: -1 }, logText: "hat mit provokanten Aussagen für Schlagzeilen gesorgt.", logKind: "negative" },
         },
         {
           id: "zurueckhaltend",
@@ -321,7 +321,7 @@ export const EVENT_TEMPLATES: EventTemplate[] = [
         {
           id: "ja",
           label: "Zustimmen",
-          effects: { reputation: 6, morale: -2, logText: "hat einer Homestory zugestimmt.", logKind: "info" },
+          effects: { reputation: 6, morale: -2, traitDeltas: { medienimage: 3 }, logText: "hat einer Homestory zugestimmt.", logKind: "info" },
         },
         {
           id: "nein",
@@ -345,12 +345,12 @@ export const EVENT_TEMPLATES: EventTemplate[] = [
         {
           id: "kontern",
           label: "Öffentlich kontern",
-          effects: { reputation: 3, morale: -3, logText: "hat auf öffentliche Kritik gekontert.", logKind: "negative" },
+          effects: { reputation: 3, morale: -3, traitDeltas: { medienimage: -2 }, logText: "hat auf öffentliche Kritik gekontert.", logKind: "negative" },
         },
         {
           id: "ignorieren",
           label: "Ignorieren und auf dem Platz antworten",
-          effects: { attributes: { mentalitaet: 1 }, logText: "hat Kritik ignoriert und auf dem Platz geantwortet.", logKind: "info" },
+          effects: { attributes: { mentalitaet: 1 }, traitDeltas: { disziplin: 2 }, logText: "hat Kritik ignoriert und auf dem Platz geantwortet.", logKind: "info" },
         },
       ],
     }),
@@ -547,12 +547,12 @@ export const EVENT_TEMPLATES: EventTemplate[] = [
         {
           id: "annehmen",
           label: "Kapitän werden",
-          effects: { attributes: { mentalitaet: 2, charisma: 1 }, reputation: 6, clubRelation: 4, logText: "wurde zum Mannschaftskapitän ernannt.", logKind: "milestone" },
+          effects: { attributes: { mentalitaet: 2, charisma: 1 }, reputation: 6, clubRelation: 4, traitDeltas: { fuehrung: 10 }, logText: "wurde zum Mannschaftskapitän ernannt.", logKind: "milestone" },
         },
         {
           id: "ablehnen",
           label: "Höflich ablehnen",
-          effects: { morale: 2, logText: "hat die Kapitänsbinde vorerst abgelehnt.", logKind: "info" },
+          effects: { morale: 2, traitDeltas: { fuehrung: -2 }, logText: "hat die Kapitänsbinde vorerst abgelehnt.", logKind: "info" },
         },
       ],
     }),
@@ -1013,7 +1013,7 @@ export const EVENT_TEMPLATES: EventTemplate[] = [
         {
           id: "investieren",
           label: "Zeit in die jungen Spieler investieren",
-          effects: { attributes: { mentalitaet: 1, charisma: 1 }, clubRelation: 5, fitness: -2, logText: "hat sich als Mentor für die jungen Spieler im Kader engagiert.", logKind: "positive" },
+          effects: { attributes: { mentalitaet: 1, charisma: 1 }, clubRelation: 5, fitness: -2, traitDeltas: { fuehrung: 5 }, logText: "hat sich als Mentor für die jungen Spieler im Kader engagiert.", logKind: "positive" },
         },
         {
           id: "fokus",
@@ -1092,7 +1092,7 @@ export const EVENT_TEMPLATES: EventTemplate[] = [
         {
           id: "annehmen",
           label: "Die Ehre genießen",
-          effects: { reputation: 6, morale: 8, logText: "wurde von den Fans zum Publikumsliebling gewählt.", logKind: "positive" },
+          effects: { reputation: 6, morale: 8, traitDeltas: { medienimage: 4 }, logText: "wurde von den Fans zum Publikumsliebling gewählt.", logKind: "positive" },
         },
       ],
     }),
@@ -1160,7 +1160,7 @@ export const EVENT_TEMPLATES: EventTemplate[] = [
         {
           id: "rechtlich",
           label: "Rechtlich dagegen vorgehen",
-          effects: { wealth: -8000, reputation: 3, logText: "ist rechtlich gegen eine Boulevard-Geschichte vorgegangen.", logKind: "info" },
+          effects: { wealth: -8000, reputation: 3, traitDeltas: { medienimage: 1 }, logText: "ist rechtlich gegen eine Boulevard-Geschichte vorgegangen.", logKind: "info" },
         },
         {
           id: "kontern",
@@ -1168,14 +1168,14 @@ export const EVENT_TEMPLATES: EventTemplate[] = [
           effects: {},
           followUpChance: {
             chance: 0.5,
-            success: { reputation: 6, morale: 3, logText: "hat eine Boulevard-Schlagzeile mit Humor gekontert und Sympathien gesammelt.", logKind: "positive" },
-            failure: { reputation: -5, logText: "ist mit einem missglückten Konter zur Schlagzeile selbst zum Gespött geworden.", logKind: "negative" },
+            success: { reputation: 6, morale: 3, traitDeltas: { medienimage: 5 }, logText: "hat eine Boulevard-Schlagzeile mit Humor gekontert und Sympathien gesammelt.", logKind: "positive" },
+            failure: { reputation: -5, traitDeltas: { medienimage: -6 }, logText: "ist mit einem missglückten Konter zur Schlagzeile selbst zum Gespött geworden.", logKind: "negative" },
           },
         },
         {
           id: "ignorieren",
           label: "Ignorieren",
-          effects: { reputation: -2, logText: "hat eine Boulevard-Schlagzeile einfach ignoriert.", logKind: "negative" },
+          effects: { reputation: -2, traitDeltas: { medienimage: -3 }, logText: "hat eine Boulevard-Schlagzeile einfach ignoriert.", logKind: "negative" },
         },
       ],
     }),
@@ -1302,7 +1302,7 @@ export const EVENT_TEMPLATES: EventTemplate[] = [
           effects: { fitness: -3 },
           followUpChance: {
             chance: 0.55,
-            success: { clubRelation: 8, morale: 5, logText: "hat den neuen Trainer von sich überzeugt.", logKind: "positive" },
+            success: { clubRelation: 8, morale: 5, traitDeltas: { arbeitsmoral: 2 }, logText: "hat den neuen Trainer von sich überzeugt.", logKind: "positive" },
             failure: { clubRelation: -6, morale: -4, logText: "kommt beim neuen Trainer bislang nicht gut an.", logKind: "negative" },
           },
         },
@@ -1357,7 +1357,7 @@ export const EVENT_TEMPLATES: EventTemplate[] = [
         {
           id: "investieren",
           label: "Zusätzliche Stunden investieren",
-          effects: { attributes: { technik: 2 }, fitness: -3, logText: "hat zusätzliche Stunden ins Standardtraining investiert.", logKind: "info" },
+          effects: { attributes: { technik: 2 }, fitness: -3, traitDeltas: { arbeitsmoral: 2 }, logText: "hat zusätzliche Stunden ins Standardtraining investiert.", logKind: "info" },
         },
         {
           id: "regenerieren",
@@ -1381,7 +1381,7 @@ export const EVENT_TEMPLATES: EventTemplate[] = [
         {
           id: "einbringen",
           label: "Sich aktiv einbringen",
-          effects: { attributes: { intelligenz: 1, charisma: 1 }, clubRelation: 3, logText: "hat sich aktiv in die taktische Vorbereitung eingebracht.", logKind: "positive" },
+          effects: { attributes: { intelligenz: 1, charisma: 1 }, clubRelation: 3, traitDeltas: { fuehrung: 4 }, logText: "hat sich aktiv in die taktische Vorbereitung eingebracht.", logKind: "positive" },
         },
         {
           id: "raushalten",
@@ -1495,7 +1495,7 @@ export const EVENT_TEMPLATES: EventTemplate[] = [
         {
           id: "annehmen",
           label: "Die Auszeichnung entgegennehmen",
-          effects: { reputation: 5, morale: 6, wealth: 3000, logText: "wurde zum Spieler des Monats gewählt.", logKind: "positive" },
+          effects: { reputation: 5, morale: 6, wealth: 3000, traitDeltas: { medienimage: 3 }, logText: "wurde zum Spieler des Monats gewählt.", logKind: "positive" },
         },
       ],
     }),
@@ -1616,7 +1616,7 @@ export const EVENT_TEMPLATES: EventTemplate[] = [
           effects: {},
           followUpChance: {
             chance: 0.55,
-            success: { reputation: 6, clubRelation: 5, morale: 6, logText: "wurde im Derby zum gefeierten Helden.", logKind: "positive" },
+            success: { reputation: 6, clubRelation: 5, morale: 6, traitDeltas: { fuehrung: 2, medienimage: 2 }, logText: "wurde im Derby zum gefeierten Helden.", logKind: "positive" },
             failure: { injuryWeeksOut: 3, injuryLabel: "Blessur im Zweikampf", morale: -4, logText: "hat sich im hitzigen Derby eine Blessur zugezogen.", logKind: "negative" },
           },
         },
@@ -1666,7 +1666,7 @@ export const EVENT_TEMPLATES: EventTemplate[] = [
         {
           id: "investieren",
           label: "Auf eigene Kosten investieren",
-          effects: { wealth: -5000, fitness: 6, attributes: { physis: 1 }, logText: "hat auf eigene Kosten in modernste Sportwissenschaft investiert.", logKind: "positive" },
+          effects: { wealth: -5000, fitness: 6, attributes: { physis: 1 }, traitDeltas: { arbeitsmoral: 2 }, logText: "hat auf eigene Kosten in modernste Sportwissenschaft investiert.", logKind: "positive" },
         },
         {
           id: "standard",
@@ -1701,6 +1701,131 @@ export const EVENT_TEMPLATES: EventTemplate[] = [
           id: "technik",
           label: "Auf Technik statt Härte setzen",
           effects: { attributes: { technik: 1 }, logText: "hat auf Technik statt auf harte Zweikämpfe gesetzt.", logKind: "info" },
+        },
+      ],
+    }),
+  },
+
+  // ---------------------------------------------------------------------
+  // CHARAKTER-EVENTS: durch vergangene Entscheidungen (Traits) freigeschaltet
+  // ---------------------------------------------------------------------
+  {
+    id: "vorbildfunktion",
+    category: "meilenstein",
+    minAge: 20,
+    maxAge: 38,
+    weight: 1,
+    condition: (p) => p.traits.arbeitsmoral >= 75,
+    build: (p) => ({
+      category: "meilenstein",
+      title: "Vorbildfunktion",
+      description: `Deine bekannte Arbeitsmoral ist ${club(p)} nicht entgangen - der Verein bittet dich, als Vorbild für die Jugendabteilung voranzugehen.`,
+      choices: [
+        {
+          id: "annehmen",
+          label: "Die Rolle annehmen",
+          effects: { clubRelation: 6, reputation: 3, traitDeltas: { fuehrung: 3 }, logText: "wurde wegen seiner/ihrer Arbeitsmoral zum Vorbild für die Jugendabteilung ernannt.", logKind: "positive" },
+        },
+        {
+          id: "ablehnen",
+          label: "Lieber im Hintergrund bleiben",
+          effects: { logText: "hat die Vorbildrolle für die Jugendabteilung abgelehnt.", logKind: "info" },
+        },
+      ],
+    }),
+  },
+  {
+    id: "reputationskrise",
+    category: "meilenstein",
+    minAge: 18,
+    maxAge: 36,
+    weight: 2,
+    condition: (p) => p.traits.disziplin <= 25,
+    build: (p) => ({
+      category: "meilenstein",
+      title: "Der Verein zieht die Reißleine",
+      description: `Dein Lebenswandel abseits des Platzes sorgt bei ${club(p)} zunehmend für Unmut - die Vereinsführung sucht das klärende Gespräch.`,
+      choices: [
+        {
+          id: "aendern",
+          label: "Verhaltensänderung geloben",
+          effects: { clubRelation: 4, morale: -3, traitDeltas: { disziplin: 15 }, logText: "hat dem Verein eine Verhaltensänderung zugesagt.", logKind: "info" },
+        },
+        {
+          id: "weiter",
+          label: "Weitermachen wie bisher",
+          effects: { clubRelation: -10, reputation: -3, logText: "hat sich vom Verein nichts vorschreiben lassen wollen.", logKind: "negative" },
+        },
+      ],
+    }),
+  },
+  {
+    id: "werbepartner_ansturm",
+    category: "sponsoring",
+    minAge: 20,
+    maxAge: 36,
+    weight: 1,
+    condition: (p) => p.traits.medienimage >= 75,
+    build: () => ({
+      category: "sponsoring",
+      title: "Ansturm der Sponsoren",
+      description: "Dein makelloses Image weckt gleich mehrere Sponsoren-Interessen zeitgleich.",
+      choices: [
+        {
+          id: "bestbietend",
+          label: "Dem bestbietenden Sponsor zusagen",
+          effects: { wealth: 40000, fitness: -3, logText: "hat dem bestbietenden von mehreren gleichzeitig interessierten Sponsoren zugesagt.", logKind: "positive" },
+        },
+        {
+          id: "exklusiv",
+          label: "Einen Exklusivpartner wählen",
+          effects: { wealth: 20000, traitDeltas: { medienimage: 3 }, logText: "hat sich für einen Exklusiv-Sponsorenpartner entschieden.", logKind: "positive" },
+        },
+      ],
+    }),
+  },
+  {
+    id: "medienvertrauenskrise",
+    category: "medien",
+    minAge: 18,
+    maxAge: 36,
+    weight: 1,
+    condition: (p) => p.traits.medienimage <= 25,
+    build: () => ({
+      category: "medien",
+      title: "Vertrauenskrise mit den Medien",
+      description: "Die Presse begegnet dir mittlerweile durchgehend feindselig - kaum ein Bericht ohne Spitze gegen dich.",
+      choices: [
+        {
+          id: "berater",
+          label: "PR-Berater engagieren",
+          effects: { wealth: -10000, traitDeltas: { medienimage: 12 }, logText: "hat einen PR-Berater engagiert, um das Verhältnis zur Presse zu kitten.", logKind: "positive" },
+        },
+        {
+          id: "konfrontativ",
+          label: "Konfrontativ bleiben",
+          effects: { reputation: -3, traitDeltas: { medienimage: -3 }, logText: "bleibt im Umgang mit der Presse konfrontativ.", logKind: "negative" },
+        },
+      ],
+    }),
+  },
+  {
+    id: "mannschaftsrat",
+    category: "meilenstein",
+    minAge: 22,
+    maxAge: 38,
+    weight: 1,
+    unique: true,
+    condition: (p) => p.traits.fuehrung >= 70 && p.clubRelation > 50,
+    build: (p) => ({
+      category: "meilenstein",
+      title: "Wahl in den Mannschaftsrat",
+      description: `Die Mitspieler bei ${club(p)} wählen dich als anerkannte Führungspersönlichkeit in den Mannschaftsrat.`,
+      choices: [
+        {
+          id: "annehmen",
+          label: "Die Wahl annehmen",
+          effects: { clubRelation: 6, reputation: 4, traitDeltas: { fuehrung: 3 }, logText: "wurde in den Mannschaftsrat gewählt.", logKind: "milestone" },
         },
       ],
     }),

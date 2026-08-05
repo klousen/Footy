@@ -15,10 +15,11 @@ import type {
   ScoreFactor,
   SeasonStats,
   SquadRole,
+  TraitKey,
 } from "./types";
 import { POSITION_WEIGHTS } from "./types";
 import { clamp } from "./data";
-import { ATTRIBUTE_LABEL, ATTRIBUTE_ORDER, formatMoney, RELATIONSHIP_LABEL, SQUAD_ROLE_RANK } from "./labels";
+import { ATTRIBUTE_LABEL, ATTRIBUTE_ORDER, formatMoney, RELATIONSHIP_LABEL, SQUAD_ROLE_RANK, TRAIT_LABEL, TRAIT_ORDER } from "./labels";
 import { eligibleTemplates, getTemplateById } from "./events";
 import type { CountryId } from "./leagues";
 import {
@@ -132,6 +133,7 @@ export function createPlayer(
       relationshipStatus: "single",
       partnerName: null,
       children: 0,
+      traits: { arbeitsmoral: 50, disziplin: 50, medienimage: 50, fuehrung: 50 },
     },
   };
 }
@@ -301,6 +303,12 @@ function applyEffects(player: Player, effects: EventChoice["effects"], season: n
   if (effects.relationshipStatus) player.relationshipStatus = effects.relationshipStatus;
   if (effects.partnerName !== undefined) player.partnerName = effects.partnerName;
   if (effects.childrenDelta) player.children = Math.max(0, player.children + effects.childrenDelta);
+  if (effects.traitDeltas) {
+    for (const key of Object.keys(effects.traitDeltas) as TraitKey[]) {
+      const delta = effects.traitDeltas[key] ?? 0;
+      player.traits[key] = clamp(player.traits[key] + delta, 0, 100);
+    }
+  }
   if (effects.injuryWeeksOut) {
     if (effects.injuryWeeksOut > 0) {
       player.injury = { label: effects.injuryLabel ?? "Verletzung", weeksOut: (player.injury?.weeksOut ?? 0) + effects.injuryWeeksOut };
@@ -341,6 +349,12 @@ export function summarizeEffects(effects: EventChoice["effects"]): string[] {
   }
   if (effects.relationshipStatus) lines.push(`Beziehungsstatus: ${RELATIONSHIP_LABEL[effects.relationshipStatus]}`);
   if (effects.childrenDelta) lines.push(`Kinder ${signed(effects.childrenDelta)}`);
+  if (effects.traitDeltas) {
+    for (const key of TRAIT_ORDER) {
+      const delta = effects.traitDeltas[key];
+      if (delta) lines.push(`${TRAIT_LABEL[key]} ${signed(delta)}`);
+    }
+  }
   if (effects.injuryWeeksOut) {
     lines.push(
       effects.injuryWeeksOut > 0
@@ -385,7 +399,10 @@ export function simulateSeason(player: Player, seasonNumber: number, league: Lea
   const matches = Math.round(baseMatches * roleFactor * availabilityFactor);
 
   const form = (player.morale - 50) / 100; // -0.5 .. 0.5
-  const ratingBase = 6.0 + (overall - clubStrength) / 45 + form * 0.6;
+  // Disziplin wirkt sich leicht auf die Konstanz der Leistungen aus (professionelle
+  // Lebensführung vs. Party-Image) - ein spürbarer, aber kein dominanter Faktor.
+  const disziplinFactor = (player.traits.disziplin - 50) / 250; // -0.2 .. +0.2
+  const ratingBase = 6.0 + (overall - clubStrength) / 45 + form * 0.6 + disziplinFactor;
   const avgRating = clamp(ratingBase + (rng() - 0.5) * 0.6, 3.5, 9.5);
 
   const attackWeight = { TW: 0.02, IV: 0.15, AV: 0.35, ZM: 0.55, FS: 0.85, ST: 1.0 }[player.position];
@@ -394,8 +411,10 @@ export function simulateSeason(player: Player, seasonNumber: number, league: Lea
   const goals = Math.max(0, Math.round(matches * goalChancePerMatch * (0.7 + rng() * 0.6)));
   const assists = Math.max(0, Math.round(matches * assistChancePerMatch * (0.7 + rng() * 0.6)));
 
-  const yellowCards = Math.round(matches * 0.12 * (0.5 + rng()));
-  const redCards = rng() < 0.05 * (matches / 30) ? 1 : 0;
+  // Niedrige Disziplin erhöht die Kartenwahrscheinlichkeit spürbar, hohe senkt sie
+  const cardFactor = clamp(1.5 - player.traits.disziplin / 50, 0.5, 1.5);
+  const yellowCards = Math.round(matches * 0.12 * (0.5 + rng()) * cardFactor);
+  const redCards = rng() < 0.05 * (matches / 30) * cardFactor ? 1 : 0;
 
   // Tabellenplatz: Vereinsstärke + etwas Zufall, moduliert leicht durch eigene Form
   const strengthNoise = (rng() - 0.5) * 20;
@@ -428,8 +447,9 @@ export function simulateSeason(player: Player, seasonNumber: number, league: Lea
   const income = player.contract.wagePerYear + performanceBonus;
   player.wealth += income;
 
-  // Reputation wächst mit guten Leistungen
-  const repGain = clamp(Math.round((avgRating - 6) * 3 + goals * 0.4 + assists * 0.2), -6, 12);
+  // Reputation wächst mit guten Leistungen - ein gutes Medienimage verstärkt den Effekt
+  const mediaFactor = 1 + (player.traits.medienimage - 50) / 200; // 0.75 .. 1.25
+  const repGain = clamp(Math.round((avgRating - 6) * 3 * mediaFactor + goals * 0.4 + assists * 0.2), -6, 14);
   player.reputation = clamp(player.reputation + repGain, 0, 100);
 
   // Verein-Beziehung leicht Richtung Mitte tendieren lassen
@@ -450,6 +470,7 @@ export function simulateSeason(player: Player, seasonNumber: number, league: Lea
     seasonLabel: `Saison ${2026 + seasonNumber}/${(2026 + seasonNumber + 1).toString().slice(-2)}`,
     age: player.age,
     club: player.club.name,
+    overallRating: overall,
     leagueTier: player.club.tier,
     leagueName: leagueNameForTier(league, player.club.tier),
     matches,
@@ -518,13 +539,17 @@ function growthFactor(age: number): number {
 
 export function ageUpPlayer(player: Player): void {
   const factor = growthFactor(player.age);
+  // Arbeitsmoral aus vergangenen Trainings-/Lifestyle-Entscheidungen beschleunigt
+  // oder bremst das Wachstum spürbar (0.8x bei sehr niedriger, 1.2x bei sehr hoher
+  // Arbeitsmoral) - der direkteste "Impact" vergangener Entscheidungen auf die Werte.
+  const workEthicMultiplier = clamp(0.8 + (player.traits.arbeitsmoral / 100) * 0.4, 0.8, 1.2);
   for (const key of ATTRIBUTE_KEYS) {
     const current = player.attributes[key];
     const potential = player.potential[key];
     let delta: number;
     if (factor > 0) {
       const room = potential - current;
-      delta = Math.round(factor * (0.5 + rng() * 0.6) * clamp(room / 12, 0.15, 1.6));
+      delta = Math.round(factor * workEthicMultiplier * (0.5 + rng() * 0.6) * clamp(room / 12, 0.15, 1.6));
       delta = Math.max(0, delta);
     } else {
       delta = Math.round(factor * (0.5 + rng() * 0.6));
@@ -603,6 +628,13 @@ export function resolveClubSituation(player: Player, league: LeagueState): LogEn
     player.consecutiveBenchSeasons += 1;
   } else {
     player.consecutiveBenchSeasons = 0;
+  }
+
+  // Hohe Führungsstärke hält die Kabine zusammen und stärkt die Vereinsbeziehung leicht
+  if (player.traits.fuehrung >= 70) {
+    player.clubRelation = clamp(player.clubRelation + 2, 0, 100);
+  } else if (player.traits.fuehrung <= 25) {
+    player.clubRelation = clamp(player.clubRelation - 1, 0, 100);
   }
 
   let entry: LogEntry | null = null;
@@ -900,6 +932,12 @@ export function computeLegacy(player: Player): { score: number; tier: string; fa
     { label: "Vereinstreue", points: player.clubChangesCount <= 1 ? 30 : player.clubChangesCount >= 4 ? -20 : 0 },
     { label: "Familie", points: (player.relationshipStatus === "verheiratet" ? 10 : 0) + player.children * 5 },
     { label: "Verletzungshistorie", points: player.totalInjuryWeeks >= 60 ? -30 : player.totalInjuryWeeks <= 10 ? 15 : 0 },
+    {
+      label: "Charakter & Image",
+      points: Math.round(
+        (player.traits.arbeitsmoral - 50 + (player.traits.disziplin - 50) + (player.traits.medienimage - 50) + (player.traits.fuehrung - 50)) / 2
+      ),
+    },
   ];
 
   const score = Math.round(factors.reduce((s, f) => s + f.points, 0));
@@ -948,6 +986,12 @@ export function computeAchievements(player: Player): Achievement[] {
       positive: false,
       condition: player.age - player.birthAge >= 10 && player.wealth < 5000,
     },
+    { id: "vorbild_kabine", label: "Vorbild der Kabine", description: "Herausragende Arbeitsmoral über die gesamte Karriere.", positive: true, condition: player.traits.arbeitsmoral >= 85 },
+    { id: "eisern_diszipliniert", label: "Eisern diszipliniert", description: "Vorbildliche Disziplin abseits des Platzes.", positive: true, condition: player.traits.disziplin >= 85 },
+    { id: "medienliebling", label: "Medienliebling", description: "Bei Fans und Presse gleichermaßen beliebt.", positive: true, condition: player.traits.medienimage >= 85 },
+    { id: "fuehrungsnatur", label: "Führungsnatur", description: "In jeder Kabine ein natürlicher Anführer gewesen.", positive: true, condition: player.traits.fuehrung >= 85 },
+    { id: "kontroverse_figur", label: "Kontroverse Figur", description: "Immer wieder für Negativschlagzeilen abseits des Platzes gesorgt.", positive: false, condition: player.traits.disziplin <= 20 },
+    { id: "medienschreck", label: "Medienschreck", description: "Nie ein entspanntes Verhältnis zur Presse gefunden.", positive: false, condition: player.traits.medienimage <= 20 },
   ];
 
   return defs.filter((d) => d.condition).map(({ condition: _condition, ...rest }) => rest);

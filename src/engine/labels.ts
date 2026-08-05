@@ -1,4 +1,4 @@
-import type { AttributeKey, RelationshipStatus } from "./types";
+import type { AttributeKey, RelationshipStatus, TraitKey } from "./types";
 
 export const ATTRIBUTE_LABEL: Record<AttributeKey, string> = {
   technik: "Technik",
@@ -45,6 +45,15 @@ export const RELATIONSHIP_LABEL: Record<RelationshipStatus, string> = {
   verlobt: "Verlobt",
   verheiratet: "Verheiratet",
 };
+
+export const TRAIT_LABEL: Record<TraitKey, string> = {
+  arbeitsmoral: "Arbeitsmoral",
+  disziplin: "Disziplin",
+  medienimage: "Medienimage",
+  fuehrung: "Führungsstärke",
+};
+
+export const TRAIT_ORDER: TraitKey[] = ["arbeitsmoral", "disziplin", "medienimage", "fuehrung"];
 
 export const SQUAD_ROLE_RANK: Record<string, number> = {
   Ausbildungsspieler: 0,

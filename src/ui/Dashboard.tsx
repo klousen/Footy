@@ -4,6 +4,7 @@ import { POSITION_LABEL } from "../engine/types";
 import { overallRating } from "../engine/careerEngine";
 import { leagueNameForTier } from "../engine/leagueEngine";
 import { AttributeBars } from "./AttributeBars";
+import { TraitBars } from "./TraitBars";
 import { formatMoney, RELATIONSHIP_LABEL } from "./labels";
 import { Timeline } from "./Timeline";
 
@@ -60,6 +61,12 @@ export function Dashboard({
       <div className="panel">
         <h3>Attribute</h3>
         <AttributeBars attributes={player.attributes} />
+      </div>
+
+      <div className="panel">
+        <h3>Charakter & Ruf</h3>
+        <p className="muted trait-hint">Prägt sich durch deine Entscheidungen und beeinflusst Wachstum, Leistung und welche Ereignisse künftig auftauchen.</p>
+        <TraitBars traits={player.traits} />
       </div>
 
       <div className="panel">

@@ -18,6 +18,7 @@ import {
   finalizeYouthClub,
   insertAt,
   isClubOfferEvent,
+  overallRating,
   pickPostCareerPath,
   pickSeasonTemplateIds,
   resolveClubSituation,
@@ -143,8 +144,15 @@ export default function App() {
     const feedback = isClubOfferEvent(game.currentEvent.templateId)
       ? applyClubOfferChoice(player, league, game.currentEvent, choice.id)
       : (() => {
+          // Gesamtstärke vorher/nachher vergleichen, damit der fußballerische Impact
+          // einer Entscheidung sofort sichtbar wird (nicht nur einzelne Attribut-Punkte).
+          const before = overallRating(player);
           const effects = applyChoice(game, choice);
+          const after = overallRating(player);
           const deltaLines = summarizeEffects(effects);
+          if (after !== before) {
+            deltaLines.unshift(`Gesamtstärke ${before} → ${after} (${after > before ? "+" : ""}${after - before})`);
+          }
           return {
             choiceId: choice.id,
             text: effects.logText ? `${player.name} ${effects.logText}` : choice.label,

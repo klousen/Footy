@@ -11,6 +11,9 @@ export function SeasonSummary({
   onContinue: () => void;
 }) {
   const recentLog = player.log.slice(-4);
+  const seasonIndex = player.seasonHistory.findIndex((s) => s === stats);
+  const previous = seasonIndex > 0 ? player.seasonHistory[seasonIndex - 1] : null;
+  const overallDelta = previous ? stats.overallRating - previous.overallRating : null;
 
   return (
     <div className="screen summary-screen">
@@ -20,6 +23,10 @@ export function SeasonSummary({
       </p>
 
       <div className="stat-strip">
+        <SummaryStat
+          label="Gesamtstärke"
+          value={`${stats.overallRating}${overallDelta ? ` (${overallDelta > 0 ? "+" : ""}${overallDelta})` : ""}`}
+        />
         <SummaryStat label="Spiele" value={String(stats.matches)} />
         <SummaryStat label="Tore" value={String(stats.goals)} />
         <SummaryStat label="Vorlagen" value={String(stats.assists)} />
