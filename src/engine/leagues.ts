@@ -1,12 +1,19 @@
 // Liga-Datenbank für die Top 10 UEFA-Länder (nach Länderkoeffizient), Saison 2026/27.
 //
-// Es werden ausschließlich Städtenamen verwendet (keine Vereinsnamen/-logos), um
-// keine echten Vereinsmarken zu verwenden. Die Zuordnung "welche Stadt spielt in
-// welcher Liga" basiert auf einer Recherche der Kader für die Saison 2026/27
-// (Auf-/Absteiger etc.), ist bei kleineren zweiten Ligen aber eine bestmögliche
-// Annäherung und kein Echtzeit-Datenfeed. Spielt in einer Liga mehr als ein
-// Verein aus derselben Stadt, wird das per angehängter römischer Ziffer
-// unterschieden (z.B. "Madrid I" / "Madrid II").
+// Es werden ausschließlich Städte-/Stadtteilnamen verwendet (keine Vereinsnamen/
+// -logos), um keine echten Vereinsmarken zu verwenden. Die Zuordnung "welche Stadt
+// spielt in welcher Liga" basiert auf einer Recherche der Kader für die Saison
+// 2026/27 (Auf-/Absteiger etc.), ist bei kleineren zweiten Ligen aber eine
+// bestmögliche Annäherung und kein Echtzeit-Datenfeed.
+//
+// Spielen mehrere Vereine aus derselben Stadt in einer Liga, wird nach Möglichkeit
+// der echte Stadtteil/das echte Vereinsgebiet verwendet (z.B. "London-Fulham" statt
+// nur "London"), analog zu z.B. "Rom-Testaccio" vs. "Rom-Flaminio". In den seltenen
+// Fällen, in denen sich zwei Vereine buchstäblich dasselbe Stadion teilen und keine
+// unterscheidbare Gegend existiert (Inter/Milan im San Siro, Club Brugge/Cercle
+// Brugge im Jan Breydel), wird ersatzweise nummeriert ("Mailand I"/"Mailand II").
+// disambiguateCities() greift nur noch als Sicherheitsnetz für unvorhergesehene
+// Dopplungen.
 //
 // Die Reihenfolge der Städte je Liga bildet grob die erwartete Kaderstärke ab
 // (stärkere/bekanntere Vereine zuerst) und dient als Ausgangspunkt für die
@@ -45,17 +52,17 @@ export const COUNTRIES: CountryDef[] = [
     tier2Name: "Championship",
     swapCount: 3,
     tier1Cities: [
-      "London", "Manchester", "Liverpool", "London", "Manchester", "Liverpool",
-      "London", "Newcastle", "London", "Brighton", "London", "Nottingham",
-      "Birmingham", "Leeds", "Bournemouth", "Coventry", "Sunderland", "Hull",
-      "Ipswich", "London",
+      "London-Islington", "Manchester-Eastlands", "Liverpool-Anfield", "London-Brentford",
+      "Manchester-Old Trafford", "Liverpool-Bramley-Moore", "London-Chelsea", "Newcastle",
+      "London-Selhurst", "Brighton", "London-Tottenham", "Nottingham", "Birmingham",
+      "Leeds", "Bournemouth", "Coventry", "Sunderland", "Hull", "Ipswich", "London-Fulham",
     ],
     tier2Cities: [
       "Sheffield", "Middlesbrough", "West Bromwich", "Southampton", "Norwich",
-      "Wolverhampton", "Burnley", "London", "Stoke-on-Trent", "Swansea",
+      "Wolverhampton", "Burnley", "London-Millwall", "Stoke-on-Trent", "Swansea",
       "Preston", "Bristol", "Derby", "Birmingham", "Blackburn", "Watford",
-      "Portsmouth", "London", "Cardiff", "Bolton", "Lincoln", "London",
-      "Wrexham", "London",
+      "Portsmouth", "London-Shepherds Bush", "Cardiff", "Bolton", "Lincoln",
+      "London-Stratford", "Wrexham", "London-Charlton",
     ],
   },
   {
@@ -66,9 +73,9 @@ export const COUNTRIES: CountryDef[] = [
     tier2Name: "Serie B",
     swapCount: 3,
     tier1Cities: [
-      "Neapel", "Mailand", "Turin", "Mailand", "Bergamo", "Rom", "Rom",
-      "Florenz", "Bologna", "Turin", "Udine", "Genua", "Como", "Cagliari",
-      "Parma", "Lecce", "Sassuolo", "Venedig", "Frosinone", "Monza",
+      "Neapel", "Mailand I", "Turin-Continassa", "Mailand II", "Bergamo", "Rom-Testaccio",
+      "Rom-Flaminio", "Florenz", "Bologna", "Turin-Filadelfia", "Udine", "Genua", "Como",
+      "Cagliari", "Parma", "Lecce", "Sassuolo", "Venedig", "Frosinone", "Monza",
     ],
     tier2Cities: [
       "Pisa", "Verona", "Cremona", "Vicenza", "Arezzo", "Benevento", "Genua",
@@ -85,10 +92,10 @@ export const COUNTRIES: CountryDef[] = [
     tier2Name: "Segunda División",
     swapCount: 3,
     tier1Cities: [
-      "Madrid", "Barcelona", "Madrid", "Bilbao", "Villarreal", "Sevilla",
-      "Vigo", "San Sebastián", "Sevilla", "Valencia", "Getafe", "Pamplona",
-      "Madrid", "Vitoria-Gasteiz", "Barcelona", "Elche", "Valencia",
-      "Santander", "A Coruña", "Málaga",
+      "Madrid-Chamartín", "Barcelona-Les Corts", "Madrid-Metropolitano", "Bilbao",
+      "Villarreal", "Sevilla-Heliópolis", "Vigo", "San Sebastián", "Sevilla-Nervión",
+      "Valencia-Mestalla", "Getafe", "Pamplona", "Madrid-Vallecas", "Vitoria-Gasteiz",
+      "Barcelona-Cornellà", "Elche", "Valencia-Algirós", "Santander", "A Coruña", "Málaga",
     ],
     tier2Cities: [
       "Oviedo", "Girona", "Palma", "Teneriffa", "Elda", "León", "Andorra",
@@ -123,8 +130,8 @@ export const COUNTRIES: CountryDef[] = [
     tier2Name: "Ligue 2",
     swapCount: 2,
     tier1Cities: [
-      "Paris", "Marseille", "Monaco", "Lyon", "Lille", "Nizza", "Lens",
-      "Rennes", "Straßburg", "Toulouse", "Paris", "Angers", "Auxerre",
+      "Paris-Auteuil", "Marseille", "Monaco", "Lyon", "Lille", "Nizza", "Lens",
+      "Rennes", "Straßburg", "Toulouse", "Paris-Charléty", "Angers", "Auxerre",
       "Brest", "Le Havre", "Le Mans", "Lorient", "Troyes",
     ],
     tier2Cities: [
@@ -141,14 +148,15 @@ export const COUNTRIES: CountryDef[] = [
     tier2Name: "Liga Portugal 2",
     swapCount: 2,
     tier1Cities: [
-      "Porto", "Lissabon", "Lissabon", "Braga", "Guimarães", "Famalicão",
-      "Lissabon", "Amadora", "Vila do Conde", "Moreira de Cónegos", "Arouca",
-      "Funchal", "Estoril", "Barcelos", "Alverca", "Faro", "Funchal", "Viseu",
+      "Porto", "Lissabon-Benfica", "Lissabon-Alvalade", "Braga", "Guimarães",
+      "Famalicão", "Lissabon-Casal Vistoso", "Amadora", "Vila do Conde",
+      "Moreira de Cónegos", "Arouca", "Funchal-Choupana", "Estoril", "Barcelos",
+      "Alverca", "Faro", "Funchal-Barreiros", "Viseu",
     ],
     tier2Cities: [
       "Tondela", "Felgueiras", "Amarante", "Coimbra", "Santa Maria da Feira",
       "Matosinhos", "Mafra", "Torres Vedras", "Vizela", "Penafiel", "Porto",
-      "Lissabon", "Lissabon", "Chaves",
+      "Seixal", "Alcochete", "Chaves",
     ],
   },
   {
@@ -159,9 +167,10 @@ export const COUNTRIES: CountryDef[] = [
     tier2Name: "Challenger Pro League",
     swapCount: 2,
     tier1Cities: [
-      "Brügge", "Brüssel", "Genk", "Antwerpen", "Gent", "Lüttich", "Brüssel",
-      "Charleroi", "Brügge", "Mechelen", "Löwen", "Westerlo", "Sint-Truiden",
-      "Beveren", "Kortrijk", "Lommel", "Zulte", "La Louvière",
+      "Brügge-Sint-Andries", "Brüssel-Anderlecht", "Genk", "Antwerpen", "Gent",
+      "Lüttich", "Brüssel-Forest", "Charleroi", "Brügge-Sint-Michiels", "Mechelen",
+      "Löwen", "Westerlo", "Sint-Truiden", "Beveren", "Kortrijk", "Lommel",
+      "Zulte", "La Louvière",
     ],
     tier2Cities: [
       "Antwerpen", "Virton", "Hasselt", "Brüssel", "Lier", "Deinze",
@@ -176,16 +185,16 @@ export const COUNTRIES: CountryDef[] = [
     tier2Name: "Eerste Divisie",
     swapCount: 3,
     tier1Cities: [
-      "Amsterdam", "Eindhoven", "Rotterdam", "Alkmaar", "Enschede", "Utrecht",
-      "Deventer", "Rotterdam", "Nijmegen", "Sittard", "Zwolle", "Heerenveen",
-      "Groningen", "Rotterdam", "IJmuiden", "Den Haag", "Leeuwarden",
+      "Amsterdam", "Eindhoven", "Rotterdam-Feijenoord", "Alkmaar", "Enschede", "Utrecht",
+      "Deventer", "Rotterdam-Spangen", "Nijmegen", "Sittard", "Zwolle", "Heerenveen",
+      "Groningen", "Rotterdam-Kralingen", "IJmuiden", "Den Haag", "Leeuwarden",
       "Tilburg",
     ],
     tier2Cities: [
       "Volendam", "Breda", "Almelo", "Dordrecht", "Amsterdam", "Emmen",
-      "Kerkrade", "Oss", "Arnhem", "Waalwijk", "Venlo", "Eindhoven",
+      "Kerkrade", "Oss", "Arnhem", "Waalwijk", "Venlo", "Eindhoven-Meerhoven",
       "Alkmaar", "Almere", "Doetinchem", "Helmond", "Maastricht", "Den Bosch",
-      "Eindhoven", "Utrecht",
+      "Eindhoven-Woensel", "Utrecht",
     ],
   },
   {
@@ -196,14 +205,15 @@ export const COUNTRIES: CountryDef[] = [
     tier2Name: "TFF 1. Lig",
     swapCount: 3,
     tier1Cities: [
-      "Istanbul", "Istanbul", "Istanbul", "Trabzon", "Istanbul", "Konya",
-      "Sivas", "Istanbul", "Alanya", "Gaziantep", "Rize", "Samsun", "Izmir",
-      "Istanbul", "Ankara", "Erzurum", "Diyarbakır", "Çorum",
+      "Istanbul-Seyrantepe", "Istanbul-Kadıköy", "Istanbul-Beşiktaş", "Trabzon",
+      "Istanbul-Başakşehir", "Konya", "Sivas", "Istanbul-Kasımpaşa", "Alanya",
+      "Gaziantep", "Rize", "Samsun", "Izmir", "Istanbul-Eyüp", "Ankara", "Erzurum",
+      "Diyarbakır", "Çorum",
     ],
     tier2Cities: [
-      "Antalya", "Kayseri", "Istanbul", "Bursa", "Batman", "Mardin", "Muğla",
-      "Bolu", "Ankara", "Manisa", "Istanbul", "Iğdır", "Bandırma", "Ankara",
-      "Istanbul", "Şanlıurfa", "Adana", "Izmir",
+      "Antalya", "Kayseri", "Istanbul-Karagümrük", "Bursa", "Batman", "Mardin", "Muğla",
+      "Bolu", "Ankara-Eryaman", "Manisa", "Istanbul-Pendik", "Iğdır", "Bandırma",
+      "Ankara-Keçiören", "Istanbul-Esenler", "Şanlıurfa", "Adana", "Izmir",
     ],
   },
   {
@@ -221,7 +231,7 @@ export const COUNTRIES: CountryDef[] = [
     tier2Cities: [
       "Danzig", "Gdynia", "Nieciecza", "Skierniewice", "Posen", "Warschau",
       "Oppeln", "Tychy", "Legnica", "Bielsko-Biała", "Krakau", "Chojnice",
-      "Pruszków", "Lodz", "Rzeszów", "Kołobrzeg", "Rzeszów", "Łęczna",
+      "Pruszków", "Lodz", "Rzeszów-Baranówka", "Kołobrzeg", "Rzeszów-Staroniwa", "Łęczna",
     ],
   },
 ];
@@ -232,7 +242,12 @@ export function getCountry(id: CountryId): CountryDef {
   return c;
 }
 
-/** Hängt bei mehrfach vorkommenden Städtenamen römische Ziffern an (Reihenfolge bleibt erhalten). */
+/**
+ * Sicherheitsnetz: hängt bei (unerwartet) mehrfach vorkommenden Namen römische
+ * Ziffern an, damit es in der Liga-Ansicht nie zwei identische Einträge gibt.
+ * Bei den oben gepflegten Daten sollte das im Regelfall nicht mehr greifen, da
+ * echte Stadtteilnamen bereits eindeutig sind.
+ */
 export function disambiguateCities(cities: string[]): string[] {
   const counts = new Map<string, number>();
   for (const c of cities) counts.set(c, (counts.get(c) ?? 0) + 1);

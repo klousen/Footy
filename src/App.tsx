@@ -1,24 +1,31 @@
 import { useEffect, useState } from "react";
-import type { AttributeKey, EventChoice, GameState, Position } from "./engine/types";
+import type { AttributeKey, ClubState, EventChoice, GameState, Position } from "./engine/types";
 import { emptyState } from "./engine/initialState";
 import { loadGame, saveGame, clearSave, hasSave as hasSaveOnDisk } from "./engine/storage";
 import type { CountryId } from "./engine/leagues";
 import {
   ageUpPlayer,
   applyChoice,
+  applyClubOfferChoice,
   applyLeaguePromotionRelegation,
   buildRetirementEvent,
   buildSeasonEvents,
   computeLegacy,
   createPlayer,
+  finalizeYouthClub,
+  insertClubOfferEvent,
+  isClubOfferEvent,
+  maybeInjectClubOfferEvent,
   pickPostCareerPath,
   resolveClubSituation,
   shouldOfferRetirement,
   simulateSeason,
+  summarizeEffects,
 } from "./engine/careerEngine";
 import { StartScreen } from "./ui/StartScreen";
 import { SelectCountry } from "./ui/SelectCountry";
 import { CreatePlayer } from "./ui/CreatePlayer";
+import { YouthClubOffer } from "./ui/YouthClubOffer";
 import { Dashboard } from "./ui/Dashboard";
 import { EventCard } from "./ui/EventCard";
 import { SeasonSummary } from "./ui/SeasonSummary";
@@ -32,6 +39,7 @@ function initState(): GameState {
 export default function App() {
   const [game, setGame] = useState<GameState>(initState);
   const [pendingCountry, setPendingCountry] = useState<CountryId | null>(null);
+  const [youthOffers, setYouthOffers] = useState<ClubState[]>([]);
 
   useEffect(() => {
     saveGame(game);
@@ -40,6 +48,7 @@ export default function App() {
   function handleNewGame() {
     clearSave();
     setPendingCountry(null);
+    setYouthOffers([]);
     setGame({ ...emptyState(), screen: "country" });
   }
 
@@ -55,14 +64,26 @@ export default function App() {
 
   function handleCreatePlayer(name: string, position: Position, focus: AttributeKey) {
     if (!pendingCountry) return;
-    const { player, league } = createPlayer(name, position, focus, pendingCountry);
-    setGame({ ...emptyState(), player, leagueState: league, screen: "dashboard" });
+    const { player, league, offers } = createPlayer(name, position, focus, pendingCountry);
+    setYouthOffers(offers);
+    setGame({ ...emptyState(), player, leagueState: league, screen: "youthOffer" });
+  }
+
+  function handleSelectYouthClub(clubId: string) {
+    if (!game.player || !game.leagueState) return;
+    finalizeYouthClub(game.player, game.leagueState, clubId);
+    setYouthOffers([]);
+    setGame({ ...game, player: { ...game.player }, screen: "dashboard" });
   }
 
   function handleStartSeason() {
-    if (!game.player) return;
+    if (!game.player || !game.leagueState) return;
     const used = new Set(game.usedTemplateIds);
-    const events = buildSeasonEvents(game.player, used, 5);
+    let events = buildSeasonEvents(game.player, used, 5);
+
+    const offerEvent = maybeInjectClubOfferEvent(game.player, game.leagueState);
+    if (offerEvent) events = insertClubOfferEvent(events, offerEvent);
+
     const nextSeasonNumber = game.seasonNumber + 1;
     if (events.length === 0) {
       finishSeasonEvents({ ...game, seasonNumber: nextSeasonNumber });
@@ -71,6 +92,8 @@ export default function App() {
     const [first, ...rest] = events;
     setGame({
       ...game,
+      player: { ...game.player },
+      leagueState: { ...game.leagueState },
       seasonNumber: nextSeasonNumber,
       pendingEvents: rest,
       currentEvent: first,
@@ -96,19 +119,43 @@ export default function App() {
       lastSeasonStats: stats,
       currentEvent: null,
       pendingEvents: [],
+      feedback: null,
       screen: "seasonSummary",
     });
   }
 
+  // Schritt 1: Wahl treffen -> Effekte sofort anwenden, Ergebnis als Feedback zeigen
+  // (die Event-Queue wird erst weitergeschaltet, wenn "Weiter" im Feedback geklickt wird).
   function handleChoice(choice: EventChoice) {
-    if (!game.player || !game.currentEvent) return;
-    const isRetirementDecision = game.currentEvent.templateId === "retirement_decision";
+    if (!game.player || !game.currentEvent || !game.leagueState) return;
+    const player = game.player;
+    const league = game.leagueState;
 
-    applyChoice(game, choice);
+    const feedback = isClubOfferEvent(game.currentEvent.templateId)
+      ? applyClubOfferChoice(player, league, game.currentEvent, choice.id)
+      : (() => {
+          const effects = applyChoice(game, choice);
+          const deltaLines = summarizeEffects(effects);
+          return {
+            choiceId: choice.id,
+            text: effects.logText ? `${player.name} ${effects.logText}` : choice.label,
+            kind: effects.logKind ?? "info",
+            deltaLines,
+          };
+        })();
+
+    setGame({ ...game, player: { ...player }, leagueState: { ...league }, feedback });
+  }
+
+  // Schritt 2: "Weiter" im Feedback -> je nach Event-Art passend weiterleiten.
+  function handleFeedbackContinue() {
+    if (!game.player || !game.currentEvent || !game.feedback) return;
+    const isRetirementDecision = game.currentEvent.templateId === "retirement_decision";
+    const choiceId = game.feedback.choiceId;
     const player = game.player;
 
     if (isRetirementDecision) {
-      if (choice.id === "beenden") {
+      if (choiceId === "beenden") {
         player.retired = true;
         player.postCareerPath = pickPostCareerPath(player);
         const { score, tier } = computeLegacy(player);
@@ -116,29 +163,30 @@ export default function App() {
           ...game,
           player: { ...player },
           currentEvent: null,
+          feedback: null,
           screen: "careerEnd",
           legacyScore: score,
           legacyTier: tier,
           epilogue: buildEpilogueSafe(player, tier),
         });
       } else {
-        setGame({ ...game, player: { ...player }, currentEvent: null, screen: "dashboard" });
+        setGame({ ...game, player: { ...player }, currentEvent: null, feedback: null, screen: "dashboard" });
       }
       return;
     }
 
     if (game.pendingEvents.length > 0) {
       const [next, ...rest] = game.pendingEvents;
-      setGame({ ...game, player: { ...player }, currentEvent: next, pendingEvents: rest });
+      setGame({ ...game, player: { ...player }, currentEvent: next, pendingEvents: rest, feedback: null });
     } else {
-      finishSeasonEvents(game);
+      finishSeasonEvents({ ...game, feedback: null });
     }
   }
 
   function handleContinueFromSummary() {
     if (!game.player) return;
     if (shouldOfferRetirement(game.player)) {
-      setGame({ ...game, currentEvent: buildRetirementEvent(game.player), screen: "event" });
+      setGame({ ...game, currentEvent: buildRetirementEvent(game.player), feedback: null, screen: "event" });
     } else {
       setGame({ ...game, screen: "dashboard" });
     }
@@ -147,6 +195,7 @@ export default function App() {
   function handleNewCareerAfterEnd() {
     clearSave();
     setPendingCountry(null);
+    setYouthOffers([]);
     setGame({ ...emptyState(), screen: "country" });
   }
 
@@ -157,11 +206,25 @@ export default function App() {
       )}
       {game.screen === "country" && <SelectCountry onSelect={handleSelectCountry} />}
       {game.screen === "create" && <CreatePlayer onCreate={handleCreatePlayer} />}
+      {game.screen === "youthOffer" && game.player && game.leagueState && (
+        <YouthClubOffer
+          playerName={game.player.name}
+          league={game.leagueState}
+          offers={youthOffers}
+          onSelect={handleSelectYouthClub}
+        />
+      )}
       {game.screen === "dashboard" && game.player && game.leagueState && (
         <Dashboard player={game.player} league={game.leagueState} onStartSeason={handleStartSeason} />
       )}
       {game.screen === "event" && game.player && game.currentEvent && (
-        <EventCard event={game.currentEvent} player={game.player} onChoose={handleChoice} />
+        <EventCard
+          event={game.currentEvent}
+          player={game.player}
+          feedback={game.feedback}
+          onChoose={handleChoice}
+          onContinue={handleFeedbackContinue}
+        />
       )}
       {game.screen === "seasonSummary" && game.player && game.lastSeasonStats && (
         <SeasonSummary stats={game.lastSeasonStats} player={game.player} onContinue={handleContinueFromSummary} />

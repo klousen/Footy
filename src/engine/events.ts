@@ -658,17 +658,17 @@ export const EVENT_TEMPLATES: EventTemplate[] = [
         {
           id: "verlaengern_geld",
           label: "Verlängern, Fokus auf hohes Gehalt",
-          effects: { wealth: 0, clubRelation: 2, logText: "hat den Vertrag mit Fokus auf ein hohes Gehalt verlängert.", logKind: "milestone" },
+          effects: { wealth: 0, clubRelation: 2, wantsTransfer: false, logText: "hat den Vertrag mit Fokus auf ein hohes Gehalt verlängert.", logKind: "milestone" },
         },
         {
           id: "verlaengern_rolle",
           label: "Verlängern, Fokus auf Stammplatzgarantie",
-          effects: { clubRelation: 6, morale: 4, logText: "hat verlängert mit Fokus auf eine klare Rolle im Team.", logKind: "milestone" },
+          effects: { clubRelation: 6, morale: 4, wantsTransfer: false, logText: "hat verlängert mit Fokus auf eine klare Rolle im Team.", logKind: "milestone" },
         },
         {
           id: "ablehnen",
           label: "Nicht verlängern, offen für Wechsel",
-          effects: { clubRelation: -6, reputation: 2, logText: "hat eine Vertragsverlängerung abgelehnt und ist wechselbereit.", logKind: "info" },
+          effects: { clubRelation: -6, reputation: 2, wantsTransfer: true, logText: "hat eine Vertragsverlängerung abgelehnt und ist wechselbereit.", logKind: "info" },
         },
       ],
     }),
@@ -688,12 +688,12 @@ export const EVENT_TEMPLATES: EventTemplate[] = [
         {
           id: "wechselwunsch",
           label: "Wechselwunsch äußern",
-          effects: { clubRelation: -8, reputation: 3, logText: "hat öffentlich einen Wechselwunsch geäußert.", logKind: "negative" },
+          effects: { clubRelation: -8, reputation: 3, wantsTransfer: true, logText: "hat öffentlich einen Wechselwunsch geäußert.", logKind: "negative" },
         },
         {
           id: "loyal",
           label: "Dem Verein die Treue halten",
-          effects: { clubRelation: 8, morale: 3, logText: "hat sich öffentlich zum aktuellen Verein bekannt.", logKind: "positive" },
+          effects: { clubRelation: 8, morale: 3, wantsTransfer: false, logText: "hat sich öffentlich zum aktuellen Verein bekannt.", logKind: "positive" },
         },
       ],
     }),
@@ -713,7 +713,7 @@ export const EVENT_TEMPLATES: EventTemplate[] = [
         {
           id: "ja",
           label: "Leihe akzeptieren",
-          effects: { attributes: { mentalitaet: 1 }, clubRelation: 2, morale: 2, logText: "ist auf Leihbasis zu einem anderen Verein gewechselt.", logKind: "milestone" },
+          effects: { attributes: { mentalitaet: 1 }, clubRelation: 2, morale: 2, wantsTransfer: true, logText: "ist offen für eine Leihe und signalisiert dem Verein Wechselbereitschaft.", logKind: "info" },
         },
         {
           id: "nein",

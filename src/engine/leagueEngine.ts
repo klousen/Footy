@@ -68,6 +68,55 @@ export function pickClubNearStrength(
   return shortlist[Math.floor(rng() * shortlist.length)];
 }
 
+/**
+ * Wählt bis zu `count` unterschiedliche Vereine nahe einer Ziel-Stärke aus (z.B.
+ * für "3 Vereine bieten dir einen Platz an"). Die Auswahl kommt aus einem
+ * Shortlist der nächstliegenden Vereine, damit trotzdem etwas Varianz entsteht.
+ */
+export function pickDistinctClubOffers(
+  clubs: ClubState[],
+  targetStrength: number,
+  excludeIds: string[],
+  rng: () => number,
+  count: number
+): ClubState[] {
+  const excludeSet = new Set(excludeIds);
+  const candidates = clubs.filter((c) => !excludeSet.has(c.id));
+  const pool = candidates.length >= count ? candidates : clubs;
+  const sorted = [...pool].sort(
+    (a, b) => Math.abs(a.strength - targetStrength) - Math.abs(b.strength - targetStrength)
+  );
+  const shortlistSize = Math.min(Math.max(count * 3, 6), sorted.length);
+  const shortlist = sorted.slice(0, shortlistSize);
+
+  const picked: ClubState[] = [];
+  const used = new Set<string>();
+  let guard = 0;
+  while (picked.length < count && used.size < shortlist.length && guard < 200) {
+    guard++;
+    const candidate = shortlist[Math.floor(rng() * shortlist.length)];
+    if (used.has(candidate.id)) continue;
+    used.add(candidate.id);
+    picked.push(candidate);
+  }
+  return picked;
+}
+
+/** Verteilt `count` Vereine über die Stärkespanne eines Pools (schwach/mittel/stark). */
+export function pickSpreadClubOffers(clubs: ClubState[], rng: () => number, count: number): ClubState[] {
+  const sorted = [...clubs].sort((a, b) => a.strength - b.strength);
+  const bucketSize = Math.max(1, Math.floor(sorted.length / count));
+  const picks: ClubState[] = [];
+  for (let i = 0; i < count; i++) {
+    const start = i * bucketSize;
+    const end = i === count - 1 ? sorted.length : start + bucketSize;
+    const slice = sorted.slice(start, Math.max(end, start + 1));
+    if (slice.length === 0) continue;
+    picks.push(slice[Math.floor(rng() * slice.length)]);
+  }
+  return picks;
+}
+
 export interface SeasonTableResult {
   order: (ClubState & { rank: number })[];
 }

@@ -8,6 +8,7 @@ export function emptyState(): GameState {
     screen: "start",
     pendingEvents: [],
     currentEvent: null,
+    feedback: null,
     lastSeasonStats: null,
     usedTemplateIds: [],
   };

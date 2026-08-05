@@ -126,8 +126,18 @@ export interface EffectDelta {
   injuryLabel?: string;
   educationPoints?: number;
   clubRelation?: number;
+  /** Setzt explizit, ob der Spieler offen für einen Vereinswechsel ist. */
+  wantsTransfer?: boolean;
   logText?: string;
   logKind?: LogEntry["kind"];
+}
+
+/** Sofortiges Feedback nach einer Entscheidung - Text + lesbare Auswirkungen. */
+export interface ChoiceFeedback {
+  choiceId: string;
+  text: string;
+  kind: LogEntry["kind"];
+  deltaLines: string[];
 }
 
 export interface EventChoice {
@@ -205,6 +215,10 @@ export interface Player {
   retired: boolean;
   postCareerPath?: string;
   wantsTransfer: boolean;
+  /** Saisons seit dem letzten Transferangebot-Event (Cooldown-Zähler). */
+  seasonsSinceTransferEvent: number;
+  /** Aufeinanderfolgende Saisons auf/nahe der Bank (für Bankphasen-Mechanik). */
+  consecutiveBenchSeasons: number;
 }
 
 export interface GameState {
@@ -214,6 +228,8 @@ export interface GameState {
   screen: Screen;
   pendingEvents: GameEvent[];
   currentEvent: GameEvent | null;
+  /** Sofort-Feedback zur zuletzt getroffenen Entscheidung, bevor es weitergeht. */
+  feedback: ChoiceFeedback | null;
   lastSeasonStats: SeasonStats | null;
   usedTemplateIds: string[];
   legacyScore?: number;
@@ -225,6 +241,7 @@ export type Screen =
   | "start"
   | "country"
   | "create"
+  | "youthOffer"
   | "dashboard"
   | "event"
   | "seasonSummary"

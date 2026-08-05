@@ -2,6 +2,8 @@ import type {
   Attributes,
   AttributeKey,
   CareerStage,
+  ChoiceFeedback,
+  ClubState,
   EventChoice,
   GameEvent,
   GameState,
@@ -10,17 +12,19 @@ import type {
   Player,
   Position,
   SeasonStats,
+  SquadRole,
 } from "./types";
 import { POSITION_WEIGHTS } from "./types";
 import { clamp } from "./data";
+import { ATTRIBUTE_LABEL, ATTRIBUTE_ORDER, formatMoney, SQUAD_ROLE_RANK } from "./labels";
 import { eligibleTemplates } from "./events";
 import type { CountryId } from "./leagues";
 import {
   buildLeagueState,
-  clubsForTier,
   findClub,
   leagueNameForTier,
-  pickClubNearStrength,
+  pickDistinctClubOffers,
+  pickSpreadClubOffers,
   simulateLeaguePromotionRelegation,
 } from "./leagueEngine";
 
@@ -50,7 +54,7 @@ export function createPlayer(
   position: Position,
   focusAttr: AttributeKey,
   countryId: CountryId
-): { player: Player; league: LeagueState } {
+): { player: Player; league: LeagueState; offers: ClubState[] } {
   const base: Attributes = {
     technik: randInt(18, 30),
     tempo: randInt(18, 30),
@@ -73,20 +77,23 @@ export function createPlayer(
 
   const league = buildLeagueState(countryId, rng);
 
-  // Jugendakademie: bevorzugt ein eher schwächerer Verein aus Liga 2 (typisch für ein
-  // 14-jähriges, noch unbekanntes Talent).
-  const youthClub = pickWeightedWeakerClub(league.tier2, rng);
+  // Drei Vereine aus Liga 2 bieten dem 14-jährigen Talent einen Akademieplatz an -
+  // bewusst über die Stärkespanne verteilt (schwach/mittel/stark), damit es eine
+  // echte Wahl ist.
+  const offers = pickSpreadClubOffers(league.tier2, rng, 3);
+  const placeholder = offers[0];
 
   const club = {
-    clubId: youthClub.id,
-    name: youthClub.city,
+    clubId: placeholder.id,
+    name: placeholder.city,
     country: league.countryName,
-    tier: youthClub.tier,
-    strength: youthClub.strength,
+    tier: placeholder.tier,
+    strength: placeholder.strength,
   };
 
   return {
     league,
+    offers,
     player: {
       name,
       country: countryId,
@@ -113,24 +120,35 @@ export function createPlayer(
       careerTotals: { matches: 0, goals: 0, assists: 0, trophies: [], yellowCards: 0, redCards: 0, caps: 0 },
       nationalTeamCaps: 0,
       seasonHistory: [],
-      log: [
-        {
-          season: 0,
-          age: 14,
-          text: `${name} beginnt die Karriere in der Jugendakademie von ${club.name} (${league.countryName}).`,
-          kind: "milestone",
-        },
-      ],
+      log: [],
       retired: false,
       wantsTransfer: false,
+      seasonsSinceTransferEvent: 0,
+      consecutiveBenchSeasons: 0,
     },
   };
 }
 
-function pickWeightedWeakerClub<T extends { strength: number }>(clubs: T[], rand: () => number): T {
-  const sorted = [...clubs].sort((a, b) => a.strength - b.strength);
-  const idx = Math.floor(rand() * rand() * sorted.length);
-  return sorted[clamp(idx, 0, sorted.length - 1)];
+/** Schließt die Auswahl der Jugendakademie ab (Karrierestart-Bildschirm). */
+export function finalizeYouthClub(player: Player, league: LeagueState, clubId: string): void {
+  const chosen = findClub(league, clubId) ?? league.tier2[0];
+  player.club = {
+    clubId: chosen.id,
+    name: chosen.city,
+    country: league.countryName,
+    tier: chosen.tier,
+    strength: chosen.strength,
+  };
+  player.contract = { club: chosen.city, yearsLeft: 3, wagePerYear: 0, squadRole: "Ausbildungsspieler" };
+  player.clubRelation = 60;
+  player.log = [
+    {
+      season: 0,
+      age: player.age,
+      text: `${player.name} beginnt die Karriere in der Jugendakademie von ${chosen.city} (${league.countryName}).`,
+      kind: "milestone",
+    },
+  ];
 }
 
 export function overallRating(p: Player): number {
@@ -184,13 +202,18 @@ export function buildSeasonEvents(player: Player, usedTemplateIds: Set<string>, 
   return chosen;
 }
 
+function insertAt<T>(arr: T[], item: T, index: number): T[] {
+  const i = clamp(index, 0, arr.length);
+  return [...arr.slice(0, i), item, ...arr.slice(i)];
+}
+
 // ---------------------------------------------------------------------------
 // Effekte einer Entscheidung anwenden
 // ---------------------------------------------------------------------------
 
-export function applyChoice(state: GameState, choice: EventChoice): void {
+export function applyChoice(state: GameState, choice: EventChoice): EventChoice["effects"] {
   const player = state.player;
-  if (!player) return;
+  if (!player) return {};
 
   let effects = choice.effects;
   if (choice.followUpChance) {
@@ -199,6 +222,7 @@ export function applyChoice(state: GameState, choice: EventChoice): void {
   }
 
   applyEffects(player, effects, state.seasonNumber);
+  return effects;
 }
 
 function applyEffects(player: Player, effects: EventChoice["effects"], season: number) {
@@ -214,6 +238,7 @@ function applyEffects(player: Player, effects: EventChoice["effects"], season: n
   if (effects.wealth) player.wealth = Math.max(0, player.wealth + effects.wealth);
   if (effects.educationPoints) player.education = clamp(player.education + effects.educationPoints, 0, 100);
   if (effects.clubRelation) player.clubRelation = clamp(player.clubRelation + effects.clubRelation, 0, 100);
+  if (effects.wantsTransfer !== undefined) player.wantsTransfer = effects.wantsTransfer;
   if (effects.injuryWeeksOut) {
     if (effects.injuryWeeksOut > 0) {
       player.injury = { label: effects.injuryLabel ?? "Verletzung", weeksOut: (player.injury?.weeksOut ?? 0) + effects.injuryWeeksOut };
@@ -230,6 +255,36 @@ function applyEffects(player: Player, effects: EventChoice["effects"], season: n
       kind: effects.logKind ?? "info",
     });
   }
+}
+
+/** Übersetzt die angewendeten Effekte einer Entscheidung in lesbare Feedback-Zeilen. */
+export function summarizeEffects(effects: EventChoice["effects"]): string[] {
+  const lines: string[] = [];
+  if (effects.attributes) {
+    for (const key of ATTRIBUTE_ORDER) {
+      const delta = effects.attributes[key];
+      if (delta) lines.push(`${ATTRIBUTE_LABEL[key]} ${signed(delta)}`);
+    }
+  }
+  if (effects.morale) lines.push(`Moral ${signed(effects.morale)}`);
+  if (effects.fitness) lines.push(`Fitness ${signed(effects.fitness)}`);
+  if (effects.reputation) lines.push(`Bekanntheit ${signed(effects.reputation)}`);
+  if (effects.clubRelation) lines.push(`Vereinsbeziehung ${signed(effects.clubRelation)}`);
+  if (effects.educationPoints) lines.push(`Bildung ${signed(effects.educationPoints)}`);
+  if (effects.wealth) lines.push(`Vermögen ${effects.wealth > 0 ? "+" : ""}${formatMoney(effects.wealth)}`);
+  if (effects.injuryWeeksOut) {
+    lines.push(
+      effects.injuryWeeksOut > 0
+        ? `Verletzung: +${effects.injuryWeeksOut} Wochen Ausfall${effects.injuryLabel ? ` (${effects.injuryLabel})` : ""}`
+        : `Genesung: ${Math.abs(effects.injuryWeeksOut)} Wochen früher zurück`
+    );
+  }
+  if (lines.length === 0) lines.push("Keine spürbaren Auswirkungen.");
+  return lines;
+}
+
+function signed(n: number): string {
+  return `${n > 0 ? "+" : ""}${n}`;
 }
 
 // ---------------------------------------------------------------------------
@@ -256,7 +311,7 @@ export function simulateSeason(player: Player, seasonNumber: number, league: Lea
       ? 0.7
       : player.contract.squadRole === "Ergänzungsspieler"
       ? 0.4
-      : 0.5;
+      : 0.2;
 
   const matches = Math.round(baseMatches * roleFactor * availabilityFactor);
 
@@ -361,6 +416,7 @@ export function ageUpPlayer(player: Player): void {
   player.stage = stageForAge(player.age);
   player.fitness = clamp(player.fitness + 12, 40, 100); // Sommerpause / Erholung
   player.morale = clamp(player.morale + (player.morale < 50 ? 5 : 0), 0, 100);
+  player.seasonsSinceTransferEvent += 1;
 
   if (player.injury) {
     const remaining = player.injury.weeksOut - 16; // Sommerpause heilt viel
@@ -376,7 +432,7 @@ export function ageUpPlayer(player: Player): void {
 }
 
 // ---------------------------------------------------------------------------
-// Vertrag / Karriereübergänge zwischen den Saisons
+// Vertrag / Rollenpflege zwischen den Saisons
 // ---------------------------------------------------------------------------
 
 /** Zielstärke, die ein Spieler mit gegebener Bekanntheit für einen neuen Verein "verdient". */
@@ -384,7 +440,7 @@ function targetStrengthForReputation(reputation: number): number {
   return clamp(35 + reputation * 0.6, 30, 95);
 }
 
-function squadRoleForOverall(overall: number, clubStrength: number): Player["contract"]["squadRole"] {
+function squadRoleForOverall(overall: number, clubStrength: number): SquadRole {
   const diff = overall - clubStrength;
   if (diff >= 5) return "Stammspieler";
   if (diff >= -5) return "Rotation";
@@ -393,96 +449,60 @@ function squadRoleForOverall(overall: number, clubStrength: number): Player["con
 }
 
 /**
- * Vertrags-/Transferlogik zwischen den Saisons. Verein wird immer aus der echten
- * Liga-Pyramide (`league.tier1` / `league.tier2`) des gewählten Landes gewählt.
+ * Pflegt Vertrag, Kaderrolle und Vereinszugehörigkeit zwischen den Saisons - OHNE
+ * automatische, unsichtbare Vereinswechsel. Transfers laufen ausschließlich über
+ * die sichtbaren `club_offer`-Events (siehe `maybeInjectClubOfferEvent`). Diese
+ * Funktion aktualisiert nur: Rolle im Kader (mit Log bei Veränderung, damit man
+ * "sich herausarbeiten" sichtbar mitbekommt), Bankphasen-Zähler und automatische
+ * Kurzverlängerung, falls kein Vertrags-Event gegriffen hat.
  */
 export function resolveClubSituation(player: Player, league: LeagueState): LogEntry | null {
-  const overall = overallRating(player);
-  let entry: LogEntry | null = null;
-
-  if (player.age === 18 && player.contract.squadRole === "Ausbildungsspieler") {
-    // Übergang Jugend -> Profi
-    const targetStrength = targetStrengthForReputation(player.reputation);
-    const proTier: 1 | 2 = targetStrength > 68 && rng() < 0.35 ? 1 : 2;
-    const pool = clubsForTier(league, proTier);
-    const staysAtAcademy = rng() < 0.4 && findClub(league, player.club.clubId);
-    const chosen = staysAtAcademy
-      ? (findClub(league, player.club.clubId) ?? pickClubNearStrength(pool, targetStrength, null, rng))
-      : pickClubNearStrength(pool, targetStrength, player.club.clubId, rng);
-
-    const isNewClub = chosen.id !== player.club.clubId;
-    player.club = { clubId: chosen.id, name: chosen.city, country: league.countryName, tier: chosen.tier, strength: chosen.strength };
-    entry = {
-      season: 0,
-      age: player.age,
-      text: isNewClub
-        ? `${player.name} unterschreibt den ersten Profivertrag bei ${chosen.city}.`
-        : `${player.name} erhält einen Profivertrag im eigenen Verein ${chosen.city}.`,
-      kind: "milestone",
+  const currentClub = findClub(league, player.club.clubId);
+  if (currentClub) {
+    player.club = {
+      clubId: currentClub.id,
+      name: currentClub.city,
+      country: league.countryName,
+      tier: currentClub.tier,
+      strength: currentClub.strength,
     };
-    player.contract = {
-      club: chosen.city,
-      yearsLeft: 2,
-      wagePerYear: 20000 + player.reputation * 800,
-      squadRole: squadRoleForOverall(overall, chosen.strength),
-    };
-    player.clubRelation = 60;
-    player.wantsTransfer = false;
-    return entry;
+  }
+  player.contract.club = player.club.name;
+
+  if (player.contract.squadRole === "Ausbildungsspieler") {
+    // Profidebüt läuft über das eigene club_offer-Event (siehe maybeInjectClubOfferEvent)
+    return null;
   }
 
-  const currentClub = findClub(league, player.club.clubId);
-  const currentTier = currentClub?.tier ?? player.club.tier;
-  const currentStrength = currentClub?.strength ?? player.club.strength;
+  const overall = overallRating(player);
+  const oldRole = player.contract.squadRole;
+  const newRole = squadRoleForOverall(overall, player.club.strength);
+  player.contract.squadRole = newRole;
 
-  const shouldForceMove = player.clubRelation < 15 && player.stage !== "jugend";
-  const targetStrength = targetStrengthForReputation(player.reputation);
-  const shouldUpgrade =
-    player.wantsTransfer || (targetStrength > currentStrength + 12 && player.reputation > 30 && rng() < 0.4);
+  if (newRole === "Ersatzbank" || newRole === "Ergänzungsspieler") {
+    player.consecutiveBenchSeasons += 1;
+  } else {
+    player.consecutiveBenchSeasons = 0;
+  }
 
-  if (shouldForceMove || shouldUpgrade) {
-    const wantsTier1 = targetStrength > 60;
-    const pool = clubsForTier(league, wantsTier1 ? 1 : 2);
-    const chosen = pickClubNearStrength(
-      pool,
-      shouldForceMove ? Math.max(currentStrength - 15, 20) : targetStrength,
-      player.club.clubId,
-      rng
-    );
-    const oldClubName = player.club.name;
-    player.club = { clubId: chosen.id, name: chosen.city, country: league.countryName, tier: chosen.tier, strength: chosen.strength };
-    player.contract = {
-      club: chosen.city,
-      yearsLeft: 3,
-      wagePerYear: Math.round((15000 + player.reputation * 1500) * (1 + (chosen.tier === 1 ? 0.5 : 0))),
-      squadRole: squadRoleForOverall(overall, chosen.strength),
-    };
-    player.clubRelation = 55;
-    player.wantsTransfer = false;
+  let entry: LogEntry | null = null;
+  if (newRole !== oldRole) {
+    const improved = SQUAD_ROLE_RANK[newRole] > SQUAD_ROLE_RANK[oldRole];
     entry = {
       season: 0,
       age: player.age,
-      text: shouldForceMove
-        ? `${player.name} wird von ${oldClubName} abgegeben und wechselt zu ${chosen.city}.`
-        : `${player.name} wechselt von ${oldClubName} zu ${chosen.city}.`,
-      kind: shouldForceMove ? "negative" : "positive",
+      text: improved
+        ? `${player.name} arbeitet sich bei ${player.club.name} zu einer besseren Rolle im Kader hoch (${newRole}).`
+        : `${player.name} verliert bei ${player.club.name} an Bedeutung im Kader (${newRole}).`,
+      kind: improved ? "positive" : "negative",
     };
-  } else {
-    // Verein/Stärke aus der Liga-Pyramide übernehmen (kann sich durch Auf-/Abstieg geändert haben)
-    player.club = {
-      clubId: currentClub?.id ?? player.club.clubId,
-      name: currentClub?.city ?? player.club.name,
-      country: league.countryName,
-      tier: currentTier,
-      strength: currentStrength,
-    };
-    player.contract.club = player.club.name;
-    player.contract.squadRole = squadRoleForOverall(overall, player.club.strength);
-    if (player.contract.yearsLeft <= 0) {
-      // Automatische Kurzverlängerung, falls kein aktives Event gegriffen hat
-      player.contract.yearsLeft = 1;
-      player.contract.wagePerYear = Math.round(player.contract.wagePerYear * 1.05);
-    }
+    player.log.push(entry);
+  }
+
+  if (player.contract.yearsLeft <= 0) {
+    // Automatische Kurzverlängerung, falls kein aktives Vertrags-Event gegriffen hat
+    player.contract.yearsLeft = 1;
+    player.contract.wagePerYear = Math.round(player.contract.wagePerYear * 1.05);
   }
 
   return entry;
@@ -517,6 +537,199 @@ export function applyLeaguePromotionRelegation(player: Player, league: LeagueSta
       : `${player.club.name} steigt auf und spielt künftig in der ${leagueName}.`,
     kind: wasRelegated ? "negative" : "positive",
   };
+}
+
+// ---------------------------------------------------------------------------
+// Sichtbare Vereinswechsel: Profidebüt, Transferangebote, Bankphasen-Druck
+// ---------------------------------------------------------------------------
+
+export type ClubOfferReason = "pro-debut" | "opportunity" | "pressure";
+
+const CLUB_OFFER_PREFIX = "club_offer:";
+
+export function isClubOfferEvent(templateId: string): boolean {
+  return templateId.startsWith(CLUB_OFFER_PREFIX);
+}
+
+export function shouldOfferProDebut(player: Player): boolean {
+  return player.age === 18 && player.contract.squadRole === "Ausbildungsspieler";
+}
+
+export function shouldTriggerTransferPressure(player: Player): boolean {
+  if (player.stage === "jugend") return false;
+  if (player.seasonsSinceTransferEvent < 1) return false;
+  return player.clubRelation < 25 || player.consecutiveBenchSeasons >= 2;
+}
+
+export function shouldTriggerTransferOpportunity(player: Player): boolean {
+  if (player.stage === "jugend") return false;
+  const cooldown = player.wantsTransfer ? 1 : 2;
+  if (player.seasonsSinceTransferEvent < cooldown) return false;
+  const last = player.seasonHistory[player.seasonHistory.length - 1];
+  const goodForm = last ? last.avgRating >= 6.9 : false;
+  const chance = player.wantsTransfer ? 0.85 : 0.4;
+  return (goodForm || player.wantsTransfer) && rng() < chance;
+}
+
+function buildClubOfferEvent(player: Player, league: LeagueState, reason: ClubOfferReason): GameEvent {
+  const overall = overallRating(player);
+  const currentStrength = player.club.strength;
+  const pool = [...league.tier1, ...league.tier2];
+
+  let targetStrength: number;
+  let excludeCurrent: boolean;
+  let count = 3;
+  if (reason === "pro-debut") {
+    targetStrength = targetStrengthForReputation(player.reputation);
+    excludeCurrent = false;
+  } else if (reason === "opportunity") {
+    targetStrength = clamp(currentStrength + 10 + rng() * 15, 30, 96);
+    excludeCurrent = true;
+  } else {
+    targetStrength = clamp(currentStrength - 18, 22, 90);
+    excludeCurrent = true;
+  }
+
+  const offers = pickDistinctClubOffers(
+    pool,
+    targetStrength,
+    excludeCurrent ? [player.club.clubId] : [],
+    rng,
+    count
+  );
+  count = offers.length;
+
+  const choices: EventChoice[] = offers.map((c) => ({
+    id: `club-${c.id}`,
+    label: `Wechsel zu ${c.city}`,
+    detail: `${leagueNameForTier(league, c.tier)} · Vereinsstärke ${c.strength} · Rolle voraussichtlich ${squadRoleForOverall(overall, c.strength)}`,
+    effects: {},
+  }));
+
+  if (reason === "opportunity") {
+    choices.push({
+      id: "stay",
+      label: `Bei ${player.club.name} bleiben`,
+      detail: "Zeigt dem Verein die Treue - stärkt die Vereinsbeziehung.",
+      effects: {},
+    });
+  } else if (reason === "pressure") {
+    choices.push({
+      id: "fight",
+      label: "Kämpfen und den Stammplatz zurückerobern",
+      detail: "Riskant, aber du bleibst bei deinem aktuellen Verein.",
+      effects: {},
+    });
+  }
+
+  const title =
+    reason === "pro-debut"
+      ? "Dein erster Profivertrag"
+      : reason === "opportunity"
+      ? "Interesse von anderen Vereinen"
+      : "Unruhige Zeiten auf der Bank";
+
+  const description =
+    reason === "pro-debut"
+      ? `Nach starken Jahren in der Jugend ist es Zeit für den Sprung in den Profifußball. Gleich ${count} Vereine bieten dir einen Profivertrag an.`
+      : reason === "opportunity"
+      ? `Deine starken Leistungen bei ${player.club.name} sind Scouts nicht entgangen. ${count} Vereine erkundigen sich nach dir.`
+      : `Bei ${player.club.name} kommst du kaum noch zum Einsatz. Der Verein wäre offen für einen Wechsel - ${count} Vereine haben bereits angefragt.`;
+
+  return {
+    id: `cluboffer-${player.age}-${reason}-${Math.round(rng() * 1e6)}`,
+    templateId: `${CLUB_OFFER_PREFIX}${reason}`,
+    category: "transfer",
+    title,
+    description,
+    choices,
+  };
+}
+
+/**
+ * Prüft am Beginn einer Saison, ob ein sichtbares Vereins-Event fällig ist
+ * (Profidebüt > Bankphasen-Druck > gute Form), und baut es ggf. Setzt bei
+ * Auslösung den Cooldown-Zähler zurück.
+ */
+export function maybeInjectClubOfferEvent(player: Player, league: LeagueState): GameEvent | null {
+  if (shouldOfferProDebut(player)) {
+    player.seasonsSinceTransferEvent = 0;
+    return buildClubOfferEvent(player, league, "pro-debut");
+  }
+  if (shouldTriggerTransferPressure(player)) {
+    player.seasonsSinceTransferEvent = 0;
+    return buildClubOfferEvent(player, league, "pressure");
+  }
+  if (shouldTriggerTransferOpportunity(player)) {
+    player.seasonsSinceTransferEvent = 0;
+    return buildClubOfferEvent(player, league, "opportunity");
+  }
+  return null;
+}
+
+export function insertClubOfferEvent(events: GameEvent[], offerEvent: GameEvent): GameEvent[] {
+  return insertAt(events, offerEvent, Math.min(2, events.length));
+}
+
+/** Löst eine Entscheidung innerhalb eines `club_offer`-Events auf (kein generisches EffectDelta). */
+export function applyClubOfferChoice(player: Player, league: LeagueState, event: GameEvent, choiceId: string): ChoiceFeedback {
+  const reason = event.templateId.slice(CLUB_OFFER_PREFIX.length) as ClubOfferReason;
+
+  if (choiceId === "stay") {
+    player.clubRelation = clamp(player.clubRelation + 10, 0, 100);
+    player.morale = clamp(player.morale + 5, 0, 100);
+    player.wantsTransfer = false;
+    const text = `${player.name} bleibt ${player.club.name} treu.`;
+    player.log.push({ season: 0, age: player.age, text, kind: "positive" });
+    return { choiceId, text, kind: "positive", deltaLines: ["Vereinsbeziehung +10", "Moral +5"] };
+  }
+
+  if (choiceId === "fight") {
+    player.clubRelation = clamp(player.clubRelation + 15, 0, 100);
+    player.morale = clamp(player.morale + 8, 0, 100);
+    player.consecutiveBenchSeasons = Math.floor(player.consecutiveBenchSeasons / 2);
+    player.wantsTransfer = false;
+    const text = `${player.name} kämpft entschlossen um eine zweite Chance bei ${player.club.name}.`;
+    player.log.push({ season: 0, age: player.age, text, kind: "positive" });
+    return { choiceId, text, kind: "positive", deltaLines: ["Vereinsbeziehung +15", "Moral +8", "Bankphasen-Druck sinkt"] };
+  }
+
+  const clubId = choiceId.replace(/^club-/, "");
+  const chosen = findClub(league, clubId);
+  if (!chosen) {
+    const text = `${player.name} bleibt vorerst bei ${player.club.name}.`;
+    return { choiceId, text, kind: "info", deltaLines: [] };
+  }
+
+  const overall = overallRating(player);
+  const oldName = player.club.name;
+  const oldStrength = player.club.strength;
+  player.club = { clubId: chosen.id, name: chosen.city, country: league.countryName, tier: chosen.tier, strength: chosen.strength };
+  const wage = Math.round((15000 + player.reputation * 1500) * (1 + (chosen.tier === 1 ? 0.5 : 0)));
+  const newRole = squadRoleForOverall(overall, chosen.strength);
+  player.contract = { club: chosen.city, yearsLeft: 3, wagePerYear: wage, squadRole: newRole };
+  player.clubRelation = 60;
+  player.wantsTransfer = false;
+  player.consecutiveBenchSeasons = 0;
+
+  const leagueLabel = leagueNameForTier(league, chosen.tier);
+  const kind: LogEntry["kind"] = reason === "pro-debut" ? "milestone" : reason === "pressure" ? "negative" : "positive";
+  const text =
+    reason === "pro-debut"
+      ? `${player.name} unterschreibt den ersten Profivertrag bei ${chosen.city} (${leagueLabel}).`
+      : `${player.name} wechselt von ${oldName} zu ${chosen.city} (${leagueLabel}).`;
+  player.log.push({ season: 0, age: player.age, text, kind });
+
+  const deltaLines = [
+    `Neuer Verein: ${chosen.city}`,
+    `Liga: ${leagueLabel}`,
+    `Gehalt: ${formatMoney(wage)} / Jahr`,
+    `Rolle im Kader: ${newRole}`,
+  ];
+  if (chosen.strength > oldStrength + 3) deltaLines.push("Vereinsstärke deutlich höher als zuvor");
+  else if (chosen.strength < oldStrength - 3) deltaLines.push("Vereinsstärke niedriger, dafür bessere Aussichten auf Spielzeit");
+
+  return { choiceId, text, kind, deltaLines };
 }
 
 // ---------------------------------------------------------------------------

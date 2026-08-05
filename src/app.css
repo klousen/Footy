@@ -454,6 +454,100 @@ input:focus {
   color: var(--muted);
 }
 
+/* ---------------- Feedback panel ---------------- */
+
+.feedback-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  background: var(--bg-alt);
+  border: 1px solid var(--panel-border);
+  border-radius: 12px;
+  padding: 16px;
+  animation: fade-in 0.2s ease;
+}
+
+.feedback-panel.kind-positive {
+  border-color: rgba(56, 214, 122, 0.5);
+}
+
+.feedback-panel.kind-negative {
+  border-color: rgba(240, 85, 79, 0.5);
+}
+
+.feedback-panel.kind-milestone {
+  border-color: rgba(240, 180, 41, 0.5);
+}
+
+.feedback-headline {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  font-weight: 600;
+}
+
+.feedback-deltas {
+  margin: 0;
+  padding-left: 4px;
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.feedback-deltas li {
+  background: var(--panel);
+  border: 1px solid var(--panel-border);
+  border-radius: 999px;
+  padding: 5px 12px;
+  font-size: 0.82rem;
+  color: var(--text);
+}
+
+/* ---------------- Youth club offer ---------------- */
+
+.club-offer-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.club-offer-card {
+  text-align: left;
+  background: var(--panel);
+  border: 1px solid var(--panel-border);
+  border-radius: 14px;
+  padding: 16px;
+  color: var(--text);
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.club-offer-card:hover {
+  border-color: var(--accent);
+}
+
+.club-offer-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  font-size: 1.05rem;
+}
+
+.club-offer-strength {
+  font-size: 0.82rem;
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.club-offer-flavor {
+  font-size: 0.85rem;
+  color: var(--muted);
+  margin-top: 4px;
+}
+
 /* ---------------- Season summary ---------------- */
 
 .mini-log {
