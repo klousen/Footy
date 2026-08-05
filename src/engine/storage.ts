@@ -22,6 +22,19 @@ export function loadGame(): GameState | null {
       state.player.trainingBoostSeasons ??= 0;
       state.player.unlockedAchievementIds ??= [];
       state.player.growthCarry ??= {};
+      state.player.nationalTeamGoals ??= 0;
+      // Bei älteren Spielständen als Basis den aktuellen Stand nehmen, damit nicht
+      // plötzlich alle bisherigen Länderspiele als "diese Saison" gewertet werden.
+      state.player.capsAtSeasonStart ??= state.player.nationalTeamCaps ?? 0;
+      // Ältere Saison-Historien haben noch keine Minuten-/Länderspiel-Felder je Saison.
+      if (state.player.seasonHistory) {
+        state.player.seasonHistory = state.player.seasonHistory.map((s) => ({
+          ...s,
+          minutesPlayed: s.minutesPlayed ?? 0,
+          possibleMinutes: s.possibleMinutes ?? 0,
+          capsThisSeason: s.capsThisSeason ?? 0,
+        }));
+      }
     }
     state.foreignLeagues ??= {};
     return state;

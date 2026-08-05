@@ -182,7 +182,16 @@ im höheren Alter.
   inklusive Risiko/Ertrags-Abwägungen mit Erfolgs-/Misserfolgschance.
 - **Automatische Saison-Simulation**: Spiele, Tore, Vorlagen, Bewertungen,
   Tabellenplatz und Titel werden auf Basis der Attribute, Vereinsstärke, Moral
-  und Fitness simuliert.
+  und Fitness simuliert. Dazu die Einsatzquote als eigene Metrik - gespielte
+  Minuten im Vergleich zu den maximal möglichen Team-Minuten der Saison, wie
+  bei Transfermarkt/fotmob.
+- **Transfers nur im echten Transferfenster**: Vereinsangebote nach Profidebüt,
+  starker Form oder Auf-/Abstieg werden gezielt an den Saisonanfang (Sommer)
+  gelegt, Bankdruck-Angebote erst zur Saisonmitte (Winter) - statt an einer
+  beliebigen Stelle mitten in der Saison.
+- **Nationalmannschaft mit echtem Wert**: Länderspiele und -tore werden separat
+  von den Vereinsstats getrackt, fließen in die Saison-Bilanz und den
+  Legacy-Score ein.
 - **Alterung & Entwicklung**: Attribute wachsen in der Jugend/Frühkarriere und
   bauen im höheren Alter wieder ab - abhängig vom individuellen Potenzial
   jedes Spielers.
@@ -195,13 +204,13 @@ im höheren Alter.
   Torbeteiligungen bereits mit ein) - ohne Gehalts- oder Liga-Details, die
   im laufenden Spiel schon sichtbar waren.
 - **Sharepic für soziale Medien**: Am Karriereende wird automatisch eine
-  Spielerkarte im FUT-Stil erzeugt (Name, Position, Land, Gesamtstärke mit
-  Tier-Farbe, Karriere-Titel, Kernstats wie Spiele/Tore/Vorlagen/Titel/
-  Länderspiele/Legacy-Score sowie die wichtigsten Erfolge) - direkt als Bild
-  herunterladbar, in einem neuen Tab zum Speichern zu öffnen oder mit
-  passendem Beschreibungstext für Social Media zu kopieren (auf Geräten mit
-  nativer Teilen-Funktion zusätzlich direkt teilbar). Rein clientseitig via
-  Canvas gezeichnet, keine externen Dienste.
+  Spielerkarte im FUT-Stil erzeugt (Name, Position, Land, Karriere-Bestwert
+  der Gesamtstärke mit Tier-Farbe, Karriere-Titel, Kernstats wie Spiele/Tore/
+  Vorlagen/Titel/Länderspiele/Legacy-Score sowie die wichtigsten Erfolge) -
+  direkt als Bild herunterladbar, in einem neuen Tab zum Speichern zu öffnen
+  oder mit passendem Beschreibungstext für Social Media zu kopieren (auf
+  Geräten mit nativer Teilen-Funktion zusätzlich direkt teilbar). Rein
+  clientseitig via Canvas gezeichnet, keine externen Dienste.
 
 Spielernamen sind frei erfunden. Länder, Ligen und die Anzahl/Herkunft der
 Vereine je Liga sind real recherchiert (Saison 2026/27); dargestellt werden

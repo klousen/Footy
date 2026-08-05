@@ -24,6 +24,8 @@ export function CareerEnd({
   const positiveAchievements = (achievements ?? []).filter((a) => a.positive);
   const negativeAchievements = (achievements ?? []).filter((a) => !a.positive);
   const clubTenures = buildClubTenures(player);
+  const totalMinutesPlayed = player.seasonHistory.reduce((s, h) => s + h.minutesPlayed, 0);
+  const totalPossibleMinutes = player.seasonHistory.reduce((s, h) => s + h.possibleMinutes, 0);
 
   return (
     <div className="screen career-end-screen">
@@ -50,7 +52,19 @@ export function CareerEnd({
           <span>Titel</span>
           <span>{t.trophies.length > 0 ? t.trophies.join(", ") : "keine"}</span>
           <span>Länderspiele</span>
-          <span>{player.nationalTeamCaps}</span>
+          <span>
+            {player.nationalTeamCaps}
+            {player.nationalTeamGoals > 0 ? ` (${player.nationalTeamGoals} Tore)` : ""}
+          </span>
+          {totalPossibleMinutes > 0 && (
+            <>
+              <span>Einsatzminuten</span>
+              <span>
+                {totalMinutesPlayed.toLocaleString("de-DE")} / {totalPossibleMinutes.toLocaleString("de-DE")} Min. (
+                {Math.round((totalMinutesPlayed / totalPossibleMinutes) * 100)}%)
+              </span>
+            </>
+          )}
           <span>Karten</span>
           <span>
             {t.yellowCards}× Gelb, {t.redCards}× Rot

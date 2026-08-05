@@ -693,8 +693,10 @@ export const EVENT_TEMPLATES: EventTemplate[] = [
       const last = p.seasonHistory[p.seasonHistory.length - 1];
       return !!last && last.avgRating >= 8;
     },
-    build: (p) => {
+    build: (p, ctx) => {
       const isDebut = p.nationalTeamCaps === 0;
+      const attackWeight = { TW: 0, IV: 0.1, AV: 0.2, ZM: 0.35, FS: 0.6, ST: 0.75 }[p.position];
+      const goalsDelta = ctx.rng() < attackWeight ? rInt(ctx, 1, 2) : 0;
       return {
         category: "nationalmannschaft",
         title: isDebut ? "Einladung zur Nationalmannschaft" : "Erneute Berufung in die Nationalmannschaft",
@@ -713,11 +715,14 @@ export const EVENT_TEMPLATES: EventTemplate[] = [
                 fitness: -6,
                 morale: 8,
                 capsDelta: 3,
+                goalsDelta,
                 attributes: { mentalitaet: 1, physis: 1 },
                 traitDeltas: { fuehrung: 1 },
-                logText: isDebut
-                  ? "hat sein/ihr Debüt für die Nationalmannschaft gegeben und überzeugt."
-                  : "kam erneut für die Nationalmannschaft zum Einsatz und überzeugte.",
+                logText:
+                  (isDebut
+                    ? "hat sein/ihr Debüt für die Nationalmannschaft gegeben und überzeugt."
+                    : "kam erneut für die Nationalmannschaft zum Einsatz und überzeugte.") +
+                  (goalsDelta > 0 ? ` Dabei ${goalsDelta === 1 ? "erzielte er/sie ein Länderspieltor" : `erzielte er/sie ${goalsDelta} Länderspieltore`}.` : ""),
                 logKind: "milestone",
               },
               failure: {

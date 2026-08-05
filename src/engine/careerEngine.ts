@@ -135,6 +135,8 @@ export function createPlayer(
       stage: "jugend",
       careerTotals: { matches: 0, goals: 0, assists: 0, trophies: [], yellowCards: 0, redCards: 0, caps: 0 },
       nationalTeamCaps: 0,
+      nationalTeamGoals: 0,
+      capsAtSeasonStart: 0,
       seasonHistory: [],
       log: [],
       retired: false,
@@ -376,6 +378,7 @@ function applyEffects(player: Player, effects: EventChoice["effects"], season: n
   if (effects.partnerName !== undefined) player.partnerName = effects.partnerName;
   if (effects.childrenDelta) player.children = Math.max(0, player.children + effects.childrenDelta);
   if (effects.capsDelta) player.nationalTeamCaps = Math.max(0, player.nationalTeamCaps + effects.capsDelta);
+  if (effects.goalsDelta) player.nationalTeamGoals = Math.max(0, player.nationalTeamGoals + effects.goalsDelta);
   if (effects.roleProtectionSeasons) {
     player.roleProtectionSeasons = Math.max(player.roleProtectionSeasons, effects.roleProtectionSeasons);
   }
@@ -445,6 +448,7 @@ export function summarizeEffects(effects: EventChoice["effects"]): string[] {
   if (effects.relationshipStatus) lines.push(`Beziehungsstatus: ${RELATIONSHIP_LABEL[effects.relationshipStatus]}`);
   if (effects.childrenDelta) lines.push(`Kinder ${signed(effects.childrenDelta)}`);
   if (effects.capsDelta) lines.push(`Länderspiele ${signed(effects.capsDelta)}`);
+  if (effects.goalsDelta) lines.push(`Länderspieltore ${signed(effects.goalsDelta)}`);
   if (effects.roleProtectionSeasons) lines.push(`Kaderrolle für ${effects.roleProtectionSeasons} Saison(en) abgesichert`);
   if (effects.squadRoleOverride) lines.push(`Neue Kaderrolle: ${effects.squadRoleOverride}`);
   if (effects.traitDeltas) {
@@ -503,6 +507,20 @@ export function simulateSeason(player: Player, seasonNumber: number, league: Lea
       : 0.2;
 
   const matches = Math.round(baseMatches * roleFactor * availabilityFactor);
+
+  // Einsatzminuten: Stammspieler bestreiten fast immer die volle Spielzeit,
+  // Rotationsspieler und Ergänzungsspieler werden häufiger früh ausgewechselt
+  // oder erst eingewechselt - realistisch angelehnt an Transfermarkt/fotmob-Quoten.
+  const minutesPerMatchByRole =
+    player.contract.squadRole === "Stammspieler"
+      ? 84
+      : player.contract.squadRole === "Rotation"
+      ? 58
+      : player.contract.squadRole === "Ergänzungsspieler"
+      ? 32
+      : 22;
+  const minutesPlayed = Math.round(matches * minutesPerMatchByRole);
+  const possibleMinutes = baseMatches * 90;
 
   const form = (player.morale - 50) / 100; // -0.5 .. 0.5
   // Disziplin wirkt sich leicht auf die Konstanz der Leistungen aus (professionelle
@@ -598,6 +616,11 @@ export function simulateSeason(player: Player, seasonNumber: number, league: Lea
   if (avgRating >= 7) player.clubRelation = clamp(player.clubRelation + 3, 0, 100);
   if (avgRating < 5.5) player.clubRelation = clamp(player.clubRelation - 4, 0, 100);
 
+  // Länderspiele dieser Saison: Differenz zum Stand bei Saisonbeginn (Caps können
+  // während der Saison über Nationalmannschafts-Events dazukommen).
+  const capsThisSeason = Math.max(0, player.nationalTeamCaps - player.capsAtSeasonStart);
+  player.capsAtSeasonStart = player.nationalTeamCaps;
+
   const { score, tier: scoreTier, factors: scoreFactors } = computeSeasonScore({
     avgRating,
     goals,
@@ -606,6 +629,7 @@ export function simulateSeason(player: Player, seasonNumber: number, league: Lea
     repGain,
     yellowCards,
     redCards,
+    capsThisSeason,
   });
 
   const stats: SeasonStats = {
@@ -616,8 +640,11 @@ export function simulateSeason(player: Player, seasonNumber: number, league: Lea
     leagueTier: player.club.tier,
     leagueName: leagueNameForTier(league, player.club.tier),
     matches,
+    minutesPlayed,
+    possibleMinutes,
     goals,
     assists,
+    capsThisSeason,
     avgRating: Math.round(avgRating * 10) / 10,
     leaguePosition,
     trophies,
@@ -647,6 +674,7 @@ function computeSeasonScore(input: {
   repGain: number;
   yellowCards: number;
   redCards: number;
+  capsThisSeason: number;
 }): { score: number; tier: string; factors: ScoreFactor[] } {
   const factors: ScoreFactor[] = [
     { label: "Sportliche Leistung (Ø Bewertung)", points: Math.round(input.avgRating * 12) },
@@ -655,6 +683,9 @@ function computeSeasonScore(input: {
     { label: "Entwicklung (Bekanntheit)", points: input.repGain * 3 },
     { label: "Disziplin", points: -Math.round(input.yellowCards * 2 + input.redCards * 15) },
   ];
+  if (input.capsThisSeason > 0) {
+    factors.push({ label: "Länderspiele", points: input.capsThisSeason * 10 });
+  }
 
   const score = factors.reduce((s, f) => s + f.points, 0);
   let tier = "Durchwachsene Saison";
@@ -760,7 +791,7 @@ export function ageUpPlayer(player: Player): void {
  * Bekanntheit, darüber entscheidet, wie attraktiv die Angebote ausfallen.
  */
 function targetStrengthForReputation(reputation: number, overall: number): number {
-  return clamp(20 + reputation * 0.25 + overall * 0.55, 30, 96);
+  return clamp(15 + reputation * 0.2 + overall * 0.65, 30, 96);
 }
 
 /** Geschätztes Jahresgehalt bei einem Verein - richtet sich nach Bekanntheit UND
@@ -1025,7 +1056,15 @@ function buildClubOfferEvent(
         : lastStats?.scoreTier === "Starke Saison"
         ? [10, 20]
         : [3, 12];
-    targetStrength = clamp(currentStrength + minJump + rng() * (maxJump - minJump), 30, 96);
+    const jumpTarget = currentStrength + minJump + rng() * (maxJump - minJump);
+    // Zusätzlicher Anker an der eigenen Gesamtstärke: ein Elite-Spieler (82+), der
+    // zufällig bei einem schwächeren Verein hängt, soll trotzdem Angebote auf
+    // seinem echten Niveau bekommen - nicht nur eine relative Verbesserung zum
+    // aktuellen (ggf. viel zu schwachen) Verein. Realistisch nach Transfermarkt/
+    // fotmob-Logik: die eigene Bewertung zieht Top-Klubs an, unabhängig davon,
+    // wo man gerade spielt.
+    const ratingAnchor = overall - 3 + rng() * 8;
+    targetStrength = clamp(Math.max(jumpTarget, ratingAnchor), 30, 96);
     excludeCurrent = true;
   } else {
     targetStrength = clamp(currentStrength - 18, 22, 90);
@@ -1109,12 +1148,12 @@ function buildClubOfferEvent(
     reason === "pro-debut"
       ? "Dein erster Profivertrag"
       : relegatedEscape
-      ? "Rettungsanker vom sinkenden Schiff"
+      ? "Rettungsanker im Sommertransferfenster"
       : promotedReward
-      ? "Der Aufstieg zahlt sich aus"
+      ? "Der Aufstieg zahlt sich im Sommer aus"
       : reason === "opportunity"
-      ? "Interesse von anderen Vereinen"
-      : "Unruhige Zeiten auf der Bank";
+      ? "Interesse von anderen Vereinen im Sommertransferfenster"
+      : "Wechselgerüchte im Winterfenster";
 
   // Konkreter Bezug zur letzten Saison, damit klar wird, WARUM sich gerade jetzt
   // Vereine melden - keine anonyme Zufalls-Einladung, sondern eine nachvollziehbare
@@ -1129,12 +1168,12 @@ function buildClubOfferEvent(
     reason === "pro-debut"
       ? `Nach starken Jahren in der Jugend ist es Zeit für den Sprung in den Profifußball. Gleich ${count} Vereine bieten dir einen Profivertrag an.${foreignNote}`
       : relegatedEscape
-      ? `Trotz des Abstiegs mit ${player.club.name} bleibt deine starke individuelle Leistung nicht unbemerkt - ${count} Vereine wollen dich vom sinkenden Schiff holen.${foreignNote}`
+      ? `Trotz des Abstiegs mit ${player.club.name} bleibt deine starke individuelle Leistung nicht unbemerkt - im Sommertransferfenster wollen dich ${count} Vereine vom sinkenden Schiff holen.${foreignNote}`
       : promotedReward
-      ? `Dein starker Anteil am Aufstieg mit ${player.club.name} beweist deine Extraklasse - jetzt werden auch größere Vereine auf dich aufmerksam. ${count} Vereine erkundigen sich.${foreignNote}`
+      ? `Dein starker Anteil am Aufstieg mit ${player.club.name} beweist deine Extraklasse - im Sommertransferfenster werden auch größere Vereine auf dich aufmerksam. ${count} Vereine erkundigen sich.${foreignNote}`
       : reason === "opportunity"
-      ? `${lastSeasonRef}sind Scouts auf ${player.name} bei ${player.club.name} aufmerksam geworden. ${count} Vereine erkundigen sich nach dir.${foreignNote}`
-      : `Bei ${player.club.name} kommst du kaum noch zum Einsatz (${player.consecutiveBenchSeasons} Saison(en) auf der Bank). Der Verein wäre offen für einen Wechsel - ${count} Vereine haben bereits angefragt.${foreignNote}`;
+      ? `${lastSeasonRef}sind Scouts auf ${player.name} bei ${player.club.name} aufmerksam geworden. Im Sommertransferfenster erkundigen sich ${count} Vereine nach dir.${foreignNote}`
+      : `Bei ${player.club.name} kommst du kaum noch zum Einsatz (${player.consecutiveBenchSeasons} Saison(en) auf der Bank). Im Winterfenster wäre der Verein offen für einen Wechsel - ${count} Vereine haben bereits angefragt.${foreignNote}`;
 
   return {
     id: `cluboffer-${player.age}-${reason}-${Math.round(rng() * 1e6)}`,

@@ -128,8 +128,14 @@ export interface SeasonStats {
   leagueTier: LeagueTier;
   leagueName: string;
   matches: number;
+  /** Tatsächlich gespielte Minuten diese Saison (siehe `possibleMinutes` für die Team-Gesamtminuten). */
+  minutesPlayed: number;
+  /** Maximal mögliche Minuten des Teams diese Saison (Team-Spiele × 90) - Vergleichsbasis für die Einsatzquote. */
+  possibleMinutes: number;
   goals: number;
   assists: number;
+  /** Länderspiel-Einsätze in dieser Saison (Differenz zu `Player.capsAtSeasonStart`). */
+  capsThisSeason: number;
   avgRating: number; // 1-10
   leaguePosition: number;
   trophies: string[];
@@ -176,6 +182,8 @@ export interface EffectDelta {
   childrenDelta?: number;
   /** Länderspiel-Einsätze (Nationalmannschaft), addiert auf `Player.nationalTeamCaps`. */
   capsDelta?: number;
+  /** Länderspieltore, addiert auf `Player.nationalTeamGoals`. */
+  goalsDelta?: number;
   /** Schützt die Kaderrolle für N weitere Saisons vor dem Abrutschen unter "Rotation". */
   roleProtectionSeasons?: number;
   /** Ernennt zum Kapitän der Nationalmannschaft. */
@@ -306,6 +314,10 @@ export interface Player {
     caps: number; // Nationalmannschaftseinsätze
   };
   nationalTeamCaps: number;
+  /** Tore für die Nationalmannschaft - separat von den Vereinstoren getrackt. */
+  nationalTeamGoals: number;
+  /** Länderspiel-Stand zu Beginn der laufenden Saison - Basis, um `capsThisSeason` je Saison zu ermitteln. */
+  capsAtSeasonStart: number;
   seasonHistory: SeasonStats[];
   log: LogEntry[];
   retired: boolean;

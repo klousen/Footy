@@ -34,6 +34,17 @@ export function SeasonSummary({
         <SummaryStat label="Ø Bewertung" value={String(stats.avgRating)} />
         <SummaryStat label="Tabelle" value={`${stats.leaguePosition}.`} />
         <SummaryStat label="Einkommen" value={formatMoney(stats.income)} />
+        {stats.possibleMinutes > 0 && (
+          <SummaryStat
+            label="Einsatzquote"
+            value={`${stats.minutesPlayed}/${stats.possibleMinutes} Min. (${Math.round(
+              (stats.minutesPlayed / stats.possibleMinutes) * 100
+            )}%)`}
+          />
+        )}
+        {stats.capsThisSeason > 0 && (
+          <SummaryStat label="Länderspiele" value={String(stats.capsThisSeason)} />
+        )}
       </div>
 
       {stats.trophies.length > 0 && (

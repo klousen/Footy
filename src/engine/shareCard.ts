@@ -17,6 +17,7 @@ export interface ShareCardData {
   countryName: string;
   finalClub: string;
   ageRange: string;
+  /** Karriere-Bestwert (höchste je erreichte Gesamtstärke) - das ist die Zahl, die groß im Badge steht. */
   overall: number;
   tierLabel: string;
   tierClassName: string;
@@ -37,7 +38,10 @@ export function buildShareCardData(
   achievements: Achievement[] | undefined
 ): ShareCardData {
   const country = COUNTRIES.find((c) => c.id === player.country);
-  const overall = overallRating(player);
+  // Karriere-Bestwert statt aktuellem Wert: nach Alterung/Abbau am Karriereende wäre die
+  // aktuelle Gesamtstärke oft niedriger als der tatsächliche Karriere-Höhepunkt - das
+  // Sharepic soll aber genau diesen Höhepunkt feiern.
+  const overall = Math.max(overallRating(player), ...player.seasonHistory.map((s) => s.overallRating));
   const tier = overallTier(overall);
   const topAchievements = (achievements ?? []).filter((a) => a.positive).slice(0, 4);
   return {
@@ -146,13 +150,16 @@ export function drawShareCard(canvas: HTMLCanvasElement, data: ShareCardData): v
   roundRect(ctx, badgeX, badgeY, badgeW, badgeH, 24);
   ctx.stroke();
 
-  ctx.fillStyle = style.accent;
-  ctx.font = '800 120px "Segoe UI", system-ui, sans-serif';
+  ctx.fillStyle = "rgba(238,242,247,0.55)";
+  ctx.font = '600 20px "Segoe UI", system-ui, sans-serif';
   ctx.textBaseline = "alphabetic";
-  ctx.fillText(String(data.overall), W / 2, badgeY + 128);
+  ctx.fillText("KARRIERE-BESTWERT", W / 2, badgeY + 34);
+  ctx.fillStyle = style.accent;
+  ctx.font = '800 108px "Segoe UI", system-ui, sans-serif';
+  ctx.fillText(String(data.overall), W / 2, badgeY + 140);
   ctx.font = '700 32px "Segoe UI", system-ui, sans-serif';
   ctx.fillStyle = "rgba(238,242,247,0.85)";
-  ctx.fillText(data.tierLabel.toUpperCase(), W / 2, badgeY + 175);
+  ctx.fillText(data.tierLabel.toUpperCase(), W / 2, badgeY + 180);
 
   // Name
   let cursorY = badgeY + badgeH + 90;
@@ -303,5 +310,5 @@ export function drawShareCard(canvas: HTMLCanvasElement, data: ShareCardData): v
 /** Kurzer Beschreibungstext zum Mitkopieren beim Teilen (Caption für Social Media). */
 export function buildShareCaption(data: ShareCardData): string {
   const achievementsPart = data.achievementLabels.length > 0 ? ` 🏅 ${data.achievementLabels.join(", ")}.` : "";
-  return `⚽ Meine Fußball-Karriere als ${data.name}: ${data.legacyTier}! ${data.matches} Spiele, ${data.goals} Tore, ${data.assists} Vorlagen, ${data.trophies} Titel.${achievementsPart} Gespielt mit Footy Karriere.`;
+  return `⚽ Meine Fußball-Karriere als ${data.name}: ${data.legacyTier} mit ${data.overall} Gesamtstärke (Karriere-Bestwert)! ${data.matches} Spiele, ${data.goals} Tore, ${data.assists} Vorlagen, ${data.trophies} Titel.${achievementsPart} Gespielt mit Footy Karriere.`;
 }

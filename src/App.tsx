@@ -50,6 +50,14 @@ export default function App() {
     saveGame(game);
   }, [game]);
 
+  // Bei jedem Screen-Wechsel (z.B. Saison-Rückblick, neues Event) ganz oben
+  // starten - sonst bleibt teils die Scroll-Position der vorherigen, längeren
+  // Ansicht erhalten und die wichtigsten Infos (Score, Titel) sind erst nach
+  // manuellem Scrollen sichtbar.
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, [game.screen, game.currentEvent?.id, game.lastSeasonStats]);
+
   function handleNewGame() {
     clearSave();
     setPendingCountry(null);
@@ -96,8 +104,15 @@ export default function App() {
       ids = insertAt(ids, storyId, Math.min(1, ids.length));
     }
 
+    // Wechsel sollen realistisch an echte Transferfenster gebunden sein, nicht an
+    // eine beliebige Stelle mitten in der Saison: Angebote nach Profidebüt/starker
+    // Form kommen im Sommer (ganz am Saisonanfang, vor allen anderen Ereignissen),
+    // Bankdruck-Angebote erst im Winterfenster (nach der gedachten Hinrunde).
     const offerReason = decideClubOfferInjection(game.player);
-    if (offerReason) ids = insertAt(ids, clubOfferTemplateId(offerReason), Math.min(2, ids.length));
+    if (offerReason) {
+      const insertIndex = offerReason === "pressure" ? Math.ceil(ids.length / 2) : 0;
+      ids = insertAt(ids, clubOfferTemplateId(offerReason), insertIndex);
+    }
 
     if (ids.length === 0) {
       finishSeasonEvents({ ...game, seasonNumber: nextSeasonNumber, recentTemplateSeasons });
