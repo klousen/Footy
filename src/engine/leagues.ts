@@ -48,7 +48,7 @@ export const COUNTRIES: CountryDef[] = [
       "London", "Manchester", "Liverpool", "London", "Manchester", "Liverpool",
       "London", "Newcastle", "London", "Brighton", "London", "Nottingham",
       "Birmingham", "Leeds", "Bournemouth", "Coventry", "Sunderland", "Hull",
-      "Ipswich", "Fulham",
+      "Ipswich", "London",
     ],
     tier2Cities: [
       "Sheffield", "Middlesbrough", "West Bromwich", "Southampton", "Norwich",
