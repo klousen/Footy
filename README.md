@@ -47,9 +47,11 @@ im höheren Alter.
   kann sich aber per Entscheidung zurückkämpfen oder einen Neuanfang bei
   einem anderen Verein wagen. Rollenwechsel im Kader (Stammspieler ↔ Bank)
   werden im Karriereverlauf klar vermerkt. Wer aktiv einen Wechsel sucht
-  (z. B. nach einem eskalierten Trainerkonflikt), bekommt schon in der
-  nächsten Saison mit sehr hoher Wahrscheinlichkeit ein Angebot - keine
-  wochenlange Hängepartie. Die Vereinsstärke der Angebote folgt außerdem
+  (z. B. per Wechselwunsch oder nach einem eskalierten Trainerkonflikt),
+  bekommt schon in der nächsten Saison mit sehr hoher Wahrscheinlichkeit ein
+  passendes Angebot - das hat Vorrang vor der allgemeinen Bankdruck-Logik,
+  damit ein geäußerter Wechselwunsch nicht folgenlos bleibt. Die
+  Vereinsstärke der Angebote folgt außerdem
   einer nachvollziehbaren Kurve, die sich direkt an der Saison-Bilanz
   orientiert (überragende Saison → deutlich stärkere Vereine als eine solide
   Saison), und der Einladungstext nennt konkret die Zahlen der vorherigen
@@ -115,17 +117,22 @@ im höheren Alter.
   unterschiedlich. Gehaltsverhandlungen (hart pokern, moderat nachfragen,
   Vertragsverlängerung mit Fokus auf hohes Gehalt oder auf dem
   Beziehungskonto verzichten), Vereinswechsel und Aufstiege wirken sich
-  direkt auf die Höhe aus.
-- **Mehrfaktorielles Scoring**: Am Saisonende gibt es eine Saison-Bilanz
-  (sportliche Leistung, Torbeteiligungen, Titel, Entwicklung, Disziplin,
-  Auf-/Abstieg) mit Punktzahl und Einordnung. Am Karriereende wird der
-  Legacy-Score in all seine Faktoren aufgeschlüsselt (Tore, Vorlagen, Titel,
-  Länderspiele, Vermögen, Vereinstreue, Familie, Verletzungshistorie, ...)
-  und es gibt eine Reihe positiver wie negativer **Erfolge/Achievements**
-  (z. B. "Torjäger", "Vereinstreue", "Verletzungsanfällig", "Vielwechsler").
-  Neu erreichte Erfolge werden nicht erst am Karriereende erwähnt, sondern
-  direkt in dem Saisonrückblick angezeigt, in dem sie erreicht wurden -
-  kontextualisiert mit Beschreibung.
+  direkt auf die Höhe aus. Jedes Vereinsangebot zeigt das voraussichtliche
+  Gehalt schon vor der Entscheidung an, damit Angebote wirklich vergleichbar
+  sind - kein Rätselraten mehr.
+- **Mehrfaktorielles Scoring inkl. Transferhistorie**: Am Saisonende gibt es
+  eine Saison-Bilanz (sportliche Leistung inkl. Tore/Vorlagen, Titel,
+  Entwicklung, Disziplin, Auf-/Abstieg) mit Punktzahl und Einordnung. Am
+  Karriereende wird der Legacy-Score in all seine Faktoren aufgeschlüsselt
+  (Tore, Vorlagen, Titel, Länderspiele, Vermögen, Vereinstreue, Familie,
+  Verletzungshistorie, ...), es gibt eine Reihe positiver wie negativer
+  **Erfolge/Achievements** (z. B. "Torjäger", "Vereinstreue",
+  "Verletzungsanfällig", "Vielwechsler") sowie eine vollständige
+  **Transferhistorie**: jeder Wechsel mit Alter, altem/neuem Verein, Land,
+  Liga, Gehalt und der eigenen Saison-Bilanz (inkl. Tore/Vorlagen) zum
+  Zeitpunkt des Wechsels. Neu erreichte Erfolge werden nicht erst am
+  Karriereende erwähnt, sondern direkt in dem Saisonrückblick angezeigt, in
+  dem sie erreicht wurden - kontextualisiert mit Beschreibung.
 - **Mehrjährige Geschichten (Storylines)**: Manche Entscheidungen stoßen eine
   Ereignis-Reihe an, die sich über mehrere Saisons fortsetzt und garantiert
   (nicht zufällig) weitergeht, sobald das nächste Kapitel fällig ist - inkl.
@@ -148,7 +155,11 @@ im höheren Alter.
   inklusive vieler fußballspezifischer Momente (Trainerwechsel,
   Taktikumstellung, Stadtderby, Pokal-Kraftakt, Hattrick-Chance,
   Sportgericht, Spieler des Monats, Torjägerrennen, U-Nationalmannschaft,
-  Standardsituationen, ...). Die Anzahl Ereignisse pro Saison ist bewusst
+  Standardsituationen, ...) - auch Defensivaktionen kommen vor (rettender
+  Tackle, Kopfballduell in der eigenen Box, Abwehrchef-Rolle), inklusive der
+  dort naturgemäß höheren Verletzungsgefahr; dazu ein Event für
+  Zufalls-Verletzungen aus harmlosen Zusammenprallen. Die Anzahl Ereignisse
+  pro Saison ist bewusst
   knapp gehalten (3-5) und schwankt leicht, damit jede einzelne Entscheidung
   mehr Gewicht für die Karriere hat - kürzlich gezogene Events werden für
   einige Saisons unwahrscheinlicher, damit sich weniger wiederholt.

@@ -720,6 +720,43 @@ input:focus {
   font-variant-numeric: tabular-nums;
 }
 
+/* ---------------- Transferhistorie ---------------- */
+
+.transfer-history-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.transfer-history-item {
+  border: 1px solid var(--panel-border);
+  border-radius: 12px;
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.transfer-history-head {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 4px 10px;
+  font-size: 0.9rem;
+}
+
+.transfer-history-details {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
 /* ---------------- Achievements ---------------- */
 
 .achievement-grid {

@@ -9,6 +9,7 @@ import type {
   GameEvent,
   GameState,
   LeagueState,
+  LeagueTier,
   LogEntry,
   Player,
   Position,
@@ -151,6 +152,7 @@ export function createPlayer(
       completedStorylines: [],
       trainingBoostSeasons: 0,
       unlockedAchievementIds: [],
+      transferHistory: [],
     },
   };
 }
@@ -761,6 +763,14 @@ function targetStrengthForReputation(reputation: number, overall: number): numbe
   return clamp(20 + reputation * 0.25 + overall * 0.55, 30, 96);
 }
 
+/** Geschätztes Jahresgehalt bei einem Verein - richtet sich nach Bekanntheit UND
+ * Zahlkraft/Stärke des Vereins, mit Aufschlag für die erste Liga. Wird sowohl in der
+ * Angebots-Vorschau als auch bei der tatsächlichen Zusage verwendet, damit das
+ * versprochene Gehalt exakt dem entspricht, was man am Ende bekommt. */
+function estimateWage(reputation: number, clubStrength: number, tier: LeagueTier): number {
+  return Math.round((6000 + reputation * 900 + clubStrength * 1400) * (1 + (tier === 1 ? 0.35 : 0)));
+}
+
 /** Rang eines Landes nach UEFA-Länderkoeffizient (Reihenfolge der `COUNTRIES`-Liste) -
  * 0 = höchstes Liga-Ansehen (England), 9 = niedrigstes (Polen). Dient als Proxy für
  * "Aufstieg/Abstieg im Liga-Ranking" bei internationalen Wechseln. */
@@ -1062,14 +1072,19 @@ function buildClubOfferEvent(
 
   const count = candidates.length;
 
-  const choices: EventChoice[] = candidates.map((cand) => ({
-    id: `club-${cand.club.id}`,
-    label: cand.isForeign
-      ? `Auslandswechsel zu ${cand.club.city} (${cand.flag} ${cand.countryName})`
-      : `Wechsel zu ${cand.club.city}`,
-    detail: `${cand.leagueLabel} · Vereinsstärke ${cand.club.strength} · Rolle voraussichtlich ${squadRoleForOverall(overall, cand.club.strength)}${cand.isForeign ? " · Auslandswechsel" : ""}`,
-    effects: {},
-  }));
+  const choices: EventChoice[] = candidates.map((cand) => {
+    // Dieselbe Formel wie bei der tatsächlichen Zusage (siehe `applyClubOfferChoice`),
+    // damit das hier gezeigte Gehalt exakt dem entspricht, was man am Ende bekommt.
+    const wagePreview = estimateWage(player.reputation, cand.club.strength, cand.club.tier);
+    return {
+      id: `club-${cand.club.id}`,
+      label: cand.isForeign
+        ? `Auslandswechsel zu ${cand.club.city} (${cand.flag} ${cand.countryName})`
+        : `Wechsel zu ${cand.club.city}`,
+      detail: `${cand.leagueLabel} · Vereinsstärke ${cand.club.strength} · Rolle voraussichtlich ${squadRoleForOverall(overall, cand.club.strength)} · Gehalt ca. ${formatMoney(wagePreview)}/Jahr${cand.isForeign ? " · Auslandswechsel" : ""}`,
+      effects: {},
+    };
+  });
 
   if (reason === "opportunity") {
     choices.push({
@@ -1141,6 +1156,15 @@ export function decideClubOfferInjection(player: Player): ClubOfferReason | null
   if (shouldOfferProDebut(player)) {
     player.seasonsSinceTransferEvent = 0;
     return "pro-debut";
+  }
+  // Aktiv geäußertes Wechselinteresse hat Vorrang vor der Bankdruck-Prüfung: wer
+  // klar signalisiert hat, wechseln zu wollen, soll gezielte Scouting-Angebote
+  // bekommen (bessere/passende Vereine) statt ggf. von der allgemeinen
+  // Bankdruck-Logik zu Notlösungs-Angeboten schwächerer Vereine verdrängt zu
+  // werden - alles andere wirkt inkonsequent gegenüber der eigenen Entscheidung.
+  if (player.wantsTransfer && shouldTriggerTransferOpportunity(player)) {
+    player.seasonsSinceTransferEvent = 0;
+    return "opportunity";
   }
   if (shouldTriggerTransferPressure(player)) {
     player.seasonsSinceTransferEvent = 0;
@@ -1224,10 +1248,7 @@ export function applyClubOfferChoice(
   const oldName = player.club.name;
   const oldStrength = player.club.strength;
   player.club = { clubId: chosen.id, name: chosen.city, country: targetLeague.countryName, tier: chosen.tier, strength: chosen.strength };
-  // Das Gehalt richtet sich nicht nur nach Bekanntheit, sondern spürbar auch nach
-  // der Zahlkraft des Vereins (Vereinsstärke) - zwei Erstligisten unterschiedlicher
-  // Größe sollten nicht dasselbe zahlen.
-  const wage = Math.round((6000 + player.reputation * 900 + chosen.strength * 1400) * (1 + (chosen.tier === 1 ? 0.35 : 0)));
+  const wage = estimateWage(player.reputation, chosen.strength, chosen.tier);
   const newRole = squadRoleForOverall(overall, chosen.strength);
   player.contract = { club: chosen.city, yearsLeft: 3, wagePerYear: wage, squadRole: newRole };
   player.clubRelation = 60;
@@ -1247,6 +1268,27 @@ export function applyClubOfferChoice(
   }
 
   const leagueLabel = leagueNameForTier(targetLeague, chosen.tier);
+
+  // Transferhistorie für den Karriererückblick - die Saison-Bilanz der letzten
+  // abgeschlossenen Saison (inkl. Tore/Vorlagen, siehe `computeSeasonScore`) zeigt,
+  // auf welchem Leistungsniveau der Wechsel stattfand. `null` beim Profidebüt ohne
+  // vorherige Profisaison.
+  const lastCompletedSeason = player.seasonHistory[player.seasonHistory.length - 1];
+  player.transferHistory.push({
+    age: player.age,
+    reason,
+    fromClub: oldName,
+    toClub: chosen.city,
+    toCountry: targetLeague.countryName,
+    toFlag: targetLeague.flag,
+    leagueLabel,
+    wagePerYear: wage,
+    scoreAtTransfer: lastCompletedSeason ? lastCompletedSeason.score : null,
+    scoreTierAtTransfer: lastCompletedSeason ? lastCompletedSeason.scoreTier : null,
+    goalsLastSeason: lastCompletedSeason ? lastCompletedSeason.goals : 0,
+    assistsLastSeason: lastCompletedSeason ? lastCompletedSeason.assists : 0,
+  });
+
   const kind: LogEntry["kind"] = reason === "pro-debut" ? "milestone" : reason === "pressure" ? "negative" : "positive";
   const text =
     reason === "pro-debut"

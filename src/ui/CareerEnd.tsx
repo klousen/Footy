@@ -62,6 +62,37 @@ export function CareerEnd({
         </div>
       </div>
 
+      {player.transferHistory.length > 0 && (
+        <div className="panel">
+          <h3>Transferhistorie</h3>
+          <ul className="transfer-history-list">
+            {player.transferHistory.map((t, i) => (
+              <li key={i} className="transfer-history-item">
+                <div className="transfer-history-head">
+                  <strong>
+                    Alter {t.age}: {t.fromClub} → {t.toClub}
+                  </strong>
+                  <span className="muted">
+                    {t.toFlag} {t.toCountry} · {t.leagueLabel}
+                  </span>
+                </div>
+                <div className="transfer-history-details">
+                  <span>Gehalt: {formatMoney(t.wagePerYear)}/Jahr</span>
+                  <span>
+                    {t.scoreAtTransfer !== null
+                      ? `Score zum Zeitpunkt: ${t.scoreAtTransfer} Pkt. (${t.scoreTierAtTransfer})`
+                      : "Score zum Zeitpunkt: Profidebüt, noch keine Profisaison bewertet"}
+                  </span>
+                  <span>
+                    Vorsaison: {t.goalsLastSeason} Tore / {t.assistsLastSeason} Vorlagen
+                  </span>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
       {legacyFactors && legacyFactors.length > 0 && (
         <div className="panel">
           <h3>Legacy-Score im Detail</h3>

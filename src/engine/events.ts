@@ -1780,6 +1780,172 @@ export const EVENT_TEMPLATES: EventTemplate[] = [
   },
 
   // ---------------------------------------------------------------------
+  // DEFENSIVAKTIONEN - auch Verteidigen ist eine sportliche Chance, sich zu
+  // beweisen, nicht nur Tore und Vorlagen. Bringt naturgemäß auch eigene
+  // Verletzungsrisiken mit sich (Grätschen, Kopfballduelle, Zusammenpralle).
+  // ---------------------------------------------------------------------
+  {
+    id: "rettender_tackle",
+    category: "taktik",
+    minAge: 16,
+    maxAge: 37,
+    weight: 1.4,
+    build: (p) => ({
+      category: "taktik",
+      title: "Der rettende Tackle",
+      description: `Ein Gegenspieler entwischt der Abwehr von ${club(p)} und läuft frei aufs Tor zu - nur du kannst ihn jetzt noch stoppen.`,
+      choices: [
+        {
+          id: "vollgas",
+          label: "Vollen Einsatz zeigen (Grätsche)",
+          effects: {},
+          followUpChance: {
+            chance: 0.55,
+            success: {
+              reputation: 5,
+              clubRelation: 3,
+              attributes: { mentalitaet: 1, physis: 1 },
+              logText: "hat mit einer spektakulären Grätsche im letzten Moment gerettet.",
+              logKind: "positive",
+            },
+            failure: {
+              injuryWeeksOut: 4,
+              injuryLabel: "Knieprellung",
+              morale: -4,
+              logText: "hat sich bei einer verzweifelten Rettungstat verletzt.",
+              logKind: "negative",
+            },
+          },
+        },
+        {
+          id: "taktisches_foul",
+          label: "Lieber taktisch stoppen (Foul in Kauf nehmen)",
+          effects: {
+            attributes: { mentalitaet: 1 },
+            traitDeltas: { disziplin: -2 },
+            logText: "hat den Gegenspieler bewusst taktisch gestoppt, um Schlimmeres zu verhindern.",
+            logKind: "info",
+          },
+        },
+      ],
+    }),
+  },
+  {
+    id: "kopfballduell_abwehr",
+    category: "taktik",
+    minAge: 16,
+    maxAge: 38,
+    weight: 1.2,
+    build: (p) => ({
+      category: "taktik",
+      title: "Kopfballduell in der eigenen Box",
+      description: `${club(p)} verteidigt eine gefährliche Ecke - im Kopfballduell mit einem kopfballstarken Stürmer musst du klären.`,
+      choices: [
+        {
+          id: "vollgas",
+          label: "Vollen Kopfeinsatz zeigen",
+          effects: {},
+          followUpChance: {
+            chance: 0.6,
+            success: {
+              attributes: { physis: 1 },
+              clubRelation: 2,
+              reputation: 2,
+              logText: "hat die gefährliche Ecke per Kopf entscheidend geklärt.",
+              logKind: "positive",
+            },
+            failure: {
+              injuryWeeksOut: 3,
+              injuryLabel: "Gehirnerschütterung",
+              morale: -5,
+              fitness: -4,
+              logText: "hat sich beim Kopfballduell eine Gehirnerschütterung zugezogen.",
+              logKind: "negative",
+            },
+          },
+        },
+        {
+          id: "vorsichtig",
+          label: "Vorsichtig positionieren, Kopfballrisiko meiden",
+          effects: {
+            attributes: { intelligenz: 1 },
+            clubRelation: -1,
+            logText: "hat das Kopfballduell aus Vorsicht gemieden und stattdessen clever verteidigt.",
+            logKind: "info",
+          },
+        },
+      ],
+    }),
+  },
+  {
+    id: "abwehrchef",
+    category: "taktik",
+    minAge: 21,
+    maxAge: 36,
+    weight: 1,
+    unique: true,
+    condition: (p) => p.stage !== "jugend",
+    build: (p) => ({
+      category: "taktik",
+      title: "Abwehrchef gesucht",
+      description: `Die Abwehr von ${club(p)} wirkt zunehmend unsortiert - der Trainer bittet dich, die Kette künftig lautstark zu organisieren.`,
+      choices: [
+        {
+          id: "uebernehmen",
+          label: "Die Verantwortung übernehmen",
+          effects: {
+            traitDeltas: { fuehrung: 4 },
+            attributes: { mentalitaet: 1 },
+            clubRelation: 3,
+            logText: "übernimmt fortan die Organisation der Abwehrkette.",
+            logKind: "positive",
+          },
+        },
+        {
+          id: "ablehnen",
+          label: "Lieber im Hintergrund bleiben",
+          effects: { logText: "überlässt die Organisation der Abwehr lieber anderen.", logKind: "info" },
+        },
+      ],
+    }),
+  },
+  {
+    id: "unglueckliches_zusammenprall",
+    category: "verletzung",
+    minAge: 15,
+    maxAge: 40,
+    weight: 1.3,
+    build: () => ({
+      category: "verletzung",
+      title: "Unglücklicher Zusammenprall",
+      description: "Bei einem harmlos wirkenden Zweikampf prallst du unglücklich mit einem Gegenspieler zusammen.",
+      choices: [
+        {
+          id: "weiterspielen",
+          label: "Vorsichtig weiterspielen lassen",
+          effects: {},
+          followUpChance: {
+            chance: 0.6,
+            success: { morale: 1, logText: "kommt bei einem unglücklichen Zusammenprall glimpflich davon.", logKind: "info" },
+            failure: {
+              injuryWeeksOut: 5,
+              injuryLabel: "Bänderdehnung",
+              morale: -4,
+              logText: "zieht sich bei einem unglücklichen Zusammenprall eine Bänderdehnung zu.",
+              logKind: "negative",
+            },
+          },
+        },
+        {
+          id: "behandeln",
+          label: "Sofort behandeln lassen, kein Risiko eingehen",
+          effects: { fitness: 2, clubRelation: 1, logText: "lässt sich nach dem Zusammenprall sofort vorsorglich behandeln.", logKind: "info" },
+        },
+      ],
+    }),
+  },
+
+  // ---------------------------------------------------------------------
   // AUFSTIEG: die Chance, sich sportlich zu beweisen
   // ---------------------------------------------------------------------
   {
