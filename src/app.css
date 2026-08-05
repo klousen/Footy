@@ -757,6 +757,39 @@ input:focus {
   color: var(--muted);
 }
 
+/* ---------------- Sharepic ---------------- */
+
+.share-card-panel {
+  align-items: center;
+  text-align: center;
+}
+
+.share-card-preview {
+  width: 100%;
+  max-width: 340px;
+  margin: 0 auto;
+}
+
+.share-card-canvas {
+  width: 100%;
+  height: auto;
+  display: block;
+  border-radius: 16px;
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.45);
+}
+
+.share-card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.share-card-actions .btn {
+  flex: 0 0 auto;
+}
+
 /* ---------------- Achievements ---------------- */
 
 .achievement-grid {

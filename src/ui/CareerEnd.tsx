@@ -1,5 +1,6 @@
 import type { Achievement, Player, ScoreFactor } from "../engine/types";
 import { formatMoney, RELATIONSHIP_LABEL } from "./labels";
+import { ShareCard } from "./ShareCard";
 
 export function CareerEnd({
   player,
@@ -32,6 +33,8 @@ export function CareerEnd({
       </div>
 
       <p className="epilogue">{epilogue}</p>
+
+      <ShareCard player={player} legacyScore={legacyScore} legacyTier={legacyTier} achievements={achievements} />
 
       <div className="panel">
         <h3>Karrierestatistik</h3>

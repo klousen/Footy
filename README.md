@@ -181,6 +181,14 @@ im höheren Alter.
   Achievement-Badges, ein Karriere-Titel (z. B. "Publikumsliebling",
   "Weltklasse-Legende") und ein Ausblick auf den Karriereweg danach
   (Trainer, TV-Experte, Jugendarbeit, ...).
+- **Sharepic für soziale Medien**: Am Karriereende wird automatisch eine
+  Spielerkarte im FUT-Stil erzeugt (Name, Position, Land, Gesamtstärke mit
+  Tier-Farbe, Karriere-Titel, Kernstats wie Spiele/Tore/Vorlagen/Titel/
+  Länderspiele/Legacy-Score sowie die wichtigsten Erfolge) - direkt als Bild
+  herunterladbar, in einem neuen Tab zum Speichern zu öffnen oder mit
+  passendem Beschreibungstext für Social Media zu kopieren (auf Geräten mit
+  nativer Teilen-Funktion zusätzlich direkt teilbar). Rein clientseitig via
+  Canvas gezeichnet, keine externen Dienste.
 
 Spielernamen sind frei erfunden. Länder, Ligen und die Anzahl/Herkunft der
 Vereine je Liga sind real recherchiert (Saison 2026/27); dargestellt werden
@@ -210,6 +218,7 @@ src/
                          Karriereende
     events.ts           ~100 Entscheidungs-Events + 5 mehrjährige Storylines
     labels.ts           Deutsche Labels/Formatierung (auch für Feedback-Texte)
+    shareCard.ts         Canvas-Zeichenlogik für das Karriereende-Sharepic
     data.ts, storage.ts Namenspools, localStorage-Persistenz
   ui/                  React-Komponenten für die einzelnen Bildschirme
   App.tsx              Zustandsautomat, der Bildschirme und Spiellogik verbindet
