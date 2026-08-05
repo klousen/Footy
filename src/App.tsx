@@ -8,16 +8,18 @@ import {
   applyChoice,
   applyClubOfferChoice,
   applyLeaguePromotionRelegation,
+  buildEventFromId,
   buildRetirementEvent,
-  buildSeasonEvents,
+  clubOfferTemplateId,
   computeAchievements,
   computeLegacy,
   createPlayer,
+  decideClubOfferInjection,
   finalizeYouthClub,
-  insertClubOfferEvent,
+  insertAt,
   isClubOfferEvent,
-  maybeInjectClubOfferEvent,
   pickPostCareerPath,
+  pickSeasonTemplateIds,
   resolveClubSituation,
   shouldOfferRetirement,
   simulateSeason,
@@ -79,26 +81,32 @@ export default function App() {
 
   function handleStartSeason() {
     if (!game.player || !game.leagueState) return;
-    const used = new Set(game.usedTemplateIds);
-    let events = buildSeasonEvents(game.player, used);
-
-    const offerEvent = maybeInjectClubOfferEvent(game.player, game.leagueState);
-    if (offerEvent) events = insertClubOfferEvent(events, offerEvent);
-
     const nextSeasonNumber = game.seasonNumber + 1;
-    if (events.length === 0) {
-      finishSeasonEvents({ ...game, seasonNumber: nextSeasonNumber });
+    const used = new Set(game.usedTemplateIds);
+    const recentTemplateSeasons = { ...game.recentTemplateSeasons };
+
+    // Nur IDs vormerken - der eigentliche Event-Text wird erst beim Anzeigen gebaut
+    // (siehe buildEventFromId), damit er immer den dann aktuellen Verein zeigt.
+    let ids = pickSeasonTemplateIds(game.player, used, recentTemplateSeasons, nextSeasonNumber);
+
+    const offerReason = decideClubOfferInjection(game.player);
+    if (offerReason) ids = insertAt(ids, clubOfferTemplateId(offerReason), Math.min(2, ids.length));
+
+    if (ids.length === 0) {
+      finishSeasonEvents({ ...game, seasonNumber: nextSeasonNumber, recentTemplateSeasons });
       return;
     }
-    const [first, ...rest] = events;
+    const [firstId, ...restIds] = ids;
+    const firstEvent = buildEventFromId(firstId, game.player, game.leagueState);
     setGame({
       ...game,
       player: { ...game.player },
       leagueState: { ...game.leagueState },
       seasonNumber: nextSeasonNumber,
-      pendingEvents: rest,
-      currentEvent: first,
-      usedTemplateIds: [...game.usedTemplateIds, ...events.map((e) => e.templateId)],
+      pendingEventIds: restIds,
+      currentEvent: firstEvent,
+      usedTemplateIds: [...game.usedTemplateIds, ...ids],
+      recentTemplateSeasons,
       screen: "event",
     });
   }
@@ -119,7 +127,7 @@ export default function App() {
       leagueState: { ...league },
       lastSeasonStats: stats,
       currentEvent: null,
-      pendingEvents: [],
+      pendingEventIds: [],
       feedback: null,
       screen: "seasonSummary",
     });
@@ -179,9 +187,10 @@ export default function App() {
       return;
     }
 
-    if (game.pendingEvents.length > 0) {
-      const [next, ...rest] = game.pendingEvents;
-      setGame({ ...game, player: { ...player }, currentEvent: next, pendingEvents: rest, feedback: null });
+    if (game.pendingEventIds.length > 0 && game.leagueState) {
+      const [nextId, ...restIds] = game.pendingEventIds;
+      const nextEvent = buildEventFromId(nextId, player, game.leagueState);
+      setGame({ ...game, player: { ...player }, currentEvent: nextEvent, pendingEventIds: restIds, feedback: null });
     } else {
       finishSeasonEvents({ ...game, feedback: null });
     }

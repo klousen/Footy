@@ -6,10 +6,11 @@ export function emptyState(): GameState {
     leagueState: null,
     seasonNumber: 0,
     screen: "start",
-    pendingEvents: [],
+    pendingEventIds: [],
     currentEvent: null,
     feedback: null,
     lastSeasonStats: null,
     usedTemplateIds: [],
+    recentTemplateSeasons: {},
   };
 }

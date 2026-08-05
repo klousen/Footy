@@ -1229,7 +1229,487 @@ export const EVENT_TEMPLATES: EventTemplate[] = [
       ],
     }),
   },
+
+  // ---------------------------------------------------------------------
+  // JUGEND (zusätzliche, fußballnahe Ereignisse für die frühen Jahre)
+  // ---------------------------------------------------------------------
+  {
+    id: "jugend_technikpartner",
+    category: "training",
+    minAge: 14,
+    maxAge: 17,
+    weight: 2,
+    build: () => ({
+      category: "training",
+      title: "Technik-Partnerübungen",
+      description: "Ein erfahrener Feldspieler des Vereins bietet an, nach dem Training gemeinsam an Technikdetails zu feilen.",
+      choices: [
+        {
+          id: "annehmen",
+          label: "Angebot annehmen",
+          effects: { attributes: { technik: 2 }, fitness: -2, logText: "hat mit einem erfahrenen Spieler zusätzliche Technikeinheiten absolviert.", logKind: "positive" },
+        },
+        {
+          id: "ablehnen",
+          label: "Lieber mit Gleichaltrigen üben",
+          effects: { attributes: { mentalitaet: 1 }, logText: "hat lieber mit der eigenen Altersklasse trainiert.", logKind: "info" },
+        },
+      ],
+    }),
+  },
+  {
+    id: "jugend_elternabend",
+    category: "jugend",
+    minAge: 14,
+    maxAge: 16,
+    weight: 1,
+    build: () => ({
+      category: "jugend",
+      title: "Elternabend beim Verein",
+      description: "Der Verein lädt zu einem Gespräch über die weitere sportliche und schulische Zukunft ein.",
+      choices: [
+        {
+          id: "ehrgeiz",
+          label: "Ehrgeizige sportliche Ziele formulieren",
+          effects: { attributes: { mentalitaet: 1 }, reputation: 1, logText: "hat beim Elternabend ehrgeizige Ziele formuliert.", logKind: "info" },
+        },
+        {
+          id: "balance",
+          label: "Auf eine ausgewogene Entwicklung pochen",
+          effects: { educationPoints: 4, logText: "hat sich beim Elternabend für eine ausgewogene Entwicklung starkgemacht.", logKind: "info" },
+        },
+      ],
+    }),
+  },
+
+  // ---------------------------------------------------------------------
+  // FUSSBALLALLTAG: TRAINER, TAKTIK, SPIELMOMENTE
+  // ---------------------------------------------------------------------
+  {
+    id: "neuer_trainer",
+    category: "meilenstein",
+    minAge: 18,
+    maxAge: 38,
+    weight: 2,
+    build: (p) => ({
+      category: "meilenstein",
+      title: "Neuer Trainer",
+      description: `Bei ${club(p)} übernimmt ein neuer Cheftrainer und stellt Kader sowie eingespielte Automatismen infrage.`,
+      choices: [
+        {
+          id: "beweisen",
+          label: "Sich sofort beweisen wollen",
+          effects: { fitness: -3 },
+          followUpChance: {
+            chance: 0.55,
+            success: { clubRelation: 8, morale: 5, logText: "hat den neuen Trainer von sich überzeugt.", logKind: "positive" },
+            failure: { clubRelation: -6, morale: -4, logText: "kommt beim neuen Trainer bislang nicht gut an.", logKind: "negative" },
+          },
+        },
+        {
+          id: "abwarten",
+          label: "Abwarten und den eigenen Stil zeigen",
+          effects: { clubRelation: 2, logText: "lässt sich von der neuen Trainersituation nicht aus der Ruhe bringen.", logKind: "info" },
+        },
+      ],
+    }),
+  },
+  {
+    id: "formationswechsel",
+    category: "taktik",
+    minAge: 18,
+    maxAge: 36,
+    weight: 2,
+    build: (p) => ({
+      category: "taktik",
+      title: "Taktikumstellung",
+      description: `Der Trainerstab von ${club(p)} experimentiert mit einer neuen Formation und will dich auf einer ungewohnten Position testen.`,
+      choices: [
+        {
+          id: "einlassen",
+          label: "Sich auf die neue Rolle einlassen",
+          effects: {},
+          followUpChance: {
+            chance: 0.55,
+            success: { attributes: { intelligenz: 1 }, clubRelation: 4, logText: "hat sich auf der ungewohnten Position ausgezeichnet geschlagen.", logKind: "positive" },
+            failure: { morale: -3, clubRelation: -2, logText: "kam mit der taktischen Umstellung nicht klar.", logKind: "negative" },
+          },
+        },
+        {
+          id: "bestehen",
+          label: "Auf der angestammten Position bestehen",
+          effects: { attributes: { mentalitaet: 1 }, clubRelation: -1, logText: "hat auf der angestammten Position bestanden.", logKind: "info" },
+        },
+      ],
+    }),
+  },
+  {
+    id: "standardtraining",
+    category: "training",
+    minAge: 15,
+    maxAge: 36,
+    weight: 2,
+    build: () => ({
+      category: "training",
+      title: "Standardsituationen üben",
+      description: "Nach dem regulären Training bleibt Zeit für zusätzliches Freistoß- und Eckballtraining.",
+      choices: [
+        {
+          id: "investieren",
+          label: "Zusätzliche Stunden investieren",
+          effects: { attributes: { technik: 2 }, fitness: -3, logText: "hat zusätzliche Stunden ins Standardtraining investiert.", logKind: "info" },
+        },
+        {
+          id: "regenerieren",
+          label: "Lieber regenerieren",
+          effects: { fitness: 3, logText: "hat sich für Regeneration statt Zusatztraining entschieden.", logKind: "info" },
+        },
+      ],
+    }),
+  },
+  {
+    id: "co_trainer_taktik",
+    category: "taktik",
+    minAge: 26,
+    maxAge: 40,
+    weight: 1,
+    build: (p) => ({
+      category: "taktik",
+      title: "Der Co-Trainer bittet um taktischen Input",
+      description: `Als erfahrener Spieler wirst du bei ${club(p)} in die Spielvorbereitung einbezogen.`,
+      choices: [
+        {
+          id: "einbringen",
+          label: "Sich aktiv einbringen",
+          effects: { attributes: { intelligenz: 1, charisma: 1 }, clubRelation: 3, logText: "hat sich aktiv in die taktische Vorbereitung eingebracht.", logKind: "positive" },
+        },
+        {
+          id: "raushalten",
+          label: "Sich raushalten",
+          effects: { logText: "hat sich aus der taktischen Vorbereitung rausgehalten.", logKind: "info" },
+        },
+      ],
+    }),
+  },
+  {
+    id: "pokal_kraftakt",
+    category: "taktik",
+    minAge: 17,
+    maxAge: 40,
+    weight: 2,
+    build: (p) => ({
+      category: "taktik",
+      title: "Pokal-Achtelfinale gegen einen Außenseiter",
+      description: `${club(p)} tut sich gegen einen krassen Außenseiter überraschend schwer.`,
+      choices: [
+        {
+          id: "vollrisiko",
+          label: "Vollrisiko im Angriff gehen",
+          effects: {},
+          followUpChance: {
+            chance: 0.5,
+            success: { reputation: 5, morale: 5, clubRelation: 3, logText: "hat mit einem Kraftakt das Weiterkommen im Pokal klargemacht.", logKind: "positive" },
+            failure: { morale: -4, clubRelation: -2, logText: "hat das peinliche Pokal-Aus gegen einen Außenseiter miterlebt.", logKind: "negative" },
+          },
+        },
+        {
+          id: "sicher",
+          label: "Auf Nummer sicher spielen",
+          effects: { clubRelation: 1, logText: "hat im Pokal auf Nummer sicher gespielt.", logKind: "info" },
+        },
+      ],
+    }),
+  },
+  {
+    id: "hattrick_chance",
+    category: "taktik",
+    minAge: 17,
+    maxAge: 38,
+    weight: 1,
+    condition: (p) => p.position === "ST" || p.position === "FS",
+    build: () => ({
+      category: "taktik",
+      title: "Der Hattrick lockt",
+      description: "Zwei Tore stehen schon zu Buche - eine weitere Großchance bietet sich, doch ein Mitspieler steht frei.",
+      choices: [
+        {
+          id: "abschliessen",
+          label: "Selbst abschließen für den Hattrick",
+          effects: {},
+          followUpChance: {
+            chance: 0.5,
+            success: { reputation: 7, morale: 8, logText: "hat den Auftritt mit einem Hattrick gekrönt.", logKind: "positive" },
+            failure: { morale: -3, clubRelation: -1, logText: "hat die große Chance auf den Hattrick vergeben.", logKind: "negative" },
+          },
+        },
+        {
+          id: "abspielen",
+          label: "Elegant den Mitspieler bedienen",
+          effects: { attributes: { intelligenz: 1 }, clubRelation: 3, logText: "hat uneigennützig den besser postierten Mitspieler bedient.", logKind: "positive" },
+        },
+      ],
+    }),
+  },
+  {
+    id: "rote_karte_nachspiel",
+    category: "meilenstein",
+    minAge: 17,
+    maxAge: 38,
+    weight: 1,
+    condition: (p) => p.seasonHistory.length > 0 && p.seasonHistory[p.seasonHistory.length - 1].redCards > 0,
+    build: () => ({
+      category: "meilenstein",
+      title: "Nachspiel vor dem Sportgericht",
+      description: "Nach einem Platzverweis in der vergangenen Saison lädt das Verbandsgericht zur Anhörung.",
+      choices: [
+        {
+          id: "einsichtig",
+          label: "Einsichtig auftreten",
+          effects: { reputation: 1, wealth: -1000, logText: "ist vor dem Sportgericht einsichtig aufgetreten und kam glimpflich davon.", logKind: "info" },
+        },
+        {
+          id: "anfechten",
+          label: "Die Entscheidung anfechten",
+          effects: {},
+          followUpChance: {
+            chance: 0.4,
+            success: { reputation: 3, logText: "hat vor dem Sportgericht Recht bekommen.", logKind: "positive" },
+            failure: { wealth: -6000, morale: -3, logText: "hat den Einspruch vor dem Sportgericht verloren und zusätzlich gezahlt.", logKind: "negative" },
+          },
+        },
+      ],
+    }),
+  },
+  {
+    id: "spieler_des_monats",
+    category: "medien",
+    minAge: 18,
+    maxAge: 38,
+    weight: 1,
+    condition: (p) => p.reputation > 25,
+    build: () => ({
+      category: "medien",
+      title: "Spieler des Monats",
+      description: "Für die starken Leistungen der letzten Wochen wirst du zum Spieler des Monats gewählt.",
+      choices: [
+        {
+          id: "annehmen",
+          label: "Die Auszeichnung entgegennehmen",
+          effects: { reputation: 5, morale: 6, wealth: 3000, logText: "wurde zum Spieler des Monats gewählt.", logKind: "positive" },
+        },
+      ],
+    }),
+  },
+  {
+    id: "torschuetzenkoenig_rennen",
+    category: "meilenstein",
+    minAge: 18,
+    maxAge: 36,
+    weight: 1,
+    condition: (p) => p.position === "ST" && p.reputation > 40,
+    build: () => ({
+      category: "meilenstein",
+      title: "Kampf um die Torjägerkanone",
+      description: "Ein direkter Konkurrent liefert sich mit dir ein Kopf-an-Kopf-Rennen um die Torjägerkrone.",
+      choices: [
+        {
+          id: "extra",
+          label: "Zusätzliche Abschlusseinheiten ansetzen",
+          effects: { attributes: { technik: 1 }, fitness: -3, logText: "hat im Rennen um die Torjägerkrone zusätzliche Abschlusseinheiten eingelegt.", logKind: "info" },
+        },
+        {
+          id: "locker",
+          label: "Locker angehen lassen",
+          effects: { morale: 2, logText: "nimmt das Rennen um die Torjägerkrone gelassen.", logKind: "info" },
+        },
+      ],
+    }),
+  },
+  {
+    id: "jugend_nationalmannschaft",
+    category: "nationalmannschaft",
+    minAge: 16,
+    maxAge: 20,
+    weight: 2,
+    condition: (p) => p.reputation > 15,
+    build: () => ({
+      category: "nationalmannschaft",
+      title: "Einladung zur U-Nationalmannschaft",
+      description: "Der Verband beruft dich erstmals in eine Nachwuchs-Nationalmannschaft.",
+      choices: [
+        {
+          id: "folgen",
+          label: "Der Einladung folgen",
+          effects: { reputation: 5, fitness: -3, morale: 4, logText: "wurde in eine U-Nationalmannschaft berufen.", logKind: "positive" },
+        },
+        {
+          id: "absagen",
+          label: "Wegen Vereins-Belastung absagen",
+          effects: { clubRelation: 1, logText: "hat eine U-Nationalmannschaftseinladung wegen Belastung abgesagt.", logKind: "info" },
+        },
+      ],
+    }),
+  },
+  {
+    id: "vorbereitungstour",
+    category: "lifestyle",
+    minAge: 17,
+    maxAge: 36,
+    weight: 1,
+    build: (p) => ({
+      category: "lifestyle",
+      title: "Vorbereitungstour im Ausland",
+      description: `${club(p)} reist zu einer PR-Tour mit vollem Sponsoren-Programm ins Ausland.`,
+      choices: [
+        {
+          id: "mitziehen",
+          label: "Voll bei den Sponsoren-Terminen mitziehen",
+          effects: { wealth: 5000, reputation: 3, fitness: -4, logText: "hat bei der Vorbereitungstour voll im Sponsoren-Programm mitgezogen.", logKind: "info" },
+        },
+        {
+          id: "training",
+          label: "Auf Trainingsqualität pochen",
+          effects: { attributes: { physis: 1 }, fitness: -1, logText: "hat bei der Vorbereitungstour auf Trainingsqualität statt PR gepocht.", logKind: "info" },
+        },
+      ],
+    }),
+  },
+  {
+    id: "eigentor",
+    category: "taktik",
+    minAge: 16,
+    maxAge: 38,
+    weight: 1,
+    condition: (p) => p.position !== "TW",
+    build: () => ({
+      category: "taktik",
+      title: "Unglückliches Eigentor",
+      description: "Ein verunglückter Klärungsversuch landet unhaltbar im eigenen Netz.",
+      choices: [
+        {
+          id: "zurueckmelden",
+          label: "Sich sofort zurückmelden wollen",
+          effects: { attributes: { mentalitaet: 1 }, fitness: -2, morale: -2, logText: "hat sich nach einem Eigentor sofort zurückgemeldet.", logKind: "negative" },
+        },
+        {
+          id: "beruhen",
+          label: "Es erstmal auf sich beruhen lassen",
+          effects: { morale: -4, logText: "hat ein unglückliches Eigentor erstmal verdauen müssen.", logKind: "negative" },
+        },
+      ],
+    }),
+  },
+  {
+    id: "rivalitaets_derby",
+    category: "taktik",
+    minAge: 17,
+    maxAge: 40,
+    weight: 2,
+    build: (p) => ({
+      category: "taktik",
+      title: "Stadtderby",
+      description: `Das Derby steht an - die Fans von ${club(p)} erwarten von dir ein Statement.`,
+      choices: [
+        {
+          id: "vollgas",
+          label: "Mit vollem Einsatz vorangehen",
+          effects: {},
+          followUpChance: {
+            chance: 0.55,
+            success: { reputation: 6, clubRelation: 5, morale: 6, logText: "wurde im Derby zum gefeierten Helden.", logKind: "positive" },
+            failure: { injuryWeeksOut: 3, injuryLabel: "Blessur im Zweikampf", morale: -4, logText: "hat sich im hitzigen Derby eine Blessur zugezogen.", logKind: "negative" },
+          },
+        },
+        {
+          id: "kontrolliert",
+          label: "Klug und kontrolliert spielen",
+          effects: { attributes: { intelligenz: 1 }, clubRelation: 2, logText: "hat das Derby klug und kontrolliert bestritten.", logKind: "info" },
+        },
+      ],
+    }),
+  },
+  {
+    id: "auswaertsreise_chaos",
+    category: "lifestyle",
+    minAge: 16,
+    maxAge: 40,
+    weight: 1,
+    build: () => ({
+      category: "lifestyle",
+      title: "Chaos auf der Auswärtsreise",
+      description: "Eine Flugverspätung wirbelt die Vorbereitung auf ein wichtiges Auswärtsspiel durcheinander.",
+      choices: [
+        {
+          id: "ruhe",
+          label: "Ruhe bewahren",
+          effects: { attributes: { mentalitaet: 1 }, logText: "hat das Reisechaos vor einem Auswärtsspiel gelassen hingenommen.", logKind: "info" },
+        },
+        {
+          id: "aufregen",
+          label: "Sich sichtlich aufregen",
+          effects: { morale: -2, logText: "hat sich über das Reisechaos sichtlich aufgeregt.", logKind: "negative" },
+        },
+      ],
+    }),
+  },
+  {
+    id: "sportwissenschaft",
+    category: "training",
+    minAge: 24,
+    maxAge: 38,
+    weight: 1,
+    build: () => ({
+      category: "training",
+      title: "Neue Sportwissenschafts-Methoden",
+      description: "Der Verein bietet ein kostenpflichtiges High-End-Reha- und Recovery-Programm an.",
+      choices: [
+        {
+          id: "investieren",
+          label: "Auf eigene Kosten investieren",
+          effects: { wealth: -5000, fitness: 6, attributes: { physis: 1 }, logText: "hat auf eigene Kosten in modernste Sportwissenschaft investiert.", logKind: "positive" },
+        },
+        {
+          id: "standard",
+          label: "Beim Standardprogramm bleiben",
+          effects: {},
+        },
+      ],
+    }),
+  },
+  {
+    id: "zweikampf_haerte",
+    category: "taktik",
+    minAge: 15,
+    maxAge: 40,
+    weight: 1,
+    build: () => ({
+      category: "taktik",
+      title: "Robustes Auftreten gefordert",
+      description: "Der Gegner geht couragiert und robust in die Zweikämpfe.",
+      choices: [
+        {
+          id: "dagegenhalten",
+          label: "Genauso hart dagegenhalten",
+          effects: {},
+          followUpChance: {
+            chance: 0.6,
+            success: { attributes: { physis: 1, mentalitaet: 1 }, reputation: 2, logText: "hat im robusten Zweikampfduell die Oberhand behalten.", logKind: "positive" },
+            failure: { injuryWeeksOut: 2, injuryLabel: "Prellung", morale: -2, logText: "hat sich in einem robusten Zweikampf eine Prellung zugezogen.", logKind: "negative" },
+          },
+        },
+        {
+          id: "technik",
+          label: "Auf Technik statt Härte setzen",
+          effects: { attributes: { technik: 1 }, logText: "hat auf Technik statt auf harte Zweikämpfe gesetzt.", logKind: "info" },
+        },
+      ],
+    }),
+  },
 ];
+
+export function getTemplateById(id: string): EventTemplate | undefined {
+  return EVENT_TEMPLATES.find((t) => t.id === id);
+}
 
 export function eligibleTemplates(
   player: Player,

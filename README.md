@@ -56,7 +56,15 @@ im höheren Alter.
   Schwiegereltern. Dazu karrierephasen-passende Zufallsereignisse mit
   positiven wie negativen Ausgängen (Skandal, Erbschaft, Steuerprobleme,
   Fan-Liebling, Mentorenrolle im Alter, Trainerschein, Testimonial-Spiel,
-  ...). Die Anzahl Ereignisse pro Saison schwankt bewusst (4-6).
+  ...). Über 60 Events insgesamt, inklusive vieler fußballspezifischer
+  Momente (Trainerwechsel, Taktikumstellung, Stadtderby, Pokal-Kraftakt,
+  Hattrick-Chance, Sportgericht, Spieler des Monats, Torjägerrennen,
+  U-Nationalmannschaft, Standardsituationen, ...). Die Anzahl Ereignisse
+  pro Saison schwankt bewusst (4-6), und kürzlich gezogene Events werden für
+  einige Saisons unwahrscheinlicher, damit sich weniger wiederholt.
+  Event-Texte werden zudem erst unmittelbar vor der Anzeige mit dem dann
+  aktuellen Spielerstand erzeugt - ein Vereinswechsel mitten in der Saison
+  zeigt in späteren Events also korrekt den neuen Verein.
 - **Vollständige Karriere**: von der Jugend (14) über Durchbruch, Etablierung
   und Veteranenjahre bis zum Karriereende.
 - **Echte Konsequenzen**: Entscheidungen wirken sich auf Attribute, Moral,

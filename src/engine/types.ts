@@ -262,12 +262,20 @@ export interface GameState {
   leagueState: LeagueState | null;
   seasonNumber: number; // 1 = erste Saison
   screen: Screen;
-  pendingEvents: GameEvent[];
+  /**
+   * Noch nicht angezeigte Events der laufenden Saison - bewusst nur als IDs
+   * vorgemerkt (nicht als fertig gebaute GameEvents), damit Beschreibungstexte
+   * erst unmittelbar vor der Anzeige mit dem dann aktuellen Spielerstand (Verein
+   * nach evtl. Wechsel etc.) erzeugt werden.
+   */
+  pendingEventIds: string[];
   currentEvent: GameEvent | null;
   /** Sofort-Feedback zur zuletzt getroffenen Entscheidung, bevor es weitergeht. */
   feedback: ChoiceFeedback | null;
   lastSeasonStats: SeasonStats | null;
   usedTemplateIds: string[];
+  /** Saison, in der ein Template zuletzt gezogen wurde (für Wiederholungs-Cooldown). */
+  recentTemplateSeasons: Record<string, number>;
   legacyScore?: number;
   legacyTier?: string;
   legacyFactors?: ScoreFactor[];

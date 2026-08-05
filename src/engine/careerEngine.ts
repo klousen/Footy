@@ -19,7 +19,7 @@ import type {
 import { POSITION_WEIGHTS } from "./types";
 import { clamp } from "./data";
 import { ATTRIBUTE_LABEL, ATTRIBUTE_ORDER, formatMoney, RELATIONSHIP_LABEL, SQUAD_ROLE_RANK } from "./labels";
-import { eligibleTemplates } from "./events";
+import { eligibleTemplates, getTemplateById } from "./events";
 import type { CountryId } from "./leagues";
 import {
   buildLeagueState,
@@ -179,20 +179,45 @@ function stageForAge(age: number): CareerStage {
 // Saison-Events zusammenstellen
 // ---------------------------------------------------------------------------
 
-export function buildSeasonEvents(player: Player, usedTemplateIds: Set<string>, count?: number): GameEvent[] {
+/** Wie viele Saisons ein Template "abkühlt", bevor es wieder mit vollem Gewicht gezogen werden kann. */
+const TEMPLATE_COOLDOWN_SEASONS = 3;
+
+/**
+ * Wählt aus, WELCHE Templates diese Saison an die Reihe kommen - baut aber
+ * bewusst noch KEINE GameEvents (keine Beschreibungstexte). Das passiert erst
+ * unmittelbar vor der Anzeige (`buildEventFromId`), damit z.B. der Vereinsname
+ * im Text immer den zum Anzeigezeitpunkt aktuellen Verein zeigt, auch wenn
+ * innerhalb derselben Saison zwischendurch ein Wechsel stattfand.
+ *
+ * `recentTemplateSeasons` wird mutiert: kürzlich gezogene Templates werden für
+ * die nächsten `TEMPLATE_COOLDOWN_SEASONS` Saisons deutlich unwahrscheinlicher,
+ * damit sich Ereignisse spürbar seltener wiederholen.
+ */
+export function pickSeasonTemplateIds(
+  player: Player,
+  usedTemplateIds: Set<string>,
+  recentTemplateSeasons: Record<string, number>,
+  seasonNumber: number,
+  count?: number
+): string[] {
   // Ohne explizite Vorgabe schwankt die Anzahl Ereignisse pro Saison (4-6) - fühlt
   // sich weniger vorhersehbar an, ähnlich unregelmäßig wie ein echtes Spieljahr.
   const targetCount = count ?? 4 + Math.floor(rng() * 3);
   const pool = eligibleTemplates(player, usedTemplateIds);
-  const chosen: GameEvent[] = [];
+  const chosen: string[] = [];
   const usedCategoriesThisSeason = new Map<string, number>();
   const localPool = [...pool];
 
   for (let i = 0; i < targetCount && localPool.length > 0; i++) {
-    // Gewichtung: Kategorie-Wiederholungen innerhalb der Saison abschwächen
     const weights = localPool.map((t) => {
+      // Kategorie-Wiederholungen innerhalb derselben Saison abschwächen
       const usedCount = usedCategoriesThisSeason.get(t.category) ?? 0;
-      return t.weight / (1 + usedCount * 1.5);
+      const categoryFactor = 1 / (1 + usedCount * 1.5);
+      // Kürzlich gezogene Templates deutlich seltener wiederholen (Cooldown)
+      const lastSeason = recentTemplateSeasons[t.id];
+      const recencyFactor =
+        lastSeason === undefined ? 1 : clamp((seasonNumber - lastSeason) / TEMPLATE_COOLDOWN_SEASONS, 0.08, 1);
+      return t.weight * categoryFactor * recencyFactor;
     });
     const totalWeight = weights.reduce((a, b) => a + b, 0);
     let r = rng() * totalWeight;
@@ -203,18 +228,39 @@ export function buildSeasonEvents(player: Player, usedTemplateIds: Set<string>, 
     }
     idx = Math.min(idx, localPool.length - 1);
     const template = localPool[idx];
-    const built = template.build(player, { rng });
-    chosen.push({ ...built, id: `${template.id}-${player.age}-${i}`, templateId: template.id });
+    chosen.push(template.id);
     usedCategoriesThisSeason.set(template.category, (usedCategoriesThisSeason.get(template.category) ?? 0) + 1);
+    recentTemplateSeasons[template.id] = seasonNumber;
     localPool.splice(idx, 1);
   }
 
   return chosen;
 }
 
-function insertAt<T>(arr: T[], item: T, index: number): T[] {
-  const i = clamp(index, 0, arr.length);
-  return [...arr.slice(0, i), item, ...arr.slice(i)];
+/**
+ * Baut den tatsächlichen GameEvent (inkl. Beschreibungstext) erst unmittelbar
+ * vor der Anzeige - mit dem dann aktuellen Spielerstand. Erkennt auch dynamisch
+ * erzeugte `club_offer:*`-IDs (siehe `decideClubOfferInjection`).
+ */
+export function buildEventFromId(id: string, player: Player, league: LeagueState): GameEvent {
+  if (isClubOfferEvent(id)) {
+    const reason = id.slice(CLUB_OFFER_PREFIX.length) as ClubOfferReason;
+    return buildClubOfferEvent(player, league, reason);
+  }
+  const template = getTemplateById(id);
+  if (!template) {
+    // Sollte praktisch nie vorkommen, aber sicherheitshalber ein neutraler Fallback
+    return {
+      id: `fallback-${player.age}-${Math.round(rng() * 1e6)}`,
+      templateId: id,
+      category: "meilenstein",
+      title: "Ruhige Woche",
+      description: `Bei ${player.club.name} verläuft die Woche ereignislos.`,
+      choices: [{ id: "ok", label: "Weiter", effects: {} }],
+    };
+  }
+  const built = template.build(player, { rng });
+  return { ...built, id: `${template.id}-${player.age}-${Math.round(rng() * 1e6)}`, templateId: template.id };
 }
 
 // ---------------------------------------------------------------------------
@@ -525,7 +571,7 @@ function squadRoleForOverall(overall: number, clubStrength: number): SquadRole {
 /**
  * Pflegt Vertrag, Kaderrolle und Vereinszugehörigkeit zwischen den Saisons - OHNE
  * automatische, unsichtbare Vereinswechsel. Transfers laufen ausschließlich über
- * die sichtbaren `club_offer`-Events (siehe `maybeInjectClubOfferEvent`). Diese
+ * die sichtbaren `club_offer`-Events (siehe `decideClubOfferInjection`). Diese
  * Funktion aktualisiert nur: Rolle im Kader (mit Log bei Veränderung, damit man
  * "sich herausarbeiten" sichtbar mitbekommt), Bankphasen-Zähler und automatische
  * Kurzverlängerung, falls kein Vertrags-Event gegriffen hat.
@@ -544,7 +590,7 @@ export function resolveClubSituation(player: Player, league: LeagueState): LogEn
   player.contract.club = player.club.name;
 
   if (player.contract.squadRole === "Ausbildungsspieler") {
-    // Profidebüt läuft über das eigene club_offer-Event (siehe maybeInjectClubOfferEvent)
+    // Profidebüt läuft über das eigene club_offer-Event (siehe decideClubOfferInjection)
     return null;
   }
 
@@ -631,6 +677,10 @@ const CLUB_OFFER_PREFIX = "club_offer:";
 
 export function isClubOfferEvent(templateId: string): boolean {
   return templateId.startsWith(CLUB_OFFER_PREFIX);
+}
+
+export function clubOfferTemplateId(reason: ClubOfferReason): string {
+  return `${CLUB_OFFER_PREFIX}${reason}`;
 }
 
 export function shouldOfferProDebut(player: Player): boolean {
@@ -730,27 +780,30 @@ function buildClubOfferEvent(player: Player, league: LeagueState, reason: ClubOf
 
 /**
  * Prüft am Beginn einer Saison, ob ein sichtbares Vereins-Event fällig ist
- * (Profidebüt > Bankphasen-Druck > gute Form), und baut es ggf. Setzt bei
- * Auslösung den Cooldown-Zähler zurück.
+ * (Profidebüt > Bankphasen-Druck > gute Form), und liefert ggf. den Grund
+ * zurück. Setzt bei Auslösung den Cooldown-Zähler zurück. Baut bewusst noch
+ * KEIN GameEvent (siehe `buildEventFromId` - lazy, erst bei Anzeige).
  */
-export function maybeInjectClubOfferEvent(player: Player, league: LeagueState): GameEvent | null {
+export function decideClubOfferInjection(player: Player): ClubOfferReason | null {
   if (shouldOfferProDebut(player)) {
     player.seasonsSinceTransferEvent = 0;
-    return buildClubOfferEvent(player, league, "pro-debut");
+    return "pro-debut";
   }
   if (shouldTriggerTransferPressure(player)) {
     player.seasonsSinceTransferEvent = 0;
-    return buildClubOfferEvent(player, league, "pressure");
+    return "pressure";
   }
   if (shouldTriggerTransferOpportunity(player)) {
     player.seasonsSinceTransferEvent = 0;
-    return buildClubOfferEvent(player, league, "opportunity");
+    return "opportunity";
   }
   return null;
 }
 
-export function insertClubOfferEvent(events: GameEvent[], offerEvent: GameEvent): GameEvent[] {
-  return insertAt(events, offerEvent, Math.min(2, events.length));
+/** Setzt ein Element an eine bestimmte Position (geklemmt auf die Array-Länge). */
+export function insertAt<T>(arr: T[], item: T, index: number): T[] {
+  const i = clamp(index, 0, arr.length);
+  return [...arr.slice(0, i), item, ...arr.slice(i)];
 }
 
 /** Löst eine Entscheidung innerhalb eines `club_offer`-Events auf (kein generisches EffectDelta). */
