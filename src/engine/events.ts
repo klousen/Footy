@@ -566,7 +566,9 @@ export const EVENT_TEMPLATES: EventTemplate[] = [
     minAge: 17,
     maxAge: 40,
     weight: 2,
-    condition: (p) => p.attributes.mentalitaet > 20,
+    // Torhüter treten so gut wie nie als Elfmeterschütze an - das bleibt Feldspielern
+    // vorbehalten.
+    condition: (p) => p.attributes.mentalitaet > 20 && p.position !== "TW",
     build: (p) => ({
       category: "taktik",
       title: "Elfmeter im Endspurt",
@@ -1976,6 +1978,9 @@ export const EVENT_TEMPLATES: EventTemplate[] = [
     minAge: 16,
     maxAge: 37,
     weight: 1.4,
+    // Ein letzter rettender Tackle vor dem eigenen Tor ist eine Abwehr-Szene -
+    // Stürmer und Flügelspieler stehen dort im Spielaufbau schlicht nicht.
+    condition: (p) => p.position !== "ST" && p.position !== "FS",
     build: (p) => ({
       category: "taktik",
       title: "Der rettende Tackle",
@@ -2022,6 +2027,10 @@ export const EVENT_TEMPLATES: EventTemplate[] = [
     minAge: 16,
     maxAge: 38,
     weight: 1.2,
+    // Kopfballduell in der eigenen Box klären ist Abwehrarbeit - für Stürmer/
+    // Flügelspieler (die im Angriff stehen) und Torhüter (klären mit den Fäusten,
+    // nicht per Kopf) unpassend.
+    condition: (p) => p.position !== "ST" && p.position !== "FS" && p.position !== "TW",
     build: (p) => ({
       category: "taktik",
       title: "Kopfballduell in der eigenen Box",
@@ -2070,7 +2079,10 @@ export const EVENT_TEMPLATES: EventTemplate[] = [
     maxAge: 36,
     weight: 1,
     unique: true,
-    condition: (p) => p.stage !== "jugend",
+    // Die Abwehrkette organisiert klassischerweise der Innenverteidiger oder der
+    // Torhüter (bester Überblick auf die Kette) - für Stürmer/Flügelspieler/
+    // Mittelfeld unpassend.
+    condition: (p) => p.stage !== "jugend" && (p.position === "IV" || p.position === "TW" || p.position === "AV"),
     build: (p) => ({
       category: "taktik",
       title: "Abwehrchef gesucht",
@@ -2095,6 +2107,103 @@ export const EVENT_TEMPLATES: EventTemplate[] = [
       ],
     }),
   },
+
+  // ---------------------------------------------------------------------
+  // TORHÜTER-SPEZIFISCH - eigene Spielmomente für die Position, die sonst
+  // nirgends im Ereignispool vorkommt (Elfmeter, Strafraumbeherrschung,
+  // Fehlgriffe sind torwartspezifische Situationen).
+  // ---------------------------------------------------------------------
+  {
+    id: "torwart_elfmeterheld",
+    category: "taktik",
+    minAge: 18,
+    maxAge: 38,
+    weight: 1.3,
+    condition: (p) => p.position === "TW",
+    build: (p) => ({
+      category: "taktik",
+      title: "Elfmeterheld gesucht",
+      description: `Im Elfmeterschießen eines wichtigen Pokalspiels von ${club(p)} liegt es an dir, den entscheidenden Versuch zu parieren.`,
+      choices: [
+        {
+          id: "videostudium",
+          label: "Auf Videostudien der Schützen vertrauen",
+          effects: {},
+          followUpChance: {
+            chance: 0.55,
+            success: { reputation: 7, morale: 8, attributes: { intelligenz: 1 }, logText: "hat dank akribischer Vorbereitung den entscheidenden Elfmeter pariert und wird zum Helden.", logKind: "positive" },
+            failure: { morale: -4, logText: "hat sich trotz Vorbereitung im entscheidenden Elfmeterschießen nicht auszeichnen können.", logKind: "negative" },
+          },
+        },
+        {
+          id: "bauchgefuehl",
+          label: "Aus dem Bauch heraus reagieren",
+          effects: {},
+          followUpChance: {
+            chance: 0.4,
+            success: { reputation: 9, morale: 10, traitDeltas: { medienimage: 2 }, logText: "hat rein aus dem Bauch heraus reagiert und einen spektakulären Reflex-Save gezeigt.", logKind: "positive" },
+            failure: { morale: -6, clubRelation: -2, logText: "hat sich im entscheidenden Elfmeterschießen komplett verschätzt.", logKind: "negative" },
+          },
+        },
+      ],
+    }),
+  },
+  {
+    id: "torwart_strafraumbeherrschung",
+    category: "taktik",
+    minAge: 17,
+    maxAge: 38,
+    weight: 1.2,
+    condition: (p) => p.position === "TW",
+    build: (p) => ({
+      category: "taktik",
+      title: "Kommandogewalt im eigenen Strafraum",
+      description: `Bei ${club(p)} häufen sich zuletzt hohe Bälle und Ecken gegen dein Team - der Trainer erwartet mehr Präsenz im Strafraum.`,
+      choices: [
+        {
+          id: "aggressiv",
+          label: "Konsequent herauslaufen und Bälle abfangen",
+          effects: {},
+          followUpChance: {
+            chance: 0.6,
+            success: { reputation: 4, clubRelation: 4, attributes: { mentalitaet: 1 }, logText: "hat mit mutigem Herauslaufen mehrere gefährliche Situationen im Keim erstickt.", logKind: "positive" },
+            failure: { morale: -5, clubRelation: -4, injuryWeeksOut: 2, injuryLabel: "Zusammenprall im Strafraum", logText: "ist bei einem riskanten Herauslaufen mit einem Gegenspieler zusammengeprallt.", logKind: "negative" },
+          },
+        },
+        {
+          id: "linientreue",
+          label: "Lieber auf der Linie bleiben",
+          effects: { attributes: { intelligenz: 1 }, logText: "hat sich bewusst für mehr Sicherheit auf der Linie entschieden statt für riskantes Herauslaufen.", logKind: "info" },
+        },
+      ],
+    }),
+  },
+  {
+    id: "torwart_patzer",
+    category: "medien",
+    minAge: 18,
+    maxAge: 38,
+    weight: 1,
+    condition: (p) => p.position === "TW",
+    build: (p) => ({
+      category: "medien",
+      title: "Der Patzer geht viral",
+      description: `Ein missglückter Abschlag von dir bei ${club(p)} landet direkt beim Gegner und führt zu einem Gegentor - die Szene verbreitet sich rasend schnell in den sozialen Medien.`,
+      choices: [
+        {
+          id: "bekennen",
+          label: "Sich öffentlich dazu bekennen",
+          effects: { attributes: { mentalitaet: 1 }, traitDeltas: { medienimage: 2, disziplin: 1 }, clubRelation: 2, logText: "hat sich nach dem viralen Patzer öffentlich und selbstkritisch dazu bekannt.", logKind: "positive" },
+        },
+        {
+          id: "rausreden",
+          label: "Die Schuld beim Team suchen",
+          effects: { morale: 2, clubRelation: -5, traitDeltas: { medienimage: -3 }, logText: "hat nach dem viralen Patzer die Schuld beim Team gesucht - kommt in der Kabine nicht gut an.", logKind: "negative" },
+        },
+      ],
+    }),
+  },
+
   {
     id: "teamkollege_krise",
     category: "taktik",
@@ -2500,7 +2609,7 @@ export const EVENT_TEMPLATES: EventTemplate[] = [
     weight: 1,
     condition: (p) =>
       !p.completedStorylines.includes("comeback") && !p.activeStorylines.some((t) => t.storylineId === "comeback"),
-    build: (p) => ({
+    build: (p, ctx) => ({
       category: "verletzung",
       title: "Schwere Verletzung",
       description: `Ein unglücklicher Zweikampf endet für dich bei ${club(p)} mit einer schweren Verletzung - die Ärzte sprechen von einer langen Pause, manche zweifeln sogar am Comeback.`,
@@ -2509,11 +2618,16 @@ export const EVENT_TEMPLATES: EventTemplate[] = [
           id: "aggressiv",
           label: "Riskante, beschleunigte Reha wagen",
           effects: {
-            injuryWeeksOut: 16,
+            // Ein echter Kreuzbandriss kostet realistisch 8-10 Monate, nicht nur
+            // ein paar Wochen - die Saison, in der er passiert, ist damit
+            // praktisch gelaufen, und auch die Sommerpause allein reicht nicht
+            // aus, um wieder voll einsatzbereit zu sein (siehe `ageUpPlayer`,
+            // das nur 16 Wochen pro Sommerpause heilt).
+            injuryWeeksOut: rInt(ctx, 32, 38),
             injuryLabel: "Kreuzbandriss",
             morale: -8,
             traitDeltas: { arbeitsmoral: 2 },
-            logText: "hat sich schwer verletzt (Kreuzbandriss) und wagt eine riskante, beschleunigte Reha.",
+            logText: "hat sich schwer verletzt (Kreuzbandriss, monatelange Pause) und wagt eine riskante, beschleunigte Reha.",
             logKind: "negative",
             storyline: { storylineId: "comeback", label: "Der lange Weg zurück", stage: 1, totalStages: 3, nextTemplateId: "comeback_2", delaySeasons: 1, data: { risk: "aggressiv" } },
           },
@@ -2522,11 +2636,11 @@ export const EVENT_TEMPLATES: EventTemplate[] = [
           id: "geduldig",
           label: "Geduldige, ärztlich empfohlene Reha",
           effects: {
-            injuryWeeksOut: 16,
+            injuryWeeksOut: rInt(ctx, 38, 44),
             injuryLabel: "Kreuzbandriss",
             morale: -5,
             traitDeltas: { disziplin: 2 },
-            logText: "hat sich schwer verletzt (Kreuzbandriss) und setzt auf eine geduldige, ärztlich empfohlene Reha.",
+            logText: "hat sich schwer verletzt (Kreuzbandriss, monatelange Pause) und setzt auf eine geduldige, ärztlich empfohlene Reha.",
             logKind: "negative",
             storyline: { storylineId: "comeback", label: "Der lange Weg zurück", stage: 1, totalStages: 3, nextTemplateId: "comeback_2", delaySeasons: 1, data: { risk: "geduldig" } },
           },
@@ -2903,17 +3017,25 @@ export const EVENT_TEMPLATES: EventTemplate[] = [
       return {
         category: "taktik",
         title: "Der Bruch",
-        description: `Der Konflikt mit dem Trainer bei ${club(p)} ist endgültig eskaliert - der Verein signalisiert Wechselbereitschaft.`,
+        description: `Der Konflikt mit dem Trainer bei ${club(p)} ist endgültig eskaliert - du wirst aus dem Kader verbannt, der Verein prüft bereits eine vorzeitige Vertragsauflösung.`,
         choices: [
           {
             id: "ok",
             label: "Nach vorne blicken",
             effects: {
               wantsTransfer: true,
-              clubRelation: -10,
+              // Klarer Bruch statt sanftem Dämpfer: die Vereinsbeziehung wird auf
+              // den absoluten Tiefpunkt gesetzt und die Kaderrolle direkt auf die
+              // Ersatzbank durchgereicht - das garantiert (siehe
+              // `shouldTriggerTransferPressure`), dass der Verein im nächsten
+              // Transferfenster tatsächlich einen Abgang forciert, statt es bei
+              // einer vagen Ankündigung zu belassen.
+              clubRelation: -100,
+              squadRoleOverride: "Ersatzbank",
               reputation: 2,
+              morale: -6,
               traitDeltas: { fuehrung: 2 },
-              logText: "eskaliert den Streit mit dem Trainer endgültig - ein Wechsel scheint nur noch eine Frage der Zeit.",
+              logText: "eskaliert den Streit mit dem Trainer endgültig, wird aus dem Kader verbannt - der Vertrag steht vor dem Bruch.",
               logKind: "negative",
               storyline: { storylineId: "trainerzoff", label: "Zoff mit dem Trainer", stage: 3, totalStages: 3 },
             },
