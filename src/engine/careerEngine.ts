@@ -21,11 +21,12 @@ import { POSITION_WEIGHTS } from "./types";
 import { clamp } from "./data";
 import { ATTRIBUTE_LABEL, ATTRIBUTE_ORDER, formatMoney, RELATIONSHIP_LABEL, SQUAD_ROLE_RANK, TRAIT_LABEL, TRAIT_ORDER } from "./labels";
 import { eligibleTemplates, getTemplateById } from "./events";
-import type { CountryId } from "./leagues";
+import { COUNTRIES, type CountryId } from "./leagues";
 import {
   buildLeagueState,
   findClub,
   leagueNameForTier,
+  pickClubNearStrength,
   pickDistinctClubOffers,
   pickSpreadClubOffers,
   simulateLeaguePromotionRelegation,
@@ -282,10 +283,15 @@ export function dueStorylineTemplateIds(player: Player, seasonNumber: number): s
  * vor der Anzeige - mit dem dann aktuellen Spielerstand. Erkennt auch dynamisch
  * erzeugte `club_offer:*`-IDs (siehe `decideClubOfferInjection`).
  */
-export function buildEventFromId(id: string, player: Player, league: LeagueState): GameEvent {
+export function buildEventFromId(
+  id: string,
+  player: Player,
+  league: LeagueState,
+  foreignLeagues: Partial<Record<CountryId, LeagueState>>
+): GameEvent {
   if (isClubOfferEvent(id)) {
     const reason = id.slice(CLUB_OFFER_PREFIX.length) as ClubOfferReason;
-    return buildClubOfferEvent(player, league, reason);
+    return buildClubOfferEvent(player, league, reason, foreignLeagues);
   }
   const template = getTemplateById(id);
   if (!template) {
@@ -878,17 +884,69 @@ export function shouldTriggerTransferPressure(player: Player): boolean {
 
 export function shouldTriggerTransferOpportunity(player: Player): boolean {
   if (player.stage === "jugend") return false;
-  const cooldown = player.wantsTransfer ? 1 : 2;
+  // Aktiv geäußertes Wechselinteresse hat spürbaren, schnellen Impact: keine
+  // Wartezeit mehr und eine fast sichere Trefferchance - statt erst 1-2 Saisons
+  // auf ein Angebot zu warten, obwohl man klar signalisiert hat, wechseln zu wollen.
+  const cooldown = player.wantsTransfer ? 0 : 2;
   if (player.seasonsSinceTransferEvent < cooldown) return false;
   const last = player.seasonHistory[player.seasonHistory.length - 1];
   // Solide Saison reicht schon aus, um Scouts auf sich aufmerksam zu machen - nicht
   // erst eine Ausnahmesaison. Eine "Starke"/"Überragende" Saison macht es fast sicher.
   const goodForm = last ? last.avgRating >= 6.3 || last.scoreTier === "Starke Saison" || last.scoreTier === "Überragende Saison" : false;
-  const chance = player.wantsTransfer ? 0.85 : last?.scoreTier === "Überragende Saison" ? 0.75 : 0.55;
+  const chance = player.wantsTransfer ? 0.92 : last?.scoreTier === "Überragende Saison" ? 0.75 : 0.55;
   return (goodForm || player.wantsTransfer) && rng() < chance;
 }
 
-function buildClubOfferEvent(player: Player, league: LeagueState, reason: ClubOfferReason): GameEvent {
+/** Baut die Liga-Pyramide eines fremden Landes lazy und cached sie danach dauerhaft -
+ * damit ein gezeigtes Auslandsangebot exakt dem entspricht, was man bei Annahme bekommt
+ * (kein erneutes Würfeln der Vereinsstärken zwischen Angebot und Zusage). */
+function getOrBuildForeignLeague(
+  foreignLeagues: Partial<Record<CountryId, LeagueState>>,
+  countryId: CountryId
+): LeagueState {
+  const cached = foreignLeagues[countryId];
+  if (cached) return cached;
+  const built = buildLeagueState(countryId, rng);
+  foreignLeagues[countryId] = built;
+  return built;
+}
+
+function pickForeignCountryIds(excludeId: CountryId, count: number): CountryId[] {
+  const pool = COUNTRIES.map((c) => c.id).filter((id) => id !== excludeId);
+  const picked: CountryId[] = [];
+  for (let i = 0; i < count && pool.length > 0; i++) {
+    const idx = Math.floor(rng() * pool.length);
+    picked.push(pool[idx]);
+    pool.splice(idx, 1);
+  }
+  return picked;
+}
+
+/** Wahrscheinlichkeit, dass unter den Angeboten mindestens ein Auslandsverein ist -
+ * steigt mit Bekanntheit/Gesamtstärke, und stark, wenn aktiv ein Wechsel gewünscht wird
+ * (der Berater erweitert dann bewusst den Suchradius über die Landesgrenze hinaus). */
+function internationalOfferChance(reason: ClubOfferReason, player: Player, overall: number): number {
+  const fameFactor = player.reputation / 250 + overall / 300; // ~0 .. 0.65
+  if (player.wantsTransfer) return clamp(0.55 + fameFactor, 0.45, 0.9);
+  if (reason === "pro-debut") return clamp(0.15 + fameFactor, 0.1, 0.5);
+  if (reason === "opportunity") return clamp(0.3 + fameFactor, 0.25, 0.75);
+  return clamp(0.15 + fameFactor, 0.1, 0.4);
+}
+
+interface OfferCandidate {
+  club: ClubState;
+  countryName: string;
+  flag: string;
+  leagueLabel: string;
+  isForeign: boolean;
+}
+
+function buildClubOfferEvent(
+  player: Player,
+  league: LeagueState,
+  reason: ClubOfferReason,
+  foreignLeagues: Partial<Record<CountryId, LeagueState>>
+): GameEvent {
   const overall = overallRating(player);
   const currentStrength = player.club.strength;
   const pool = [...league.tier1, ...league.tier2];
@@ -896,7 +954,7 @@ function buildClubOfferEvent(player: Player, league: LeagueState, reason: ClubOf
 
   let targetStrength: number;
   let excludeCurrent: boolean;
-  let count = 3;
+  const totalCount = 3;
   if (reason === "pro-debut") {
     targetStrength = targetStrengthForReputation(player.reputation, overall);
     excludeCurrent = false;
@@ -916,19 +974,52 @@ function buildClubOfferEvent(player: Player, league: LeagueState, reason: ClubOf
     excludeCurrent = true;
   }
 
-  const offers = pickDistinctClubOffers(
+  // Ein Teil der Angebote kann aus dem Ausland kommen - realistisch auch schon für
+  // Jungspieler beim Profidebüt, nicht erst für etablierte Stars.
+  const wantsForeign = rng() < internationalOfferChance(reason, player, overall);
+  const veryFamous = player.reputation >= 70 || overall >= 80;
+  const foreignCount = wantsForeign ? (veryFamous && rng() < 0.3 ? 2 : 1) : 0;
+  const domesticCount = totalCount - foreignCount;
+
+  const domesticOffers = pickDistinctClubOffers(
     pool,
     targetStrength,
     excludeCurrent ? [player.club.clubId] : [],
     rng,
-    count
+    domesticCount
   );
-  count = offers.length;
 
-  const choices: EventChoice[] = offers.map((c) => ({
-    id: `club-${c.id}`,
-    label: `Wechsel zu ${c.city}`,
-    detail: `${leagueNameForTier(league, c.tier)} · Vereinsstärke ${c.strength} · Rolle voraussichtlich ${squadRoleForOverall(overall, c.strength)}`,
+  const candidates: OfferCandidate[] = domesticOffers.map((c) => ({
+    club: c,
+    countryName: league.countryName,
+    flag: league.flag,
+    leagueLabel: leagueNameForTier(league, c.tier),
+    isForeign: false,
+  }));
+
+  if (foreignCount > 0) {
+    for (const countryId of pickForeignCountryIds(player.country, foreignCount)) {
+      const foreignLeague = getOrBuildForeignLeague(foreignLeagues, countryId);
+      const foreignPool = [...foreignLeague.tier1, ...foreignLeague.tier2];
+      const club = pickClubNearStrength(foreignPool, targetStrength, null, rng);
+      candidates.push({
+        club,
+        countryName: foreignLeague.countryName,
+        flag: foreignLeague.flag,
+        leagueLabel: leagueNameForTier(foreignLeague, club.tier),
+        isForeign: true,
+      });
+    }
+  }
+
+  const count = candidates.length;
+
+  const choices: EventChoice[] = candidates.map((cand) => ({
+    id: `club-${cand.club.id}`,
+    label: cand.isForeign
+      ? `Auslandswechsel zu ${cand.club.city} (${cand.flag} ${cand.countryName})`
+      : `Wechsel zu ${cand.club.city}`,
+    detail: `${cand.leagueLabel} · Vereinsstärke ${cand.club.strength} · Rolle voraussichtlich ${squadRoleForOverall(overall, cand.club.strength)}${cand.isForeign ? " · Auslandswechsel" : ""}`,
     effects: {},
   }));
 
@@ -962,12 +1053,14 @@ function buildClubOfferEvent(player: Player, league: LeagueState, reason: ClubOf
     ? `Nach ${lastStats.seasonLabel} (${lastStats.scoreTier}, Ø ${lastStats.avgRating}, ${lastStats.goals} Tore/${lastStats.assists} Vorlagen) `
     : "";
 
+  const foreignNote = foreignCount > 0 ? ` Darunter auch ${foreignCount === 1 ? "ein Angebot" : "Angebote"} aus dem Ausland.` : "";
+
   const description =
     reason === "pro-debut"
-      ? `Nach starken Jahren in der Jugend ist es Zeit für den Sprung in den Profifußball. Gleich ${count} Vereine bieten dir einen Profivertrag an.`
+      ? `Nach starken Jahren in der Jugend ist es Zeit für den Sprung in den Profifußball. Gleich ${count} Vereine bieten dir einen Profivertrag an.${foreignNote}`
       : reason === "opportunity"
-      ? `${lastSeasonRef}sind Scouts auf ${player.name} bei ${player.club.name} aufmerksam geworden. ${count} Vereine erkundigen sich nach dir.`
-      : `Bei ${player.club.name} kommst du kaum noch zum Einsatz (${player.consecutiveBenchSeasons} Saison(en) auf der Bank). Der Verein wäre offen für einen Wechsel - ${count} Vereine haben bereits angefragt.`;
+      ? `${lastSeasonRef}sind Scouts auf ${player.name} bei ${player.club.name} aufmerksam geworden. ${count} Vereine erkundigen sich nach dir.${foreignNote}`
+      : `Bei ${player.club.name} kommst du kaum noch zum Einsatz (${player.consecutiveBenchSeasons} Saison(en) auf der Bank). Der Verein wäre offen für einen Wechsel - ${count} Vereine haben bereits angefragt.${foreignNote}`;
 
   return {
     id: `cluboffer-${player.age}-${reason}-${Math.round(rng() * 1e6)}`,
@@ -1007,8 +1100,21 @@ export function insertAt<T>(arr: T[], item: T, index: number): T[] {
   return [...arr.slice(0, i), item, ...arr.slice(i)];
 }
 
+/** Ergebnis einer `club_offer`-Entscheidung - enthält zusätzlich die neue aktive
+ * Liga, falls der Wechsel ins Ausland führte (siehe `GameState.foreignLeagues`). */
+export interface ClubOfferResult {
+  feedback: ChoiceFeedback;
+  newActiveLeague?: LeagueState;
+}
+
 /** Löst eine Entscheidung innerhalb eines `club_offer`-Events auf (kein generisches EffectDelta). */
-export function applyClubOfferChoice(player: Player, league: LeagueState, event: GameEvent, choiceId: string): ChoiceFeedback {
+export function applyClubOfferChoice(
+  player: Player,
+  league: LeagueState,
+  event: GameEvent,
+  choiceId: string,
+  foreignLeagues: Partial<Record<CountryId, LeagueState>>
+): ClubOfferResult {
   const reason = event.templateId.slice(CLUB_OFFER_PREFIX.length) as ClubOfferReason;
 
   if (choiceId === "stay") {
@@ -1017,7 +1123,7 @@ export function applyClubOfferChoice(player: Player, league: LeagueState, event:
     player.wantsTransfer = false;
     const text = `${player.name} bleibt ${player.club.name} treu.`;
     player.log.push({ season: 0, age: player.age, text, kind: "positive" });
-    return { choiceId, text, kind: "positive", deltaLines: ["Vereinsbeziehung +10", "Moral +5"] };
+    return { feedback: { choiceId, text, kind: "positive", deltaLines: ["Vereinsbeziehung +10", "Moral +5"] } };
   }
 
   if (choiceId === "fight") {
@@ -1027,20 +1133,37 @@ export function applyClubOfferChoice(player: Player, league: LeagueState, event:
     player.wantsTransfer = false;
     const text = `${player.name} kämpft entschlossen um eine zweite Chance bei ${player.club.name}.`;
     player.log.push({ season: 0, age: player.age, text, kind: "positive" });
-    return { choiceId, text, kind: "positive", deltaLines: ["Vereinsbeziehung +15", "Moral +8", "Bankphasen-Druck sinkt"] };
+    return {
+      feedback: { choiceId, text, kind: "positive", deltaLines: ["Vereinsbeziehung +15", "Moral +8", "Bankphasen-Druck sinkt"] },
+    };
   }
 
   const clubId = choiceId.replace(/^club-/, "");
-  const chosen = findClub(league, clubId);
+  // Erst in der Heimatliga suchen; steckt der Verein in keiner gecachten Auslandsliga,
+  // ist es ein Auslandswechsel - die Ziel-Liga wird dann zur neuen aktiven Liga.
+  let targetLeague = league;
+  let chosen = findClub(league, clubId);
+  let movingCountryId: CountryId | null = null;
+  if (!chosen) {
+    const prefix = clubId.split("-")[0] as CountryId;
+    const foreignLeague = foreignLeagues[prefix];
+    if (foreignLeague) {
+      chosen = findClub(foreignLeague, clubId);
+      if (chosen) {
+        targetLeague = foreignLeague;
+        movingCountryId = prefix;
+      }
+    }
+  }
   if (!chosen) {
     const text = `${player.name} bleibt vorerst bei ${player.club.name}.`;
-    return { choiceId, text, kind: "info", deltaLines: [] };
+    return { feedback: { choiceId, text, kind: "info", deltaLines: [] } };
   }
 
   const overall = overallRating(player);
   const oldName = player.club.name;
   const oldStrength = player.club.strength;
-  player.club = { clubId: chosen.id, name: chosen.city, country: league.countryName, tier: chosen.tier, strength: chosen.strength };
+  player.club = { clubId: chosen.id, name: chosen.city, country: targetLeague.countryName, tier: chosen.tier, strength: chosen.strength };
   const wage = Math.round((15000 + player.reputation * 1500) * (1 + (chosen.tier === 1 ? 0.5 : 0)));
   const newRole = squadRoleForOverall(overall, chosen.strength);
   player.contract = { club: chosen.city, yearsLeft: 3, wagePerYear: wage, squadRole: newRole };
@@ -1049,16 +1172,30 @@ export function applyClubOfferChoice(player: Player, league: LeagueState, event:
   player.consecutiveBenchSeasons = 0;
   if (reason !== "pro-debut") player.clubChangesCount += 1;
 
-  const leagueLabel = leagueNameForTier(league, chosen.tier);
+  // Auslandswechsel: die bisherige Heimatliga wandert (mit ihrem aktuellen Stand)
+  // in den Cache, die Zielliga wird die neue aktive Liga - und bleibt es, bis der
+  // Spieler erneut ins Ausland wechselt.
+  let newActiveLeague: LeagueState | undefined;
+  if (movingCountryId) {
+    foreignLeagues[player.country] = league;
+    delete foreignLeagues[movingCountryId];
+    player.country = movingCountryId;
+    newActiveLeague = targetLeague;
+  }
+
+  const leagueLabel = leagueNameForTier(targetLeague, chosen.tier);
   const kind: LogEntry["kind"] = reason === "pro-debut" ? "milestone" : reason === "pressure" ? "negative" : "positive";
   const text =
     reason === "pro-debut"
       ? `${player.name} unterschreibt den ersten Profivertrag bei ${chosen.city} (${leagueLabel}).`
+      : movingCountryId
+      ? `${player.name} wagt den Auslandswechsel von ${oldName} zu ${chosen.city} (${targetLeague.flag} ${targetLeague.countryName}, ${leagueLabel}).`
       : `${player.name} wechselt von ${oldName} zu ${chosen.city} (${leagueLabel}).`;
   player.log.push({ season: 0, age: player.age, text, kind });
 
   const deltaLines = [
     `Neuer Verein: ${chosen.city}`,
+    `Land: ${targetLeague.flag} ${targetLeague.countryName}`,
     `Liga: ${leagueLabel}`,
     `Gehalt: ${formatMoney(wage)} / Jahr`,
     `Rolle im Kader: ${newRole}`,
@@ -1080,7 +1217,7 @@ export function applyClubOfferChoice(player: Player, league: LeagueState, event:
     deltaLines.push("Vereinsstärke niedriger, dafür bessere Aussichten auf Spielzeit");
   }
 
-  return { choiceId, text, kind, deltaLines };
+  return { feedback: { choiceId, text, kind, deltaLines }, newActiveLeague };
 }
 
 // ---------------------------------------------------------------------------

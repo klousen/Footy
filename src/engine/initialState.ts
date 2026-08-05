@@ -4,6 +4,7 @@ export function emptyState(): GameState {
   return {
     player: null,
     leagueState: null,
+    foreignLeagues: {},
     seasonNumber: 0,
     screen: "start",
     pendingEventIds: [],

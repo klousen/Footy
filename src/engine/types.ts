@@ -333,7 +333,16 @@ export interface Achievement {
 
 export interface GameState {
   player: Player | null;
+  /** Liga-Pyramide des Landes, in dem der Spieler aktuell unter Vertrag steht. */
   leagueState: LeagueState | null;
+  /**
+   * Gecachte Liga-Pyramiden anderer Länder - werden lazy beim ersten
+   * Auslands-Angebot gebaut und bleiben danach stabil (kein Neu-Würfeln der
+   * Vereinsstärken), damit ein gezeigtes Angebot exakt dem entspricht, was
+   * man bei Annahme auch bekommt. Wechselt der Spieler ins Ausland, wandert
+   * die bisherige Heimatliga hier hinein und die neue wird aktiv (`leagueState`).
+   */
+  foreignLeagues: Partial<Record<CountryId, LeagueState>>;
   seasonNumber: number; // 1 = erste Saison
   screen: Screen;
   /**

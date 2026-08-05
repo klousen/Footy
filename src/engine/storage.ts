@@ -22,6 +22,7 @@ export function loadGame(): GameState | null {
       state.player.trainingBoostSeasons ??= 0;
       state.player.unlockedAchievementIds ??= [];
     }
+    state.foreignLeagues ??= {};
     return state;
   } catch {
     return null;

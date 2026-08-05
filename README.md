@@ -23,15 +23,27 @@ im höheren Alter.
   Vereinswechsel läuft sichtbar über konkrete Angebote - beim Karrierestart
   bieten drei Vereine (schwach/mittel/stark gestaffelt) einen
   Jugendakademie-Platz an; beim Sprung in den Profifußball und bei späteren
-  Wechseln stehen jeweils drei echte Vereine mit Liga, Vereinsstärke und
-  voraussichtlicher Kaderrolle zur Auswahl.
+  Wechseln stehen jeweils drei echte Vereine mit Land, Liga, Vereinsstärke
+  und voraussichtlicher Kaderrolle zur Auswahl - jede Angebotskarte nennt
+  eindeutig, wo genau man spielen würde.
+- **Internationale Wechsel**: Angebote kommen nicht nur aus der Heimatliga -
+  schon beim Sprung in den Profifußball ist ein Auslandswechsel möglich, mit
+  wachsender Bekanntheit/Gesamtstärke werden Angebote aus dem Ausland
+  häufiger. Auslandsangebote sind klar als solche markiert (Flagge, Land,
+  "Auslandswechsel"), und die Ziel-Liga wird bei Zusage zur neuen aktiven
+  Liga - inklusive eigenem Auf-/Abstieg ab diesem Zeitpunkt. Andere Länder
+  werden dabei erst beim ersten Angebot "erzeugt" und bleiben danach stabil
+  (keine überraschenden Stärke-Sprünge zwischen Angebot und Zusage).
 - **Lebendige Wechselmechanik**: Schon eine solide Saison reicht, damit
   Scouts aufmerksam werden (bei starker/überragender Saison fast sicher);
   wer über längere Zeit kaum spielt, gerät in eine sichtbare Bankphase -
   kann sich aber per Entscheidung zurückkämpfen oder einen Neuanfang bei
   einem anderen Verein wagen. Rollenwechsel im Kader (Stammspieler ↔ Bank)
-  werden im Karriereverlauf klar vermerkt. Die Vereinsstärke der Angebote
-  folgt einer nachvollziehbaren Kurve, die sich direkt an der Saison-Bilanz
+  werden im Karriereverlauf klar vermerkt. Wer aktiv einen Wechsel sucht
+  (z. B. nach einem eskalierten Trainerkonflikt), bekommt schon in der
+  nächsten Saison mit sehr hoher Wahrscheinlichkeit ein Angebot - keine
+  wochenlange Hängepartie. Die Vereinsstärke der Angebote folgt außerdem
+  einer nachvollziehbaren Kurve, die sich direkt an der Saison-Bilanz
   orientiert (überragende Saison → deutlich stärkere Vereine als eine solide
   Saison), und der Einladungstext nennt konkret die Zahlen der vorherigen
   Saison, damit klar wird, warum sich gerade jetzt wer meldet.

@@ -104,11 +104,12 @@ export default function App() {
       return;
     }
     const [firstId, ...restIds] = ids;
-    const firstEvent = buildEventFromId(firstId, game.player, game.leagueState);
+    const firstEvent = buildEventFromId(firstId, game.player, game.leagueState, game.foreignLeagues);
     setGame({
       ...game,
       player: { ...game.player },
       leagueState: { ...game.leagueState },
+      foreignLeagues: { ...game.foreignLeagues },
       seasonNumber: nextSeasonNumber,
       pendingEventIds: restIds,
       currentEvent: firstEvent,
@@ -154,9 +155,15 @@ export default function App() {
     if (!game.player || !game.currentEvent || !game.leagueState) return;
     const player = game.player;
     const league = game.leagueState;
+    const foreignLeagues = game.foreignLeagues;
 
+    let newActiveLeague: GameState["leagueState"] = null;
     const feedback = isClubOfferEvent(game.currentEvent.templateId)
-      ? applyClubOfferChoice(player, league, game.currentEvent, choice.id)
+      ? (() => {
+          const result = applyClubOfferChoice(player, league, game.currentEvent!, choice.id, foreignLeagues);
+          if (result.newActiveLeague) newActiveLeague = result.newActiveLeague;
+          return result.feedback;
+        })()
       : (() => {
           // Gesamtstärke vorher/nachher vergleichen, damit der fußballerische Impact
           // einer Entscheidung sofort sichtbar wird (nicht nur einzelne Attribut-Punkte).
@@ -175,7 +182,13 @@ export default function App() {
           };
         })();
 
-    setGame({ ...game, player: { ...player }, leagueState: { ...league }, feedback });
+    setGame({
+      ...game,
+      player: { ...player },
+      leagueState: newActiveLeague ?? { ...league },
+      foreignLeagues: { ...foreignLeagues },
+      feedback,
+    });
   }
 
   // Schritt 2: "Weiter" im Feedback -> je nach Event-Art passend weiterleiten.
@@ -211,7 +224,7 @@ export default function App() {
 
     if (game.pendingEventIds.length > 0 && game.leagueState) {
       const [nextId, ...restIds] = game.pendingEventIds;
-      const nextEvent = buildEventFromId(nextId, player, game.leagueState);
+      const nextEvent = buildEventFromId(nextId, player, game.leagueState, game.foreignLeagues);
       setGame({ ...game, player: { ...player }, currentEvent: nextEvent, pendingEventIds: restIds, feedback: null });
     } else {
       finishSeasonEvents({ ...game, feedback: null });
