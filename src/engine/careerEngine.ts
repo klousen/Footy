@@ -115,6 +115,7 @@ export function createPlayer(
       age: 14,
       attributes: base,
       potential,
+      growthCarry: {},
       morale: 70,
       fitness: 90,
       reputation: 2,
@@ -667,39 +668,62 @@ function computeSeasonScore(input: {
 // Alterung / Attribut-Wachstum
 // ---------------------------------------------------------------------------
 
-function growthFactor(age: number): number {
-  if (age <= 17) return 2.0;
-  if (age <= 21) return 1.5;
-  if (age <= 24) return 0.9;
-  if (age <= 29) return 0.3;
-  if (age <= 32) return -0.35;
-  if (age <= 35) return -0.9;
-  return -1.6;
+/**
+ * Anteil der verbleibenden Lücke zum Potenzial, der in dieser Altersphase pro
+ * Saison realistisch aufgeholt wird (proportionales/logistisches Wachstum -
+ * nähert sich dem Potenzial an, erreicht es aber nie ganz exakt, ganz wie im
+ * echten Fußball). Ersetzt das alte feste Delta-Modell, bei dem die kleinen
+ * Faktoren der Prime-Jahre (22-29) durch Rundung auf ganze Zahlen praktisch
+ * immer zu 0 wurden - Spieler stagnierten dadurch unabhängig vom Potenzial
+ * meist um die 45-50 Gesamtstärke und Weltklasse-Niveau war faktisch
+ * unerreichbar. Der fraktionale Carry-Over unten verhindert dasselbe Problem.
+ */
+function growthRate(age: number): number {
+  if (age <= 17) return 0.24;
+  if (age <= 21) return 0.17;
+  if (age <= 24) return 0.11;
+  if (age <= 29) return 0.055;
+  return 0;
+}
+
+/** Anteil des aktuellen Werts, der pro Saison im Alter abgebaut wird. */
+function declineRate(age: number): number {
+  if (age <= 29) return 0;
+  if (age <= 32) return 0.03;
+  if (age <= 35) return 0.06;
+  return 0.1;
 }
 
 export function ageUpPlayer(player: Player): void {
-  const factor = growthFactor(player.age);
+  const gRate = growthRate(player.age);
+  const dRate = declineRate(player.age);
   // Arbeitsmoral aus vergangenen Trainings-/Lifestyle-Entscheidungen beschleunigt
   // oder bremst das Wachstum spürbar (0.8x bei sehr niedriger, 1.2x bei sehr hoher
   // Arbeitsmoral) - der direkteste "Impact" vergangener Entscheidungen auf die Werte.
   const workEthicMultiplier = clamp(0.8 + (player.traits.arbeitsmoral / 100) * 0.4, 0.8, 1.2);
-  // Ein kürzlicher Wechsel zu einem deutlich stärkeren Verein bringt ein besseres
-  // Trainingsumfeld mit - das beschleunigt das Wachstum für einige Saisons spürbar.
+  // Ein kürzlicher Wechsel zu einem deutlich stärkeren Verein/einer stärkeren Liga
+  // bringt ein besseres Trainingsumfeld mit - das beschleunigt das Wachstum für
+  // einige Saisons spürbar.
   const trainingEnvironmentMultiplier = player.trainingBoostSeasons > 0 ? 1.35 : 1;
   for (const key of ATTRIBUTE_KEYS) {
     const current = player.attributes[key];
     const potential = player.potential[key];
-    let delta: number;
-    if (factor > 0) {
+    let rawDelta: number;
+    if (gRate > 0) {
       const room = potential - current;
-      delta = Math.round(
-        factor * workEthicMultiplier * trainingEnvironmentMultiplier * (0.5 + rng() * 0.6) * clamp(room / 12, 0.15, 1.6)
-      );
-      delta = Math.max(0, delta);
+      rawDelta = gRate * room * workEthicMultiplier * trainingEnvironmentMultiplier * (0.7 + rng() * 0.6);
+      rawDelta = Math.max(0, rawDelta);
+    } else if (dRate > 0) {
+      rawDelta = -dRate * current * (0.7 + rng() * 0.6);
     } else {
-      delta = Math.round(factor * (0.5 + rng() * 0.6));
+      rawDelta = 0;
     }
-    player.attributes[key] = clamp(current + delta, 1, 99);
+    // Fraktionaler Rest wird in die nächste Saison mitgenommen, statt bei der
+    // Rundung auf ganze Punkte verloren zu gehen (siehe Kommentar oben).
+    const total = rawDelta + (player.growthCarry[key] ?? 0);
+    const whole = Math.trunc(total);
+    player.growthCarry[key] = total - whole;
+    player.attributes[key] = clamp(current + whole, 1, 99);
   }
 
   player.age += 1;
@@ -735,6 +759,14 @@ export function ageUpPlayer(player: Player): void {
  */
 function targetStrengthForReputation(reputation: number, overall: number): number {
   return clamp(20 + reputation * 0.25 + overall * 0.55, 30, 96);
+}
+
+/** Rang eines Landes nach UEFA-Länderkoeffizient (Reihenfolge der `COUNTRIES`-Liste) -
+ * 0 = höchstes Liga-Ansehen (England), 9 = niedrigstes (Polen). Dient als Proxy für
+ * "Aufstieg/Abstieg im Liga-Ranking" bei internationalen Wechseln. */
+function leaguePrestigeRank(countryId: CountryId): number {
+  const idx = COUNTRIES.findIndex((c) => c.id === countryId);
+  return idx === -1 ? COUNTRIES.length : idx;
 }
 
 function squadRoleForOverall(overall: number, clubStrength: number): SquadRole {
@@ -832,6 +864,7 @@ export function applyLeaguePromotionRelegation(player: Player, league: LeagueSta
   if (!wasRelegated && !wasPromoted) return null;
 
   player.club.tier = wasRelegated ? 2 : 1;
+  const personalFormGreat = !!lastStats && lastStats.avgRating >= 6.8;
   if (lastStats) {
     lastStats.relegated = wasRelegated;
     lastStats.promoted = wasPromoted;
@@ -845,15 +878,25 @@ export function applyLeaguePromotionRelegation(player: Player, league: LeagueSta
     else lastStats.scoreTier = "Durchwachsene Saison";
   }
 
+  // Auf-/Abstieg bleibt nicht folgenlos für den Spieler selbst - beim Abstieg
+  // gedämpft, wenn die eigene Leistung trotzdem stark war (kein Vorwurf an den
+  // Einzelnen), beim Aufstieg ein echter Teamerfolgs-Bonus.
+  if (wasRelegated) {
+    player.morale = clamp(player.morale - (personalFormGreat ? 4 : 9), 0, 100);
+    if (!personalFormGreat) player.reputation = clamp(player.reputation - 3, 0, 100);
+  } else {
+    player.morale = clamp(player.morale + 8, 0, 100);
+    player.reputation = clamp(player.reputation + 5, 0, 100);
+  }
+
   const leagueName = leagueNameForTier(league, player.club.tier);
-  return {
-    season: 0,
-    age: player.age,
-    text: wasRelegated
-      ? `${player.club.name} steigt ab und spielt künftig in der ${leagueName}.`
-      : `${player.club.name} steigt auf und spielt künftig in der ${leagueName}.`,
-    kind: wasRelegated ? "negative" : "positive",
-  };
+  const text = wasRelegated
+    ? personalFormGreat
+      ? `${player.club.name} steigt trotz einer starken Saison von ${player.name} ab und spielt künftig in der ${leagueName}.`
+      : `${player.club.name} steigt ab und spielt künftig in der ${leagueName}.`
+    : `${player.club.name} steigt auf und spielt künftig in der ${leagueName} - ${player.name} hat maßgeblich dazu beigetragen.`;
+
+  return { season: 0, age: player.age, text, kind: wasRelegated ? "negative" : "positive" };
 }
 
 // ---------------------------------------------------------------------------
@@ -884,17 +927,22 @@ export function shouldTriggerTransferPressure(player: Player): boolean {
 
 export function shouldTriggerTransferOpportunity(player: Player): boolean {
   if (player.stage === "jugend") return false;
-  // Aktiv geäußertes Wechselinteresse hat spürbaren, schnellen Impact: keine
-  // Wartezeit mehr und eine fast sichere Trefferchance - statt erst 1-2 Saisons
-  // auf ein Angebot zu warten, obwohl man klar signalisiert hat, wechseln zu wollen.
-  const cooldown = player.wantsTransfer ? 0 : 2;
-  if (player.seasonsSinceTransferEvent < cooldown) return false;
   const last = player.seasonHistory[player.seasonHistory.length - 1];
   // Solide Saison reicht schon aus, um Scouts auf sich aufmerksam zu machen - nicht
   // erst eine Ausnahmesaison. Eine "Starke"/"Überragende" Saison macht es fast sicher.
   const goodForm = last ? last.avgRating >= 6.3 || last.scoreTier === "Starke Saison" || last.scoreTier === "Überragende Saison" : false;
-  const chance = player.wantsTransfer ? 0.92 : last?.scoreTier === "Überragende Saison" ? 0.75 : 0.55;
-  return (goodForm || player.wantsTransfer) && rng() < chance;
+  // Auf-/Abstieg mit guter eigener Leistung zieht zusätzliche Aufmerksamkeit auf sich:
+  // beim Abstieg ein Rettungsanker weg vom sinkenden Schiff, beim Aufstieg der Lohn
+  // für den bewiesenen Beitrag - beides wirkt wie aktiv geäußertes Wechselinteresse.
+  const notableSeasonEvent = !!last && (last.relegated || last.promoted) && goodForm;
+  const urgent = player.wantsTransfer || notableSeasonEvent;
+  // Aktiv geäußertes Wechselinteresse (oder ein bemerkenswerter Auf-/Abstieg) hat
+  // spürbaren, schnellen Impact: keine Wartezeit mehr und eine fast sichere
+  // Trefferchance - statt erst 1-2 Saisons auf ein Angebot zu warten.
+  const cooldown = urgent ? 0 : 2;
+  if (player.seasonsSinceTransferEvent < cooldown) return false;
+  const chance = urgent ? 0.92 : last?.scoreTier === "Überragende Saison" ? 0.75 : 0.55;
+  return (goodForm || urgent) && rng() < chance;
 }
 
 /** Baut die Liga-Pyramide eines fremden Landes lazy und cached sie danach dauerhaft -
@@ -1039,9 +1087,16 @@ function buildClubOfferEvent(
     });
   }
 
+  const relegatedEscape = reason === "opportunity" && lastStats?.relegated;
+  const promotedReward = reason === "opportunity" && lastStats?.promoted;
+
   const title =
     reason === "pro-debut"
       ? "Dein erster Profivertrag"
+      : relegatedEscape
+      ? "Rettungsanker vom sinkenden Schiff"
+      : promotedReward
+      ? "Der Aufstieg zahlt sich aus"
       : reason === "opportunity"
       ? "Interesse von anderen Vereinen"
       : "Unruhige Zeiten auf der Bank";
@@ -1058,6 +1113,10 @@ function buildClubOfferEvent(
   const description =
     reason === "pro-debut"
       ? `Nach starken Jahren in der Jugend ist es Zeit für den Sprung in den Profifußball. Gleich ${count} Vereine bieten dir einen Profivertrag an.${foreignNote}`
+      : relegatedEscape
+      ? `Trotz des Abstiegs mit ${player.club.name} bleibt deine starke individuelle Leistung nicht unbemerkt - ${count} Vereine wollen dich vom sinkenden Schiff holen.${foreignNote}`
+      : promotedReward
+      ? `Dein starker Anteil am Aufstieg mit ${player.club.name} beweist deine Extraklasse - jetzt werden auch größere Vereine auf dich aufmerksam. ${count} Vereine erkundigen sich.${foreignNote}`
       : reason === "opportunity"
       ? `${lastSeasonRef}sind Scouts auf ${player.name} bei ${player.club.name} aufmerksam geworden. ${count} Vereine erkundigen sich nach dir.${foreignNote}`
       : `Bei ${player.club.name} kommst du kaum noch zum Einsatz (${player.consecutiveBenchSeasons} Saison(en) auf der Bank). Der Verein wäre offen für einen Wechsel - ${count} Vereine haben bereits angefragt.${foreignNote}`;
@@ -1139,6 +1198,7 @@ export function applyClubOfferChoice(
   }
 
   const clubId = choiceId.replace(/^club-/, "");
+  const oldCountryId = player.country;
   // Erst in der Heimatliga suchen; steckt der Verein in keiner gecachten Auslandsliga,
   // ist es ein Auslandswechsel - die Ziel-Liga wird dann zur neuen aktiven Liga.
   let targetLeague = league;
@@ -1164,7 +1224,10 @@ export function applyClubOfferChoice(
   const oldName = player.club.name;
   const oldStrength = player.club.strength;
   player.club = { clubId: chosen.id, name: chosen.city, country: targetLeague.countryName, tier: chosen.tier, strength: chosen.strength };
-  const wage = Math.round((15000 + player.reputation * 1500) * (1 + (chosen.tier === 1 ? 0.5 : 0)));
+  // Das Gehalt richtet sich nicht nur nach Bekanntheit, sondern spürbar auch nach
+  // der Zahlkraft des Vereins (Vereinsstärke) - zwei Erstligisten unterschiedlicher
+  // Größe sollten nicht dasselbe zahlen.
+  const wage = Math.round((6000 + player.reputation * 900 + chosen.strength * 1400) * (1 + (chosen.tier === 1 ? 0.35 : 0)));
   const newRole = squadRoleForOverall(overall, chosen.strength);
   player.contract = { club: chosen.city, yearsLeft: 3, wagePerYear: wage, squadRole: newRole };
   player.clubRelation = 60;
@@ -1201,20 +1264,60 @@ export function applyClubOfferChoice(
     `Rolle im Kader: ${newRole}`,
   ];
 
-  // Ein Wechsel zu einem spürbar stärkeren Verein bringt sofort ein besseres
+  // Ein Wechsel zu einem spürbar stärkeren Verein UND/ODER einer angeseheneren Liga
+  // (UEFA-Koeffizient-Rang der COUNTRIES-Liste) bringt sofort ein besseres
   // Trainingsumfeld mit - nicht nur eine höhere Zahl auf dem Papier: kleiner
   // sofortiger Attributschub plus beschleunigtes Wachstum für die nächsten
   // Saisons (siehe `ageUpPlayer`).
   const strengthGap = chosen.strength - oldStrength;
-  if (strengthGap > 3) {
+  const prestigeGap = movingCountryId ? leaguePrestigeRank(oldCountryId) - leaguePrestigeRank(movingCountryId) : 0;
+  const upgradeSignal = strengthGap + prestigeGap * 5;
+  if (upgradeSignal > 3) {
     const bumpKeys = ATTRIBUTE_KEYS.filter(() => rng() < 0.5);
     for (const key of bumpKeys.length > 0 ? bumpKeys : [ATTRIBUTE_KEYS[0]]) {
       player.attributes[key] = clamp(player.attributes[key] + 1, 1, 99);
     }
-    player.trainingBoostSeasons = Math.max(player.trainingBoostSeasons, strengthGap > 15 ? 3 : 2);
-    deltaLines.push("Besseres Trainingsumfeld: Wachstum für die nächsten Saisons spürbar beschleunigt");
-  } else if (chosen.strength < oldStrength - 3) {
-    deltaLines.push("Vereinsstärke niedriger, dafür bessere Aussichten auf Spielzeit");
+    player.trainingBoostSeasons = Math.max(player.trainingBoostSeasons, upgradeSignal > 15 ? 3 : 2);
+    deltaLines.push(
+      prestigeGap > 0
+        ? "Besseres Trainingsumfeld in einer angeseheneren Liga: Wachstum für die nächsten Saisons spürbar beschleunigt"
+        : "Besseres Trainingsumfeld: Wachstum für die nächsten Saisons spürbar beschleunigt"
+    );
+  } else if (upgradeSignal < -3) {
+    deltaLines.push("Schwächerer Verein/Liga, dafür bessere Aussichten auf Spielzeit");
+  }
+
+  // Auslandswechsel-Risiko: Sprache, Kultur und ein neues Spielsystem sind nicht immer
+  // sofort ein Selbstläufer - mentalitätsstarke, intelligente und arbeitsame Spieler
+  // kommen im Schnitt schneller an, aber auch sie sind nicht komplett davor gefeit.
+  if (movingCountryId) {
+    const adaptability = (player.attributes.mentalitaet + player.attributes.intelligenz) / 2 + player.traits.arbeitsmoral * 0.2;
+    const thriveChance = clamp(0.2 + adaptability / 300, 0.15, 0.5);
+    const struggleChance = clamp(0.35 - adaptability / 400, 0.15, 0.4);
+    const roll = rng();
+    if (roll < thriveChance) {
+      player.morale = clamp(player.morale + 10, 0, 100);
+      player.reputation = clamp(player.reputation + 4, 0, 100);
+      deltaLines.push("🌍 Sofort angekommen: Der Start im neuen Land gelingt beeindruckend schnell");
+      player.log.push({ season: 0, age: player.age, text: `${player.name} kommt im neuen Land sofort blendend zurecht.`, kind: "positive" });
+    } else if (roll < thriveChance + struggleChance) {
+      player.morale = clamp(player.morale - 8, 0, 100);
+      player.fitness = clamp(player.fitness - 3, 0, 100);
+      player.clubRelation = clamp(player.clubRelation - 5, 0, 100);
+      deltaLines.push("🌍 Eingewöhnungsschwierigkeiten: Sprache, Kultur und Spielsystem sind erstmal ungewohnt");
+      player.log.push({ season: 0, age: player.age, text: `${player.name} kämpft im neuen Land zunächst mit der Eingewöhnung.`, kind: "negative" });
+    }
+
+    if (player.relationshipStatus !== "single") {
+      const partnerLabel = player.partnerName ?? "Der Partner";
+      if (rng() < 0.6) {
+        player.morale = clamp(player.morale + 3, 0, 100);
+        deltaLines.push(`${partnerLabel} zieht mit und gibt Rückhalt beim Neustart`);
+      } else {
+        player.morale = clamp(player.morale - 3, 0, 100);
+        deltaLines.push(`${partnerLabel} tut sich mit dem Umzug zunächst schwer`);
+      }
+    }
   }
 
   return { feedback: { choiceId, text, kind, deltaLines }, newActiveLeague };

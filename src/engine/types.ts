@@ -272,6 +272,9 @@ export interface Player {
   age: number;
   attributes: Attributes;
   potential: Attributes; // verborgene Obergrenze
+  /** Fraktionaler Wachstums-/Abbau-Rest je Attribut, der beim Runden auf ganze
+   * Punkte übrig bleibt und in die nächste Saison mitgenommen wird (siehe `ageUpPlayer`). */
+  growthCarry: Partial<Record<AttributeKey, number>>;
   morale: number; // 0-100
   fitness: number; // 0-100
   reputation: number; // 0-100 (Bekanntheit)

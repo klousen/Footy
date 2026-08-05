@@ -736,7 +736,7 @@ export const EVENT_TEMPLATES: EventTemplate[] = [
         {
           id: "verlaengern_geld",
           label: "Verlängern, Fokus auf hohes Gehalt",
-          effects: { wealth: 0, clubRelation: 2, wantsTransfer: false, logText: "hat den Vertrag mit Fokus auf ein hohes Gehalt verlängert.", logKind: "milestone" },
+          effects: { wageMultiplier: 1.3, clubRelation: 1, wantsTransfer: false, logText: "hat den Vertrag mit deutlich höherem Gehalt verlängert.", logKind: "milestone" },
         },
         {
           id: "verlaengern_rolle",

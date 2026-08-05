@@ -26,14 +26,21 @@ im höheren Alter.
   Wechseln stehen jeweils drei echte Vereine mit Land, Liga, Vereinsstärke
   und voraussichtlicher Kaderrolle zur Auswahl - jede Angebotskarte nennt
   eindeutig, wo genau man spielen würde.
-- **Internationale Wechsel**: Angebote kommen nicht nur aus der Heimatliga -
-  schon beim Sprung in den Profifußball ist ein Auslandswechsel möglich, mit
-  wachsender Bekanntheit/Gesamtstärke werden Angebote aus dem Ausland
-  häufiger. Auslandsangebote sind klar als solche markiert (Flagge, Land,
-  "Auslandswechsel"), und die Ziel-Liga wird bei Zusage zur neuen aktiven
-  Liga - inklusive eigenem Auf-/Abstieg ab diesem Zeitpunkt. Andere Länder
-  werden dabei erst beim ersten Angebot "erzeugt" und bleiben danach stabil
-  (keine überraschenden Stärke-Sprünge zwischen Angebot und Zusage).
+- **Internationale Wechsel mit echtem Risiko**: Angebote kommen nicht nur aus
+  der Heimatliga - schon beim Sprung in den Profifußball ist ein
+  Auslandswechsel möglich, mit wachsender Bekanntheit/Gesamtstärke werden
+  Angebote aus dem Ausland häufiger. Auslandsangebote sind klar als solche
+  markiert (Flagge, Land, "Auslandswechsel"), und die Ziel-Liga wird bei
+  Zusage zur neuen aktiven Liga - inklusive eigenem Auf-/Abstieg ab diesem
+  Zeitpunkt. Andere Länder werden dabei erst beim ersten Angebot "erzeugt"
+  und bleiben danach stabil (keine überraschenden Stärke-Sprünge zwischen
+  Angebot und Zusage). Ein Sprung in eine angesehenere Liga (nach
+  UEFA-Länderkoeffizient) verstärkt den Trainingsumfeld-Effekt zusätzlich.
+  Aber nicht jeder Auslandswechsel gelingt sofort: Sprache, Kultur und
+  Spielsystem können zu echten Eingewöhnungsschwierigkeiten führen (Moral-
+  und Formdämpfer), während mentalitätsstarke Spieler manchmal sofort
+  durchstarten - bei bestehender Partnerschaft entscheidet zusätzlich der
+  Umzug mit, ob der Partner Rückhalt gibt oder selbst zu kämpfen hat.
 - **Lebendige Wechselmechanik**: Schon eine solide Saison reicht, damit
   Scouts aufmerksam werden (bei starker/überragender Saison fast sicher);
   wer über längere Zeit kaum spielt, gerät in eine sichtbare Bankphase -
@@ -57,14 +64,26 @@ im höheren Alter.
   nur für Erstliga-Spieler (Liga-2 nur bei einer wirklich außergewöhnlichen
   Saison); gelungene Länderspiele wirken sich zusätzlich zu Bekanntheit und
   Caps auch auf Attribute und Führungsstärke aus - der Nationalmannschafts-
-  Impact bleibt also nicht mehr folgenlos. Die Chance auf eine echte
-  Top-Karriere ist außerdem höher als früher: eine steilere Wachstumskurve
-  in Jugend/Durchbruch und ein seltener "Wunderkind"-Bonus bei der
-  Potenzial-Vergabe sorgen dafür, dass Weltklasse-Niveau erreichbarer ist.
-- **Echtheitsgetreuer Auf- und Abstieg**: Am Ende jeder Saison wird die
-  komplette Tabelle von Liga 1 und Liga 2 simuliert - die schwächsten Vereine
-  aus Liga 1 steigen ab, die stärksten aus Liga 2 steigen auf (Anzahl je nach
-  Land). Betrifft es den eigenen Verein, zieht der Spieler automatisch mit.
+  Impact bleibt also nicht mehr folgenlos.
+- **Realistische Wachstumskurve zur Gesamtstärke**: Attribute nähern sich
+  über die Karriere hinweg dem individuellen Potenzial an (schnell in der
+  Jugend, spürbar auch noch in den Prime-Jahren, danach altersbedingter
+  Abbau) - ein durchschnittliches Talent pendelt sich als solider Profi ein,
+  ein gut gewürfeltes Potenzial mit konsequenten Entscheidungen kann
+  tatsächlich Weltklasse-Niveau (80+) erreichen, der seltene
+  "Wunderkind"-Bonus bei der Potenzial-Vergabe sogar Ikonen-Niveau (90+).
+  Die Gesamtstärke wird dabei FUT-artig in Stufen eingeordnet (Amateur bis
+  Ikone, siehe Dashboard-Badge) - Top-Bewertungen bleiben bewusst selten und
+  müssen sich über die Karriere erarbeitet werden.
+- **Echtheitsgetreuer Auf- und Abstieg mit echtem Impact**: Am Ende jeder
+  Saison wird die komplette Tabelle von Liga 1 und Liga 2 simuliert - die
+  schwächsten Vereine aus Liga 1 steigen ab, die stärksten aus Liga 2 steigen
+  auf (Anzahl je nach Land). Betrifft es den eigenen Verein, zieht der
+  Spieler automatisch mit - inklusive spürbarer Konsequenzen: Aufstieg gibt
+  einen Moral-/Bekanntheitsschub, und wer dabei eine starke individuelle
+  Saison zeigt, wird für größere Vereine interessant. Steigt der Verein trotz
+  starker eigener Leistung ab, bleibt das nicht unbemerkt - Vereine bieten
+  dann gezielt einen "Rettungsanker" weg vom sinkenden Schiff an.
 - **Sofortiges Feedback**: Jede Entscheidung zeigt direkt im Anschluss, was
   sie bewirkt hat - Ergebnistext, die Gesamtstärke vorher/nachher (der
   direkte fußballerische Impact) sowie alle Attribut-, Charakter- und
@@ -90,7 +109,11 @@ im höheren Alter.
   Legacy-Score und Achievements ein.
 - **Gehaltssystem**: Der Vertrag zahlt jede Saison ein Grundgehalt plus
   Leistungsboni (Tore, Vorlagen, starke Bewertungen, Titel) aufs Vermögen
-  ein. Gehaltsverhandlungen (hart pokern, moderat nachfragen oder auf dem
+  ein. Das Grundgehalt bei einem Vereinswechsel richtet sich spürbar sowohl
+  nach der eigenen Bekanntheit als auch nach der Zahlkraft/Stärke des neuen
+  Vereins - zwei Erstligisten unterschiedlicher Größe zahlen entsprechend
+  unterschiedlich. Gehaltsverhandlungen (hart pokern, moderat nachfragen,
+  Vertragsverlängerung mit Fokus auf hohes Gehalt oder auf dem
   Beziehungskonto verzichten), Vereinswechsel und Aufstiege wirken sich
   direkt auf die Höhe aus.
 - **Mehrfaktorielles Scoring**: Am Saisonende gibt es eine Saison-Bilanz
