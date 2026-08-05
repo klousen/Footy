@@ -1508,9 +1508,9 @@ export const EVENT_TEMPLATES: EventTemplate[] = [
   {
     id: "standardtraining",
     category: "training",
-    minAge: 15,
-    maxAge: 36,
-    weight: 2,
+    minAge: 17,
+    maxAge: 34,
+    weight: 1.4,
     build: (_p, ctx) => ({
       category: "training",
       title: "Standardsituationen üben",
@@ -1841,9 +1841,9 @@ export const EVENT_TEMPLATES: EventTemplate[] = [
   {
     id: "videostudium",
     category: "training",
-    minAge: 17,
-    maxAge: 38,
-    weight: 2,
+    minAge: 20,
+    maxAge: 36,
+    weight: 1.3,
     build: (_p, ctx) => ({
       category: "training",
       title: "Videostudium mit dem Analysten",
@@ -1866,8 +1866,8 @@ export const EVENT_TEMPLATES: EventTemplate[] = [
     id: "krafttraining",
     category: "training",
     minAge: 16,
-    maxAge: 36,
-    weight: 2,
+    maxAge: 30,
+    weight: 1.5,
     build: (_p, ctx) => ({
       category: "training",
       title: "Zusatztraining im Kraftraum",
@@ -3053,6 +3053,275 @@ export const EVENT_TEMPLATES: EventTemplate[] = [
         ],
       };
     },
+  },
+
+  // ---------------------------------------------------------------------
+  // WEITERE FUSSBALL-REALISTISCHE EREIGNISSE - für mehr Varianz jenseits des
+  // Trainingsalltags: Themen, die im echten Profifußball (Transfermarkt/
+  // Presse/Spielerberater-Diskurs) immer wieder eine Rolle spielen.
+  // ---------------------------------------------------------------------
+  {
+    id: "medien_transfergeruecht",
+    category: "medien",
+    minAge: 19,
+    maxAge: 36,
+    weight: 1.2,
+    condition: (p) => p.reputation > 30,
+    build: (p) => ({
+      category: "medien",
+      title: "Zeitungsente über einen Wechsel",
+      description: `Eine Boulevardzeitung berichtet über einen angeblich fixen Wechsel weg von ${club(p)} - ohne dass ein Verein je Kontakt aufgenommen hätte.`,
+      choices: [
+        {
+          id: "dementieren",
+          label: "Klar dementieren",
+          effects: { clubRelation: 4, traitDeltas: { medienimage: 1 }, logText: "hat das Wechselgerücht öffentlich klar dementiert.", logKind: "info" },
+        },
+        {
+          id: "offenlassen",
+          label: "Bewusst nichts dementieren",
+          effects: { reputation: 3, clubRelation: -4, wantsTransfer: true, logText: "hat das Wechselgerücht bewusst unkommentiert stehen lassen - das Verhältnis zum Verein kühlt ab.", logKind: "negative" },
+        },
+      ],
+    }),
+  },
+  {
+    id: "medien_zitat_verdreht",
+    category: "medien",
+    minAge: 18,
+    maxAge: 38,
+    weight: 1,
+    build: (p) => ({
+      category: "medien",
+      title: "Ein Zitat sorgt für Wirbel",
+      description: `Ein aus dem Zusammenhang gerissenes Zitat von dir nach dem Spiel bei ${club(p)} verbreitet sich rasant in den sozialen Medien.`,
+      choices: [
+        {
+          id: "klarstellen",
+          label: "Öffentlich klarstellen",
+          effects: { attributes: { charisma: 1 }, traitDeltas: { medienimage: 2 }, logText: "hat das verdrehte Zitat öffentlich klargestellt und Souveränität gezeigt.", logKind: "positive" },
+        },
+        {
+          id: "ignorieren",
+          label: "Die Sache aussitzen",
+          effects: { morale: -2, traitDeltas: { medienimage: -1 }, logText: "hat den Wirbel um das verdrehte Zitat einfach ausgesessen.", logKind: "info" },
+        },
+      ],
+    }),
+  },
+  {
+    id: "vertrag_beraterwechsel",
+    category: "vertrag",
+    minAge: 20,
+    maxAge: 36,
+    weight: 1,
+    condition: (p) => p.reputation > 35,
+    build: (_p) => ({
+      category: "vertrag",
+      title: "Ein neuer Berater klopft an",
+      description: `Eine bekannte Spielerberater-Agentur wirbt aktiv um dich und verspricht bessere Konditionen als dein aktueller Berater.`,
+      choices: [
+        {
+          id: "wechseln",
+          label: "Berater wechseln",
+          effects: { wageMultiplier: 1.08, wealth: -8000, clubRelation: -2, logText: "hat den Berater gewechselt - erste Verhandlungserfolge lassen nicht lange auf sich warten.", logKind: "positive" },
+        },
+        {
+          id: "treu",
+          label: "Dem bisherigen Berater die Treue halten",
+          effects: { traitDeltas: { disziplin: 1 }, clubRelation: 1, logText: "ist dem bisherigen Berater treu geblieben.", logKind: "info" },
+        },
+      ],
+    }),
+  },
+  {
+    id: "vertrag_bosman_poker",
+    category: "vertrag",
+    minAge: 25,
+    maxAge: 36,
+    weight: 1.3,
+    condition: (p) => p.contract.yearsLeft <= 1 && p.reputation > 30,
+    build: (p) => ({
+      category: "vertrag",
+      title: "Vertrag läuft aus - Bosman-Poker",
+      description: `Dein Vertrag bei ${club(p)} läuft in einem Jahr aus. Ablösefrei wärst du für Top-Vereine hochinteressant - der Verein drängt aber auf eine schnelle Verlängerung.`,
+      choices: [
+        {
+          id: "pokern",
+          label: "Bis zum letzten Moment pokern",
+          effects: { clubRelation: -10, reputation: 4, wantsTransfer: true, logText: "lässt den Vertrag bewusst auslaufen und pokert auf einen ablösefreien Wechsel.", logKind: "negative" },
+        },
+        {
+          id: "verlaengern",
+          label: "Frühzeitig verlängern",
+          effects: { clubRelation: 10, morale: 4, logText: "hat sich früh auf eine Vertragsverlängerung eingelassen - Sicherheit vor Poker.", logKind: "positive" },
+        },
+      ],
+    }),
+  },
+  {
+    id: "verletzung_doppelbelastung",
+    category: "verletzung",
+    minAge: 20,
+    maxAge: 33,
+    weight: 1.3,
+    condition: (p) => p.nationalTeamCaps > 0,
+    build: (p) => ({
+      category: "verletzung",
+      title: "Doppelbelastung: Verein gegen Nationalmannschaft",
+      description: `Enge Terminplanung zwischen ${club(p)} und der Nationalmannschaft lässt kaum Erholungszeit - Vereinstrainer und Nationaltrainer ziehen dich in unterschiedliche Richtungen.`,
+      choices: [
+        {
+          id: "durchziehen",
+          label: "Beide Seiten bedienen und durchziehen",
+          effects: {},
+          followUpChance: {
+            chance: 0.55,
+            success: { attributes: { mentalitaet: 1 }, reputation: 3, capsDelta: 1, logText: "hat die Doppelbelastung erstaunlich gut weggesteckt.", logKind: "positive" },
+            failure: { injuryWeeksOut: 4, injuryLabel: "Überlastungsschaden", morale: -4, logText: "ist an der Doppelbelastung zwischen Verein und Nationalmannschaft körperlich zerbrochen.", logKind: "negative" },
+          },
+        },
+        {
+          id: "pause_einfordern",
+          label: "Eine Pause beim Nationaltrainer einfordern",
+          effects: { fitness: 6, clubRelation: 3, reputation: -2, logText: "hat beim Nationaltrainer eine Pause eingefordert - der Klub ist erleichtert.", logKind: "info" },
+        },
+      ],
+    }),
+  },
+  {
+    id: "verletzung_reserve_restart",
+    category: "verletzung",
+    minAge: 18,
+    maxAge: 34,
+    weight: 1,
+    condition: (p) => p.totalInjuryWeeks >= 10,
+    build: (p) => ({
+      category: "verletzung",
+      title: "Neustart in der zweiten Mannschaft",
+      description: `Nach der langen Verletzungspause soll ein Kurzeinsatz in der zweiten Mannschaft von ${club(p)} den Formaufbau beschleunigen.`,
+      choices: [
+        {
+          id: "durchbeissen",
+          label: "Sich durch mehrere Spiele durchbeißen",
+          effects: { fitness: 6, morale: 4, attributes: { mentalitaet: 1 }, logText: "hat sich über mehrere Reservespiele zurück in Form gekämpft.", logKind: "positive" },
+        },
+        {
+          id: "geduld",
+          label: "Auf schrittweisen Formaufbau bestehen",
+          effects: { fitness: 3, clubRelation: 2, logText: "hat auf einen behutsamen, schrittweisen Formaufbau bestanden.", logKind: "info" },
+        },
+      ],
+    }),
+  },
+  {
+    id: "lifestyle_legendenspiel",
+    category: "lifestyle",
+    minAge: 29,
+    maxAge: 40,
+    weight: 1,
+    condition: (p) => p.reputation > 40,
+    build: (_p) => ({
+      category: "lifestyle",
+      title: "Einladung zum Legenden-Wohltätigkeitsspiel",
+      description: "Ein Verband lädt zu einem prestigeträchtigen Wohltätigkeits-Freundschaftsspiel mit früheren und aktuellen Stars ein.",
+      choices: [
+        {
+          id: "mitmachen",
+          label: "Teilnehmen",
+          effects: {},
+          followUpChance: {
+            chance: 0.8,
+            success: { reputation: 5, attributes: { charisma: 1 }, traitDeltas: { medienimage: 2 }, logText: "hat beim Legenden-Wohltätigkeitsspiel einen bleibenden Eindruck hinterlassen.", logKind: "positive" },
+            failure: { injuryWeeksOut: 2, injuryLabel: "Zerrung im Showspiel", morale: -2, logText: "hat sich ausgerechnet im lockeren Wohltätigkeitsspiel eine Zerrung zugezogen.", logKind: "negative" },
+          },
+        },
+        {
+          id: "absagen",
+          label: "Aus Vorsicht absagen",
+          effects: { fitness: 2, logText: "hat die Einladung zum Legenden-Wohltätigkeitsspiel aus Vorsicht abgesagt.", logKind: "info" },
+        },
+      ],
+    }),
+  },
+  {
+    id: "lifestyle_dopingkontrolle",
+    category: "lifestyle",
+    minAge: 18,
+    maxAge: 40,
+    weight: 1,
+    build: (_p) => ({
+      category: "lifestyle",
+      title: "Routine-Dopingkontrolle",
+      description: `Nach dem Spiel wirst du wie üblich zufällig für eine Dopingkontrolle ausgewählt - reine Routine, aber die Prozedur zieht sich.`,
+      choices: [
+        {
+          id: "gelassen",
+          label: "Gelassen bleiben",
+          effects: { attributes: { mentalitaet: 1 }, logText: "hat die Dopingkontrolle gelassen über sich ergehen lassen.", logKind: "info" },
+        },
+        {
+          id: "genervt",
+          label: "Sichtlich genervt reagieren",
+          effects: { morale: -1, traitDeltas: { medienimage: -1 }, logText: "hat bei der Dopingkontrolle sichtlich genervt reagiert - ein Reporter hat es mitbekommen.", logKind: "negative" },
+        },
+      ],
+    }),
+  },
+  {
+    id: "meilenstein_kapitaensfrage",
+    category: "meilenstein",
+    minAge: 24,
+    maxAge: 37,
+    weight: 1,
+    condition: (p) => p.clubRelation > 45 && (p.traits.fuehrung > 45 || p.contract.squadRole === "Stammspieler"),
+    build: (p) => ({
+      category: "meilenstein",
+      title: "Wer trägt die Kapitänsbinde?",
+      description: `Bei ${club(p)} wird nach dem Abschied des bisherigen Kapitäns offen über die Nachfolge diskutiert - auch dein Name fällt.`,
+      choices: [
+        {
+          id: "bewerben",
+          label: "Sich offen um die Binde bewerben",
+          effects: {},
+          followUpChance: {
+            chance: 0.5,
+            success: { clubRelation: 8, reputation: 5, traitDeltas: { fuehrung: 3 }, logText: "wird zum neuen Kapitän ernannt - eine große Anerkennung.", logKind: "milestone" },
+            failure: { morale: -3, traitDeltas: { fuehrung: 1 }, logText: "geht bei der Kapitänswahl leer aus, bleibt aber eine wichtige Stimme in der Kabine.", logKind: "info" },
+          },
+        },
+        {
+          id: "unterstuetzen",
+          label: "Einen Teamkollegen unterstützen",
+          effects: { clubRelation: 5, traitDeltas: { fuehrung: 1 }, logText: "hat einen Teamkollegen für die Kapitänsbinde unterstützt statt selbst anzutreten.", logKind: "positive" },
+        },
+      ],
+    }),
+  },
+  {
+    id: "meilenstein_eigene_akademie",
+    category: "meilenstein",
+    minAge: 30,
+    maxAge: 40,
+    weight: 1,
+    condition: (p) => p.wealth > 400000,
+    build: () => ({
+      category: "meilenstein",
+      title: "Die eigene Fußballschule",
+      description: "Ein früherer Jugendtrainer schlägt vor, gemeinsam eine eigene Fußballschule für Nachwuchstalente zu gründen.",
+      choices: [
+        {
+          id: "investieren",
+          label: "Investieren und gründen",
+          effects: { wealth: -150000, reputation: 6, attributes: { charisma: 1 }, traitDeltas: { medienimage: 2 }, educationPoints: 6, logText: "hat in die Gründung einer eigenen Fußballschule für Nachwuchstalente investiert.", logKind: "positive" },
+        },
+        {
+          id: "verschieben",
+          label: "Auf die Zeit nach der Karriere verschieben",
+          effects: { logText: "verschiebt die Idee einer eigenen Fußballschule auf die Zeit nach der Karriere.", logKind: "info" },
+        },
+      ],
+    }),
   },
 ];
 

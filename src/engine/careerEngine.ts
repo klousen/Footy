@@ -22,7 +22,7 @@ import type {
 import { POSITION_WEIGHTS } from "./types";
 import { clamp } from "./data";
 import { ATTRIBUTE_LABEL, ATTRIBUTE_ORDER, formatMoney, RELATIONSHIP_LABEL, SQUAD_ROLE_RANK, TRAIT_LABEL, TRAIT_ORDER } from "./labels";
-import { eligibleTemplates, getTemplateById } from "./events";
+import { eligibleTemplates, getTemplateById, EVENT_TEMPLATES } from "./events";
 import { COUNTRIES, type CountryId } from "./leagues";
 import {
   buildLeagueState,
@@ -203,9 +203,9 @@ function stageForAge(age: number): CareerStage {
 // ---------------------------------------------------------------------------
 
 /** Wie viele Saisons ein Template nach dem harten Sperrfenster noch "nachklingt" (reduziertes Gewicht). */
-const TEMPLATE_COOLDOWN_SEASONS = 4;
+const TEMPLATE_COOLDOWN_SEASONS = 5;
 /** Hartes Sperrfenster: ein Template kann frühestens nach so vielen Saisons erneut gezogen werden. */
-const TEMPLATE_HARD_MIN_GAP = 2;
+const TEMPLATE_HARD_MIN_GAP = 3;
 
 /**
  * Wählt aus, WELCHE Templates diese Saison an die Reihe kommen - baut aber
@@ -245,6 +245,20 @@ export function pickSeasonTemplateIds(
   const pool = cooledDown.length >= targetCount ? cooledDown : fullPool;
   const localPool = [...pool];
 
+  // Auch über Saisongrenzen hinweg soll sich eine ganze Kategorie (z.B. "training")
+  // nicht jede einzelne Saison wiederholen, selbst wenn es jeweils ein anderes
+  // Template derselben Kategorie ist - das fühlt sich sonst trotzdem repetitiv an.
+  // Ermittelt sich rein aus den vorhandenen Zugdaten, ohne zusätzlichen State: die
+  // zuletzt gezogene Saison je Kategorie ist das Maximum über alle Templates
+  // dieser Kategorie in `recentTemplateSeasons`.
+  const lastCategorySeason = new Map<string, number>();
+  for (const t of EVENT_TEMPLATES) {
+    const last = recentTemplateSeasons[t.id];
+    if (last === undefined) continue;
+    const prev = lastCategorySeason.get(t.category);
+    if (prev === undefined || last > prev) lastCategorySeason.set(t.category, last);
+  }
+
   for (let i = 0; i < targetCount && localPool.length > 0; i++) {
     const weights = localPool.map((t) => {
       // Kategorie-Wiederholungen innerhalb derselben Saison abschwächen
@@ -254,7 +268,12 @@ export function pickSeasonTemplateIds(
       const lastSeason = recentTemplateSeasons[t.id];
       const recencyFactor =
         lastSeason === undefined ? 1 : clamp((seasonNumber - lastSeason) / TEMPLATE_COOLDOWN_SEASONS, 0.05, 1);
-      return t.weight * categoryFactor * recencyFactor;
+      // Milde Dämpfung, wenn dieselbe Kategorie erst kürzlich (auch mit einem
+      // anderen Template) an der Reihe war - klingt über 2 Saisons ab.
+      const catLastSeason = lastCategorySeason.get(t.category);
+      const categoryRecencyFactor =
+        catLastSeason === undefined ? 1 : clamp((seasonNumber - catLastSeason) / 2, 0.4, 1);
+      return t.weight * categoryFactor * recencyFactor * categoryRecencyFactor;
     });
     const totalWeight = weights.reduce((a, b) => a + b, 0);
     let r = rng() * totalWeight;
