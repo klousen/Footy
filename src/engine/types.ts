@@ -1,5 +1,7 @@
 // Kern-Datenmodelle für die Karriere-Simulation
 
+import type { CountryId } from "./leagues";
+
 export type AttributeKey =
   | "technik"
   | "tempo"
@@ -31,14 +33,35 @@ export const POSITION_WEIGHTS: Record<Position, Attributes> = {
   ST: { technik: 0.3, tempo: 0.25, physis: 0.2, mentalitaet: 0.15, intelligenz: 0.05, charisma: 0.05 },
 };
 
-export type LeagueTier = 1 | 2 | 3 | 4;
+export type LeagueTier = 1 | 2;
 
-export interface Club {
-  name: string;
-  country: string;
+/** Ein realer Verein (nur als Stadtname dargestellt) innerhalb einer Liga-Pyramide. */
+export interface ClubState {
+  id: string; // stabile ID, überlebt Auf-/Abstieg
+  city: string; // Anzeigename, ggf. mit "I"/"II" bei mehreren Vereinen derselben Stadt
   tier: LeagueTier;
   strength: number; // 0-100 Vereinsstärke
-  isNationalTeam?: boolean;
+}
+
+/** Die komplette Liga-Pyramide (Liga 1 + Liga 2) eines gewählten Landes. */
+export interface LeagueState {
+  countryId: CountryId;
+  countryName: string;
+  flag: string;
+  tier1Name: string;
+  tier2Name: string;
+  swapCount: number;
+  tier1: ClubState[];
+  tier2: ClubState[];
+}
+
+/** Momentaufnahme des aktuellen Vereins des Spielers. */
+export interface Club {
+  clubId: string; // Referenz auf ClubState.id in der LeagueState
+  name: string; // = ClubState.city
+  country: string; // Landesname zur Anzeige
+  tier: LeagueTier;
+  strength: number; // 0-100 Vereinsstärke
 }
 
 export interface Contract {
@@ -73,6 +96,7 @@ export interface SeasonStats {
   age: number;
   club: string;
   leagueTier: LeagueTier;
+  leagueName: string;
   matches: number;
   goals: number;
   assists: number;
@@ -81,6 +105,8 @@ export interface SeasonStats {
   trophies: string[];
   yellowCards: number;
   redCards: number;
+  promoted: boolean;
+  relegated: boolean;
 }
 
 export interface LogEntry {
@@ -148,6 +174,7 @@ export interface EventTemplate {
 
 export interface Player {
   name: string;
+  country: CountryId;
   position: Position;
   birthAge: number; // Startalter 14
   age: number;
@@ -182,6 +209,7 @@ export interface Player {
 
 export interface GameState {
   player: Player | null;
+  leagueState: LeagueState | null;
   seasonNumber: number; // 1 = erste Saison
   screen: Screen;
   pendingEvents: GameEvent[];
@@ -195,6 +223,7 @@ export interface GameState {
 
 export type Screen =
   | "start"
+  | "country"
   | "create"
   | "dashboard"
   | "event"

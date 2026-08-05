@@ -222,6 +222,14 @@ input:focus {
   background: var(--accent-soft);
 }
 
+.country-grid {
+  grid-template-columns: repeat(2, 1fr);
+}
+
+.flag {
+  font-size: 1.1em;
+}
+
 /* ---------------- Dashboard ---------------- */
 
 .player-header {

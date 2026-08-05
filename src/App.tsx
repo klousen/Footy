@@ -2,9 +2,11 @@ import { useEffect, useState } from "react";
 import type { AttributeKey, EventChoice, GameState, Position } from "./engine/types";
 import { emptyState } from "./engine/initialState";
 import { loadGame, saveGame, clearSave, hasSave as hasSaveOnDisk } from "./engine/storage";
+import type { CountryId } from "./engine/leagues";
 import {
   ageUpPlayer,
   applyChoice,
+  applyLeaguePromotionRelegation,
   buildRetirementEvent,
   buildSeasonEvents,
   computeLegacy,
@@ -15,6 +17,7 @@ import {
   simulateSeason,
 } from "./engine/careerEngine";
 import { StartScreen } from "./ui/StartScreen";
+import { SelectCountry } from "./ui/SelectCountry";
 import { CreatePlayer } from "./ui/CreatePlayer";
 import { Dashboard } from "./ui/Dashboard";
 import { EventCard } from "./ui/EventCard";
@@ -28,6 +31,7 @@ function initState(): GameState {
 
 export default function App() {
   const [game, setGame] = useState<GameState>(initState);
+  const [pendingCountry, setPendingCountry] = useState<CountryId | null>(null);
 
   useEffect(() => {
     saveGame(game);
@@ -35,7 +39,8 @@ export default function App() {
 
   function handleNewGame() {
     clearSave();
-    setGame({ ...emptyState(), screen: "create" });
+    setPendingCountry(null);
+    setGame({ ...emptyState(), screen: "country" });
   }
 
   function handleContinue() {
@@ -43,9 +48,15 @@ export default function App() {
     if (loaded) setGame(loaded);
   }
 
+  function handleSelectCountry(countryId: CountryId) {
+    setPendingCountry(countryId);
+    setGame({ ...game, screen: "create" });
+  }
+
   function handleCreatePlayer(name: string, position: Position, focus: AttributeKey) {
-    const player = createPlayer(name, position, focus);
-    setGame({ ...emptyState(), player, screen: "dashboard" });
+    if (!pendingCountry) return;
+    const { player, league } = createPlayer(name, position, focus, pendingCountry);
+    setGame({ ...emptyState(), player, leagueState: league, screen: "dashboard" });
   }
 
   function handleStartSeason() {
@@ -70,14 +81,18 @@ export default function App() {
 
   function finishSeasonEvents(current: GameState) {
     const player = current.player;
-    if (!player) return;
-    const stats = simulateSeason(player, current.seasonNumber);
+    const league = current.leagueState;
+    if (!player || !league) return;
+    const stats = simulateSeason(player, current.seasonNumber, league);
     ageUpPlayer(player);
-    const clubEntry = resolveClubSituation(player);
+    const clubEntry = resolveClubSituation(player, league);
     if (clubEntry) player.log.push(clubEntry);
+    const promotionEntry = applyLeaguePromotionRelegation(player, league);
+    if (promotionEntry) player.log.push(promotionEntry);
     setGame({
       ...current,
       player: { ...player },
+      leagueState: { ...league },
       lastSeasonStats: stats,
       currentEvent: null,
       pendingEvents: [],
@@ -131,7 +146,8 @@ export default function App() {
 
   function handleNewCareerAfterEnd() {
     clearSave();
-    setGame({ ...emptyState(), screen: "create" });
+    setPendingCountry(null);
+    setGame({ ...emptyState(), screen: "country" });
   }
 
   return (
@@ -139,9 +155,10 @@ export default function App() {
       {game.screen === "start" && (
         <StartScreen hasSave={hasSaveOnDisk()} onNewGame={handleNewGame} onContinue={handleContinue} />
       )}
+      {game.screen === "country" && <SelectCountry onSelect={handleSelectCountry} />}
       {game.screen === "create" && <CreatePlayer onCreate={handleCreatePlayer} />}
-      {game.screen === "dashboard" && game.player && (
-        <Dashboard player={game.player} onStartSeason={handleStartSeason} />
+      {game.screen === "dashboard" && game.player && game.leagueState && (
+        <Dashboard player={game.player} league={game.leagueState} onStartSeason={handleStartSeason} />
       )}
       {game.screen === "event" && game.player && game.currentEvent && (
         <EventCard event={game.currentEvent} player={game.player} onChoose={handleChoice} />

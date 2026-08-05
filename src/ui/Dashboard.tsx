@@ -1,15 +1,25 @@
 import { useState } from "react";
-import type { Player } from "../engine/types";
+import type { LeagueState, Player } from "../engine/types";
 import { POSITION_LABEL } from "../engine/types";
 import { overallRating } from "../engine/careerEngine";
+import { leagueNameForTier } from "../engine/leagueEngine";
 import { AttributeBars } from "./AttributeBars";
 import { formatMoney } from "./labels";
 import { Timeline } from "./Timeline";
 
-export function Dashboard({ player, onStartSeason }: { player: Player; onStartSeason: () => void }) {
+export function Dashboard({
+  player,
+  league,
+  onStartSeason,
+}: {
+  player: Player;
+  league: LeagueState;
+  onStartSeason: () => void;
+}) {
   const [showTimeline, setShowTimeline] = useState(false);
   const overall = overallRating(player);
   const lastStats = player.seasonHistory[player.seasonHistory.length - 1];
+  const leagueName = leagueNameForTier(league, player.club.tier);
 
   return (
     <div className="screen dashboard">
@@ -17,7 +27,8 @@ export function Dashboard({ player, onStartSeason }: { player: Player; onStartSe
         <div>
           <h2>{player.name}</h2>
           <p className="muted">
-            {POSITION_LABEL[player.position]} · {player.age} Jahre · {player.club.name} ({player.club.country})
+            {POSITION_LABEL[player.position]} · {player.age} Jahre · {player.club.name} · {leagueName} (
+            {league.flag} {league.countryName})
           </p>
         </div>
         <div className="overall-badge">
@@ -50,6 +61,8 @@ export function Dashboard({ player, onStartSeason }: { player: Player; onStartSe
         <div className="contract-grid">
           <span>Verein</span>
           <span>{player.club.name}</span>
+          <span>Liga</span>
+          <span>{leagueName}</span>
           <span>Rolle</span>
           <span>{player.contract.squadRole}</span>
           <span>Laufzeit</span>

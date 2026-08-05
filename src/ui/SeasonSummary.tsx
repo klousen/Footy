@@ -15,7 +15,7 @@ export function SeasonSummary({
     <div className="screen summary-screen">
       <h2>{stats.seasonLabel} - Rückblick</h2>
       <p className="muted">
-        {player.name} bei {stats.club} ({stats.leagueTier}. Liga-Ebene)
+        {player.name} bei {stats.club} ({stats.leagueName})
       </p>
 
       <div className="stat-strip">
@@ -28,6 +28,13 @@ export function SeasonSummary({
 
       {stats.trophies.length > 0 && (
         <div className="banner banner-success">🏆 Gewonnen: {stats.trophies.join(", ")}</div>
+      )}
+
+      {stats.promoted && (
+        <div className="banner banner-success">⬆️ {stats.club} steigt auf!</div>
+      )}
+      {stats.relegated && (
+        <div className="banner banner-warning">⬇️ {stats.club} steigt ab.</div>
       )}
 
       {(stats.yellowCards > 0 || stats.redCards > 0) && (
