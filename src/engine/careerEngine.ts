@@ -2105,62 +2105,181 @@ interface PostCareerOutcome {
   line: (name: string) => string;
 }
 
-function choosePostCareerOutcome(player: Player): PostCareerOutcome {
-  const { intelligenz, charisma } = player.attributes;
+/** Ein möglicher Karriereweg nach dem aktiven Fußball - mit Eignungs-Check
+ * (`eligible`) und einer Stärke (`strength`), die messen soll, wie deutlich
+ * dieser Archetyp gerade FÜR DIESEN Spieler zutrifft (höherer Wert = klareres
+ * Signal). `tier` gruppiert nach erzählerischer Priorität (siehe `choosePostCareerOutcome`):
+ * je niedriger die Zahl, desto eher gewinnt dieser Archetyp gegen einen aus
+ * einer höheren Tier-Nummer, unabhängig von dessen Stärke. */
+interface PostCareerArchetype extends PostCareerOutcome {
+  tier: number;
+  eligible: (player: Player) => boolean;
+  strength: (player: Player) => number;
+}
+
+/** Anteil des dominantesten Vereins an der Gesamt-Saisonanzahl der Karriere -
+ * gemeinsam genutzt von der "Vereinsgeschichte"-Einleitung UND vom
+ * "Vereinslegende"-Archetyp (siehe unten), damit beide dieselbe Datenbasis
+ * verwenden. */
+function clubDominance(player: Player): { club: string; share: number } | null {
+  const tenures = buildClubTenures(player);
+  const totalSeasons = tenures.reduce((sum, t) => sum + t.seasons, 0);
+  if (totalSeasons === 0) return null;
+  const dominant = tenures.reduce<(typeof tenures)[number] | undefined>(
+    (best, t) => (!best || t.seasons > best.seasons ? t : best),
+    undefined
+  );
+  if (!dominant) return null;
+  return { club: dominant.club, share: dominant.seasons / totalSeasons };
+}
+
+/**
+ * Elf mögliche Fortsetzungen nach dem aktiven Fußball - bewusst kein reines
+ * "positiv vs. negativ", sondern ein breites, glaubwürdiges Spektrum (siehe
+ * die einzelnen Tier-Kommentare für die Priorisierungslogik):
+ *
+ * Tier 0 (Negativ-Narrativ, übersticht alles andere): Zwielichtige Geschäfte
+ * Tier 1 (Sonderfall Alter/Umstände, unabhängig vom Charakterprofil): Comeback-Kandidat
+ * Tier 2 (Attribut-KOMBINATIONEN - zwei starke Werte sind aussagekräftiger als einer):
+ *        Taktikfuchs, TV-Experte, Vereinslegende, Kritiker mit Kante, Der Unternehmer
+ * Tier 3 (Einzelattribut-Archetypen): Jugendvorbild, Jugendtrainer
+ * Tier 4 (Default, immer verfügbar): Familienleben ODER Stiller Aussteiger
+ */
+function postCareerArchetypes(player: Player): PostCareerArchetype[] {
+  const { intelligenz, charisma, physis, mentalitaet } = player.attributes;
   const { fuehrung, medienimage, disziplin } = player.traits;
+  const { education } = player;
+  const dominance = clubDominance(player);
 
-  // Skandal-Narrativ: nie ein positives Medienbild aufgebaut UND wiederholt
-  // disziplinlos aufgefallen - bleibt auch als Ex-Profi im Rampenlicht, nur aus
-  // den falschen Gründen. Bewusst VOR den positiven Pfaden geprüft, damit eine
-  // wirklich verkorkste Bilanz nicht durch einen zufällig hohen Einzelwert
-  // (z.B. Bildung) in ein zu freundliches Narrativ gerettet wird.
-  if (medienimage <= 25 && disziplin <= 35) {
-    return {
+  return [
+    // Tier 0 - nie ein positives Medienbild aufgebaut UND wiederholt
+    // disziplinlos aufgefallen: bleibt auch als Ex-Profi im Rampenlicht, nur
+    // aus den falschen Gründen. Übersticht als einziger negativer Archetyp
+    // erzählerisch alles andere.
+    {
       path: "Zwielichtige Geschäfte & Boulevard-Schlagzeilen",
+      tier: 0,
+      eligible: () => medienimage <= 25 && disziplin <= 35,
+      strength: () => 100 - medienimage + (100 - disziplin),
       line: (name) =>
-        `Mit Medienimage (${medienimage}) und Disziplin (${disziplin}) tief im Keller sorgt ${name} wohl auch als Ex-Profi noch einige Jahre für negative Schlagzeilen und zwielichtige Geschäfte.`,
-    };
-  }
-
-  // Taktikfuchs: Kopf UND Führungsqualität sprechen für die Trainerbank.
-  if (intelligenz >= 65 && fuehrung >= 60 && intelligenz >= charisma) {
-    return {
-      path: "Trainer / Sportdirektor",
+        `Mit Medienimage (${medienimage}) und Disziplin (${disziplin}) tief im Keller bleibt ${name} auch nach der Karriere ein gern gesehener Gast in den Boulevardspalten - weniger wegen sportlicher Verdienste - Richtung Zwielichtige Geschäfte & Boulevard-Schlagzeilen.`,
+    },
+    // Tier 1 - Sonderfall: wer jung und noch in Top-Form aufhört, hinterlässt
+    // ein offenes Kapitel statt eines klaren Abschlusses - unabhängig davon,
+    // was die übrigen Charakterwerte sonst nahelegen würden.
+    {
+      path: "Der Comeback-Kandidat",
+      tier: 1,
+      eligible: () => player.age < 30 && physis >= 65 && mentalitaet >= 65,
+      strength: () => physis + mentalitaet,
       line: (name) =>
-        `Als Taktikfuchs mit Intelligenz (${intelligenz}) und Führungsstärke (${fuehrung}) führt der Weg von ${name} an die Seitenlinie - Richtung Trainer/Sportdirektor.`,
-    };
-  }
-
-  // Jugendvorbild: hohe Führungsstärke auch ohne ausgeprägten Fußball-IQ - der
-  // natürliche Kapitänstyp, aus dem später mit hoher Wahrscheinlichkeit selbst
-  // ein Trainer wird.
-  if (fuehrung >= 70) {
-    return {
-      path: "Jugendvorbild mit Trainer-Ambitionen",
+        `Noch immer in bemerkenswerter Verfassung (Physis ${physis}, Mentalität ${mentalitaet}) schließt ${name} eine Rückkehr auf den Platz nicht komplett aus - das Kapitel bleibt vorerst offen - Richtung Der Comeback-Kandidat.`,
+    },
+    // Tier 2 - Kopf UND Führungsqualität sprechen für die Trainerbank.
+    {
+      path: "Taktikfuchs",
+      tier: 2,
+      eligible: () => intelligenz >= 65 && fuehrung >= 60,
+      strength: () => intelligenz + fuehrung,
       line: (name) =>
-        `Mit Führungsstärke (${fuehrung}) war ${name} schon als Aktiver Vorbild in der Kabine - die Wahrscheinlichkeit ist hoch, dass daraus bald eine eigene Trainerlaufbahn wird.`,
-    };
-  }
-
-  if (charisma > 60 && medienimage > 40) {
-    return {
+        `Dank Intelligenz (${intelligenz}) und Führungsstärke (${fuehrung}) liegt für ${name} der Weg auf die Trainerbank nahe - Richtung Taktikfuchs.`,
+    },
+    // Tier 2 - Charisma UND ein gepflegtes Medienbild (Disziplin schließt den
+    // Skandal-Fall bereits aus) sprechen für die glatte Rolle vor der Kamera.
+    {
       path: "TV-Experte & Medien",
+      tier: 2,
+      eligible: () => charisma > 60 && medienimage > 55 && disziplin >= 45,
+      strength: () => charisma + medienimage,
       line: (name) =>
         `Dank Charisma (${charisma}) und Medienimage (${medienimage}) liegt für ${name} die Rolle vor der Kamera nahe - Richtung TV-Experte & Medien.`,
-    };
-  }
-
-  if (player.education > 65) {
-    return {
-      path: "Jugendtrainer & Ausbildung",
+    },
+    // Tier 2 - sehr hoher Medienbekanntheitsgrad, aber ohne die Politur eines
+    // TV-Experten (niedrigere Disziplin) - der unbequeme, schafzüngige Typ statt
+    // des glatten Pundits.
+    {
+      path: "Der Kritiker mit Kante",
+      tier: 2,
+      eligible: () => medienimage > 55 && disziplin < 45 && !(medienimage <= 25 && disziplin <= 35),
+      strength: () => medienimage + (100 - disziplin),
       line: (name) =>
-        `Mit Bildung (${player.education}) und Herz für die Nachwuchsarbeit führt der Weg von ${name} in die Jugendabteilung - Richtung Jugendtrainer & Ausbildung.`,
-    };
+        `Dank Medienimage (${medienimage}) trotz rauer Kante (Disziplin ${disziplin}) positioniert sich ${name} als scharfzüngiger TV-Experte, der auch vor unbequemen Wahrheiten nicht zurückschreckt - Richtung Der Kritiker mit Kante.`,
+    },
+    // Tier 2 - sehr hoher Vereinsanteil PLUS Führungsstärke, aber ohne das
+    // fachliche Profil (Intelligenz/Bildung) für die Trainerbank - die
+    // Identifikation bleibt, aber in einer symbolischen statt fachlichen Rolle.
+    {
+      path: "Vereinslegende",
+      tier: 2,
+      eligible: () => !!dominance && dominance.share > 0.7 && fuehrung >= 60 && intelligenz < 55 && education < 55,
+      strength: () => (dominance ? fuehrung + dominance.share * 100 : 0),
+      line: (name) =>
+        `Nach all den Jahren bei ${dominance?.club ?? player.club.name} (Führungsstärke ${fuehrung}) bleibt ${name} dem Verein als Botschafter und Vereinslegende eng verbunden - Richtung Vereinslegende.`,
+    },
+    // Tier 2 - hohe Intelligenz OHNE ausgeprägten Teamgedanken: der strategische
+    // Einzelgänger statt des Trainerbank-Typs.
+    {
+      path: "Der Unternehmer",
+      tier: 2,
+      eligible: () => intelligenz >= 65 && fuehrung < 45,
+      strength: () => intelligenz + (100 - fuehrung),
+      line: (name) =>
+        `Dank Intelligenz (${intelligenz}) abseits des klassischen Teamgedankens steigt ${name} nach dem Karriereende ins eigene Business ein - vom Rasen in die Vorstandsetage - Richtung Der Unternehmer.`,
+    },
+    // Tier 3 - hohe Führungsstärke auch ohne ausgeprägten Fußball-IQ - der
+    // natürliche Kapitänstyp, aus dem später mit hoher Wahrscheinlichkeit selbst
+    // ein Trainer wird.
+    {
+      path: "Jugendvorbild mit Trainerambitionen",
+      tier: 3,
+      eligible: () => fuehrung >= 70,
+      strength: () => fuehrung,
+      line: (name) =>
+        `Dank Führungsstärke (${fuehrung}) liegt für ${name} eine Zukunft als Mentor der jungen Generation nahe - Richtung Jugendvorbild mit Trainerambitionen.`,
+    },
+    // Tier 3 - Bildung als Einzelsignal: strukturierte Ausbildung/Lizenzen statt
+    // natürlicher Autorität wie beim Jugendvorbild.
+    {
+      path: "Jugendtrainer & Ausbildung",
+      tier: 3,
+      eligible: () => education > 65,
+      strength: () => education,
+      line: (name) =>
+        `Dank Bildung (${education}) liegt für ${name} die strukturierte Nachwuchsarbeit nahe - Richtung Jugendtrainer & Ausbildung.`,
+    },
+  ];
+}
+
+/** Durchschnitt über alle 6 Fußball-Attribute + 4 Charakterzüge - entscheidet
+ * zwischen den beiden Default-Pfaden (Tier 4), wenn kein Archetyp aus den
+ * höheren Tiers zutrifft: eine insgesamt solide, nur eben unauffällige Bilanz
+ * liest sich als bewusste Wahl (Familienleben), eine insgesamt schwache
+ * Bilanz eher als unauffälliges Verschwinden (Stiller Aussteiger). */
+function averageProfileLevel(player: Player): number {
+  const values = [...ATTRIBUTE_ORDER.map((k) => player.attributes[k]), ...TRAIT_ORDER.map((k) => player.traits[k])];
+  return values.reduce((a, b) => a + b, 0) / values.length;
+}
+
+function choosePostCareerOutcome(player: Player): PostCareerOutcome {
+  const eligible = postCareerArchetypes(player).filter((a) => a.eligible(player));
+  if (eligible.length > 0) {
+    eligible.sort((a, b) => a.tier - b.tier || b.strength(player) - a.strength(player));
+    return eligible[0];
   }
 
+  // Tier 4 - kein Archetyp trifft klar genug zu: zwei neutrale Defaults statt
+  // eines einzigen "Familienleben" für praktisch jeden unauffälligen Spieler.
+  if (averageProfileLevel(player) >= 50) {
+    return {
+      path: "Familienleben abseits der Medien",
+      line: (name) =>
+        `Ohne einen klaren Ausreißer nach oben zieht sich ${name} bewusst aus dem Rampenlicht zurück und konzentriert sich auf das Leben neben dem Platz - Richtung Familienleben abseits der Medien.`,
+    };
+  }
   return {
-    path: "Familienleben abseits der Medien",
-    line: (name) => `Nach Jahren im Rampenlicht sucht ${name} jetzt vor allem eines: ein privates Familienleben abseits der Medien.`,
+    path: "Der stille Aussteiger",
+    line: (name) =>
+      `Ohne einen klaren Höhepunkt in der Bilanz verschwindet ${name} nach dem Karriereende weitgehend aus der Öffentlichkeit, ohne dass eine neue Rolle erkennbar wird - Richtung Der stille Aussteiger.`,
   };
 }
 
@@ -2215,14 +2334,9 @@ function familyLine(player: Player): string {
  * klaren Schwerpunkt wäre die Zuschreibung an einen einzelnen Verein irreführend,
  * dann geht die Karriere allgemeiner in die "Fußballgeschichte" ein. */
 function clubLegacyPhrase(player: Player, tier: string): string {
-  const tenures = buildClubTenures(player);
-  const totalSeasons = tenures.reduce((sum, t) => sum + t.seasons, 0);
-  const dominant = tenures.reduce<(typeof tenures)[number] | undefined>(
-    (best, t) => (!best || t.seasons > best.seasons ? t : best),
-    undefined
-  );
-  if (dominant && totalSeasons > 0 && dominant.seasons / totalSeasons > 0.5) {
-    return `Die Karriere geht als "${tier}" in die Vereinsgeschichte von ${dominant.club} ein.`;
+  const dominance = clubDominance(player);
+  if (dominance && dominance.share > 0.5) {
+    return `Die Karriere geht als "${tier}" in die Vereinsgeschichte von ${dominance.club} ein.`;
   }
   return `Die Karriere geht als "${tier}" in die Fußballgeschichte ein.`;
 }
