@@ -1,4 +1,5 @@
 import type { Player, SeasonStats } from "../engine/types";
+import { overallRating } from "../engine/careerEngine";
 import { formatMoney, overallTier } from "./labels";
 
 export function SeasonSummary({
@@ -11,10 +12,17 @@ export function SeasonSummary({
   onContinue: () => void;
 }) {
   const recentLog = player.log.slice(-4);
-  const seasonIndex = player.seasonHistory.findIndex((s) => s === stats);
-  const previous = seasonIndex > 0 ? player.seasonHistory[seasonIndex - 1] : null;
-  const overallDelta = previous ? stats.overallRating - previous.overallRating : null;
-  const tier = overallTier(stats.overallRating);
+  // Die Alterung (siehe `ageUpPlayer`) ist zu diesem Zeitpunkt bereits auf
+  // `player` angewendet (finishSeasonEvents ruft sie direkt nach simulateSeason
+  // auf) - die aktuelle Gesamtstärke spiegelt also schon den Zuwachs/Abbau
+  // dieser Saison wider. `stats.overallRating` ist dagegen der Wert VOR der
+  // Alterung (Stand zu Saisonbeginn). Delta = aktueller Wert minus Saisonbeginn-
+  // Wert zeigt damit exakt den Effekt DIESER Saison - und ist bewusst dieselbe
+  // Formel wie Dashboards "trend"-Anzeige (siehe dort), damit die beiden
+  // Bildschirme sich nicht scheinbar widersprechen.
+  const currentOverall = overallRating(player);
+  const overallDelta = currentOverall - stats.overallRating;
+  const tier = overallTier(currentOverall);
 
   return (
     <div className="screen summary-screen">
@@ -26,7 +34,7 @@ export function SeasonSummary({
       <div className="stat-strip">
         <SummaryStat
           label={`Gesamtstärke · ${tier.label}`}
-          value={`${stats.overallRating}${overallDelta ? ` (${overallDelta > 0 ? "+" : ""}${overallDelta})` : ""}`}
+          value={`${currentOverall}${overallDelta !== 0 ? ` (${overallDelta > 0 ? "+" : ""}${overallDelta})` : ""}`}
         />
         <SummaryStat label="Spiele" value={String(stats.matches)} />
         <SummaryStat label="Tore" value={String(stats.goals)} />

@@ -2,6 +2,7 @@ import type { Achievement, Player, ScoreFactor } from "../engine/types";
 import { buildClubTenures } from "../engine/careerEngine";
 import { formatMoney, RELATIONSHIP_LABEL } from "./labels";
 import { ShareCard } from "./ShareCard";
+import { OverallScoreChart } from "./OverallScoreChart";
 
 export function CareerEnd({
   player,
@@ -80,6 +81,8 @@ export function CareerEnd({
           <span>{formatMoney(player.wealth)}</span>
         </div>
       </div>
+
+      <OverallScoreChart player={player} />
 
       {clubTenures.length > 0 && (
         <div className="panel">

@@ -343,6 +343,15 @@ input:focus {
 
 /* ---------------- Dashboard ---------------- */
 
+.season-kicker {
+  margin: 0;
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--accent);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
 .player-header {
   display: flex;
   justify-content: space-between;
@@ -1139,6 +1148,129 @@ input:focus {
 .epilogue {
   color: var(--muted);
   text-align: left;
+}
+
+/* ---------------- Gesamtstärke-Verlauf (Liniendiagramm) ---------------- */
+
+.score-chart-panel {
+  text-align: left;
+}
+
+.score-chart-wrap {
+  position: relative;
+}
+
+.score-chart-svg {
+  width: 100%;
+  height: auto;
+  display: block;
+  overflow: visible;
+}
+
+.score-chart-grid {
+  stroke: var(--panel-border);
+  stroke-width: 1;
+}
+
+.score-chart-axis-label {
+  fill: var(--muted);
+  font-size: 9px;
+}
+
+.score-chart-point-label {
+  fill: var(--text);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.score-chart-segment {
+  animation: score-line-draw 0.7s var(--ease) forwards;
+}
+
+@keyframes score-line-draw {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+.score-chart-dot {
+  stroke: var(--panel);
+  stroke-width: 2;
+  transform-origin: center;
+  transform-box: fill-box;
+  animation: score-dot-pop 0.4s var(--ease) backwards;
+}
+
+@keyframes score-dot-pop {
+  from {
+    transform: scale(0);
+  }
+  to {
+    transform: scale(1);
+  }
+}
+
+.score-chart-hit {
+  cursor: pointer;
+}
+
+.score-chart-hit:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.score-chart-crosshair {
+  stroke: var(--muted);
+  stroke-width: 1;
+  pointer-events: none;
+}
+
+.score-chart-tooltip {
+  position: absolute;
+  top: 0;
+  transform: translate(-50%, -100%);
+  background: var(--bg-alt);
+  border: 1px solid var(--panel-border);
+  border-radius: 10px;
+  padding: 6px 10px;
+  font-size: 0.78rem;
+  white-space: nowrap;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  pointer-events: none;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35);
+  z-index: 5;
+}
+
+.score-chart-tooltip strong {
+  font-size: 0.95rem;
+  color: var(--accent);
+}
+
+.score-chart-tooltip span {
+  color: var(--muted);
+}
+
+.score-chart-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 16px;
+  margin-top: 4px;
+  font-size: 0.82rem;
+}
+
+.score-chart-legend-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.score-chart-swatch {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
 }
 
 /* ---------------- Return-Button (Karriere jederzeit beenden) ---------------- */

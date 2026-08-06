@@ -4,13 +4,16 @@ import { clamp, FEMALE_FIRST_NAMES, FIRST_NAMES, LAST_NAMES } from "./data";
 // Hilfsfunktion für lesbaren Vereinsnamen im Text
 const club = (p: Player) => p.club.name;
 
-// Gemischter Namenspool für Partner:innen - unabhängig vom Geschlecht des
-// Spielers, damit nicht ausschließlich männliche Partnernamen vorkommen.
-const PARTNER_NAME_POOL = [...FIRST_NAMES, ...FEMALE_FIRST_NAMES];
-
-// Hilfsfunktion: zufälliger Vorname für neue Beziehungen
+// Hilfsfunktion: zufälliger Vorname für neue Beziehungen. Der Spieler selbst
+// wird immer mit einem Namen aus FIRST_NAMES erzeugt (siehe `createPlayer`) -
+// da die allermeisten Spieler also männlich sind und heterosexuelle
+// Beziehungen der Normalfall sind, bekommt der Partner/die Partnerin ganz
+// überwiegend einen weiblichen Namen (95%), nur in seltenen Fällen (5%) einen
+// männlichen - statt beide Pools gleich zu gewichten, was viel zu oft
+// männliche Partnernamen ergäbe.
 function randomPartnerName(rng: () => number): string {
-  return PARTNER_NAME_POOL[Math.floor(rng() * PARTNER_NAME_POOL.length)];
+  const pool = rng() < 0.05 ? FIRST_NAMES : FEMALE_FIRST_NAMES;
+  return pool[Math.floor(rng() * pool.length)];
 }
 
 // Hilfsfunktion: zufällige Ganzzahl in [min, max] - für variablen Effekt-Impact
@@ -3401,6 +3404,14 @@ export const EVENT_TEMPLATES: EventTemplate[] = [
     condition: (p) =>
       (p.stage === "etabliert" || p.stage === "veteran") &&
       p.contract.squadRole !== "Ausbildungsspieler" &&
+      // Ein Wechsel beendet einen laufenden Trainerkonflikt beim ALTEN Verein
+      // (siehe CLUB_BOUND_STORYLINES in careerEngine.ts), aber ohne diese
+      // zusätzliche Sperre könnte direkt in der ersten Saison beim NEUEN Verein
+      // ein frischer Konflikt aufflammen - das liest sich wie eine nahtlose
+      // Fortsetzung des alten Streits statt eines neuen, eigenständigen. Erst ab
+      // der zweiten Saison am aktuellen Verein ist ein neuer Trainerkonflikt
+      // glaubwürdig.
+      !recentlyTransferred(p) &&
       !p.completedStorylines.includes("trainerzoff") &&
       !p.activeStorylines.some((t) => t.storylineId === "trainerzoff"),
     build: (p) => ({

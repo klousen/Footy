@@ -537,6 +537,13 @@ const TROPHY_POOL_BY_TIER: Record<number, string[]> = {
   2: ["Zweitliga-Meisterschaft", "Aufstiegs-Play-off"],
 };
 
+/** Einheitliches "Saison 2026/27"-Label für eine Saisonnummer - von `simulateSeason`
+ * für die abgeschlossene Saison genutzt UND vom Dashboard für die kommende Saison
+ * ("Vor Saison X"), damit beide Bildschirme exakt dasselbe Format zeigen. */
+export function seasonLabelForNumber(seasonNumber: number): string {
+  return `Saison ${2026 + seasonNumber}/${(2026 + seasonNumber + 1).toString().slice(-2)}`;
+}
+
 export function simulateSeason(player: Player, seasonNumber: number, league: LeagueState): SeasonStats {
   const overall = overallRating(player);
   const clubStrength = player.club.strength;
@@ -718,7 +725,7 @@ export function simulateSeason(player: Player, seasonNumber: number, league: Lea
   });
 
   const stats: SeasonStats = {
-    seasonLabel: `Saison ${2026 + seasonNumber}/${(2026 + seasonNumber + 1).toString().slice(-2)}`,
+    seasonLabel: seasonLabelForNumber(seasonNumber),
     age: player.age,
     club: player.club.name,
     overallRating: overall,
@@ -1245,16 +1252,21 @@ export type ClubOfferReason = "pro-debut" | "opportunity" | "pressure";
 
 const CLUB_OFFER_PREFIX = "club_offer:";
 
-/** Vertrags-Events, deren Prämisse ("dein Vertrag läuft bald aus") durch einen
- * frisch vollzogenen Wechsel (neuer 3-Jahres-Vertrag, siehe `applyClubOfferChoice`)
- * sofort hinfällig wird. Wurden sie bereits VOR dem Wechsel für dieselbe Saison in
- * die Event-Queue gezogen (siehe `pickSeasonTemplateIds`), würden sie sonst direkt
- * im Anschluss an den gerade vollzogenen Wechsel auftauchen, obwohl man gerade erst
- * einen neuen Vertrag unterschrieben hat - siehe App.tsx `handleChoice`, das diese
- * IDs nach einem echten Wechsel noch in derselben Saison aus der Queue entfernt. */
+/** Events, deren Auswahl-Bedingung VOR einem Wechsel geprüft wurde (siehe
+ * `pickSeasonTemplateIds`, läuft einmal ganz am Saisonanfang) und durch einen
+ * innerhalb DERSELBEN Saison später vollzogenen Wechsel sofort hinfällig wird -
+ * entweder weil die Prämisse selbst hinfällig wird (Vertrags-Events: "dein
+ * Vertrag läuft bald aus" nach frisch unterschriebenem 3-Jahres-Vertrag, siehe
+ * `applyClubOfferChoice`), oder weil das Event beim Anzeigen automatisch den
+ * AKTUELLEN (neuen) statt des Vereins nennt, an dem die Auswahl-Bedingung
+ * eigentlich geprüft wurde (trainerzoff_1: ein frisch begonnener Trainerkonflikt
+ * direkt nach der Ankunft beim neuen Verein wirkt unglaubwürdig/wie die nahtlose
+ * Fortsetzung des alten Konflikts). Siehe App.tsx `handleChoice`, das diese IDs
+ * nach einem echten Wechsel noch in derselben Saison aus der Queue entfernt. */
 export const STALE_AFTER_TRANSFER_TEMPLATE_IDS: ReadonlySet<string> = new Set([
   "vertrag_verlaengerung",
   "vertrag_bosman_poker",
+  "trainerzoff_1",
 ]);
 
 export function isClubOfferEvent(templateId: string): boolean {
