@@ -8,6 +8,7 @@ import {
   applyChoice,
   applyClubOfferChoice,
   applyLeaguePromotionRelegation,
+  buildEpilogue,
   buildEventFromId,
   buildRetirementEvent,
   clubOfferTemplateId,
@@ -376,14 +377,6 @@ function buildCareerEndUpdate(player: NonNullable<GameState["player"]>): Partial
     legacyTier: tier,
     legacyFactors: factors,
     achievements,
-    epilogue: buildEpilogueSafe(player, tier),
+    epilogue: buildEpilogue(player, tier),
   };
-}
-
-function buildEpilogueSafe(player: NonNullable<GameState["player"]>, tier: string): string {
-  const trophyText =
-    player.careerTotals.trophies.length > 0
-      ? `${player.careerTotals.trophies.length} Titel in der Vitrine`
-      : "keinem Titel, aber vielen unvergesslichen Momenten";
-  return `Nach ${player.age - player.birthAge} Jahren im Profifußball beendet ${player.name} die aktive Karriere mit ${player.careerTotals.goals} Toren, ${player.careerTotals.assists} Vorlagen und ${trophyText}. Die Karriere geht als "${tier}" in die Vereinsgeschichte ein. Danach führt der Weg: ${player.postCareerPath}.`;
 }

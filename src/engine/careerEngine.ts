@@ -2088,13 +2088,160 @@ export function computeAchievements(player: Player): Achievement[] {
   return defs.filter((d) => d.condition).map(({ condition: _condition, ...rest }) => rest);
 }
 
+/**
+ * Karriereweg nach dem aktiven Fußball - baut bewusst nicht nur auf den reinen
+ * Fußball-Attributen auf, sondern auf den Charakterzügen, die sich über die
+ * Karriere durch die getroffenen Lebensentscheidungen geformt haben (Medienimage
+ * z.B. aus PR-/Boulevard-Events, Führungsstärke aus Kapitäns-/Konfliktentscheidungen,
+ * Disziplin aus Trainingsfleiß vs. Party-Momenten). Deckt bewusst ein "wholesome"
+ * Spektrum an Szenarien ab, nicht nur positive: eine verkorkste Medien-/Disziplin-Bilanz
+ * führt zu einer eigenen, unschönen Fortsetzung statt in eines der Erfolgs-Narrative
+ * gepresst zu werden.
+ */
+interface PostCareerOutcome {
+  path: string;
+  /** Vollständiger Abschlusssatz - nimmt den Spielernamen selbst entgegen, damit
+   * er unabhängig von `buildEpilogue` wiederverwendbar bleibt. */
+  line: (name: string) => string;
+}
+
+function choosePostCareerOutcome(player: Player): PostCareerOutcome {
+  const { intelligenz, charisma } = player.attributes;
+  const { fuehrung, medienimage, disziplin } = player.traits;
+
+  // Skandal-Narrativ: nie ein positives Medienbild aufgebaut UND wiederholt
+  // disziplinlos aufgefallen - bleibt auch als Ex-Profi im Rampenlicht, nur aus
+  // den falschen Gründen. Bewusst VOR den positiven Pfaden geprüft, damit eine
+  // wirklich verkorkste Bilanz nicht durch einen zufällig hohen Einzelwert
+  // (z.B. Bildung) in ein zu freundliches Narrativ gerettet wird.
+  if (medienimage <= 25 && disziplin <= 35) {
+    return {
+      path: "Zwielichtige Geschäfte & Boulevard-Schlagzeilen",
+      line: (name) =>
+        `Mit Medienimage (${medienimage}) und Disziplin (${disziplin}) tief im Keller sorgt ${name} wohl auch als Ex-Profi noch einige Jahre für negative Schlagzeilen und zwielichtige Geschäfte.`,
+    };
+  }
+
+  // Taktikfuchs: Kopf UND Führungsqualität sprechen für die Trainerbank.
+  if (intelligenz >= 65 && fuehrung >= 60 && intelligenz >= charisma) {
+    return {
+      path: "Trainer / Sportdirektor",
+      line: (name) =>
+        `Als Taktikfuchs mit Intelligenz (${intelligenz}) und Führungsstärke (${fuehrung}) führt der Weg von ${name} an die Seitenlinie - Richtung Trainer/Sportdirektor.`,
+    };
+  }
+
+  // Jugendvorbild: hohe Führungsstärke auch ohne ausgeprägten Fußball-IQ - der
+  // natürliche Kapitänstyp, aus dem später mit hoher Wahrscheinlichkeit selbst
+  // ein Trainer wird.
+  if (fuehrung >= 70) {
+    return {
+      path: "Jugendvorbild mit Trainer-Ambitionen",
+      line: (name) =>
+        `Mit Führungsstärke (${fuehrung}) war ${name} schon als Aktiver Vorbild in der Kabine - die Wahrscheinlichkeit ist hoch, dass daraus bald eine eigene Trainerlaufbahn wird.`,
+    };
+  }
+
+  if (charisma > 60 && medienimage > 40) {
+    return {
+      path: "TV-Experte & Medien",
+      line: (name) =>
+        `Dank Charisma (${charisma}) und Medienimage (${medienimage}) liegt für ${name} die Rolle vor der Kamera nahe - Richtung TV-Experte & Medien.`,
+    };
+  }
+
+  if (player.education > 65) {
+    return {
+      path: "Jugendtrainer & Ausbildung",
+      line: (name) =>
+        `Mit Bildung (${player.education}) und Herz für die Nachwuchsarbeit führt der Weg von ${name} in die Jugendabteilung - Richtung Jugendtrainer & Ausbildung.`,
+    };
+  }
+
+  return {
+    path: "Familienleben abseits der Medien",
+    line: (name) => `Nach Jahren im Rampenlicht sucht ${name} jetzt vor allem eines: ein privates Familienleben abseits der Medien.`,
+  };
+}
+
+export function pickPostCareerPath(player: Player): string {
+  return choosePostCareerOutcome(player).path;
+}
+
+function topAttributeHighlight(player: Player): { label: string; value: number } {
+  let bestKey = ATTRIBUTE_ORDER[0];
+  let bestVal = -Infinity;
+  for (const key of ATTRIBUTE_ORDER) {
+    if (player.attributes[key] > bestVal) {
+      bestVal = player.attributes[key];
+      bestKey = key;
+    }
+  }
+  return { label: ATTRIBUTE_LABEL[bestKey], value: bestVal };
+}
+
+function topTraitHighlight(player: Player): { label: string; value: number } {
+  let bestKey = TRAIT_ORDER[0];
+  let bestVal = -Infinity;
+  for (const key of TRAIT_ORDER) {
+    if (player.traits[key] > bestVal) {
+      bestVal = player.traits[key];
+      bestKey = key;
+    }
+  }
+  return { label: TRAIT_LABEL[bestKey], value: bestVal };
+}
+
+/** Fasst den Beziehungsstatus + Kinder zu einem Satz zusammen - die "Lebensentscheidungen"
+ * abseits des Platzes, die während der Karriere getroffen wurden. */
+function familyLine(player: Player): string {
+  const hasKidsClause = player.children === 0 ? "" : player.children === 1 ? " und hat ein Kind" : ` und hat ${player.children} Kinder`;
+  switch (player.relationshipStatus) {
+    case "verheiratet":
+      return `Privat ist ${player.name} verheiratet${hasKidsClause}.`;
+    case "verlobt":
+      return `Privat ist ${player.name} verlobt${hasKidsClause}.`;
+    case "in_beziehung":
+      return `Privat führt ${player.name} eine feste Beziehung${hasKidsClause}.`;
+    default:
+      return player.children > 0
+        ? `Privat ist ${player.name} alleinerziehend mit ${player.children === 1 ? "einem Kind" : `${player.children} Kindern`}.`
+        : `Privat blieb ${player.name} während der aktiven Karriere ungebunden.`;
+  }
+}
+
+/** "Vereinsgeschichte" ist nur angebracht, wenn ein Klub tatsächlich die Mehrheit
+ * der Karriere getragen hat - bei einer Karriere quer durch mehrere Vereine ohne
+ * klaren Schwerpunkt wäre die Zuschreibung an einen einzelnen Verein irreführend,
+ * dann geht die Karriere allgemeiner in die "Fußballgeschichte" ein. */
+function clubLegacyPhrase(player: Player, tier: string): string {
+  const tenures = buildClubTenures(player);
+  const totalSeasons = tenures.reduce((sum, t) => sum + t.seasons, 0);
+  const dominant = tenures.reduce<(typeof tenures)[number] | undefined>(
+    (best, t) => (!best || t.seasons > best.seasons ? t : best),
+    undefined
+  );
+  if (dominant && totalSeasons > 0 && dominant.seasons / totalSeasons > 0.5) {
+    return `Die Karriere geht als "${tier}" in die Vereinsgeschichte von ${dominant.club} ein.`;
+  }
+  return `Die Karriere geht als "${tier}" in die Fußballgeschichte ein.`;
+}
+
 export function buildEpilogue(player: Player, tier: string): string {
-  const path = player.postCareerPath ?? "Ruhestand";
+  const years = player.age - player.birthAge;
   const trophyText =
     player.careerTotals.trophies.length > 0
-      ? `${player.careerTotals.trophies.length} Titel(n) in der Vitrine`
+      ? `${player.careerTotals.trophies.length} Titel in der Vitrine`
       : "keinem Titel, aber vielen unvergesslichen Momenten";
-  return `Nach ${player.age - player.birthAge} Jahren im Profifußball beendet ${player.name} die aktive Karriere mit ${player.careerTotals.goals} Toren, ${player.careerTotals.assists} Vorlagen und ${trophyText}. Die Karriere wird als "${tier}" in die Vereinsgeschichte eingehen. Danach führt der Weg von ${player.name} in Richtung: ${path}.`;
+  const intro = `Nach ${years} Jahren im Profifußball beendet ${player.name} die aktive Karriere mit ${player.careerTotals.goals} Toren, ${player.careerTotals.assists} Vorlagen und ${trophyText}. ${clubLegacyPhrase(player, tier)}`;
+
+  const topAttr = topAttributeHighlight(player);
+  const topTrait = topTraitHighlight(player);
+  const attrLine = `Auf dem Platz war ${player.name} vor allem für ${topAttr.label} (${topAttr.value}) bekannt, abseits des Rasens für ${topTrait.label} (${topTrait.value}).`;
+
+  const outcome = choosePostCareerOutcome(player);
+
+  return [intro, attrLine, familyLine(player), outcome.line(player.name)].join(" ");
 }
 
 export function buildRetirementEvent(player: Player): GameEvent {
@@ -2130,10 +2277,3 @@ export function buildRetirementEvent(player: Player): GameEvent {
   };
 }
 
-export function pickPostCareerPath(player: Player): string {
-  const { intelligenz, charisma } = player.attributes;
-  if (intelligenz > 65 && intelligenz >= charisma) return "Trainer / Sportdirektor";
-  if (charisma > 60) return "TV-Experte & Medien";
-  if (player.education > 65) return "Jugendtrainer & Ausbildung";
-  return "Ruhestand & Familie";
-}
