@@ -1129,31 +1129,6 @@ export const EVENT_TEMPLATES: EventTemplate[] = [
     }),
   },
   {
-    id: "transfer_angebot",
-    category: "transfer",
-    minAge: 17,
-    maxAge: 38,
-    weight: 2,
-    condition: (p) => p.reputation > 25,
-    build: (p) => ({
-      category: "transfer",
-      title: "Transferangebot eines anderen Vereins",
-      description: `Ein anderer Verein interessiert sich für dich und würde dich gerne von ${club(p)} loseisen.`,
-      choices: [
-        {
-          id: "wechselwunsch",
-          label: "Wechselwunsch äußern",
-          effects: { clubRelation: -8, reputation: 3, wantsTransfer: true, logText: "hat öffentlich einen Wechselwunsch geäußert.", logKind: "negative" },
-        },
-        {
-          id: "loyal",
-          label: "Dem Verein die Treue halten",
-          effects: { clubRelation: 8, morale: 3, wantsTransfer: false, logText: "hat sich öffentlich zum aktuellen Verein bekannt.", logKind: "positive" },
-        },
-      ],
-    }),
-  },
-  {
     id: "transfer_loan",
     category: "transfer",
     minAge: 17,
@@ -4411,64 +4386,6 @@ export const EVENT_TEMPLATES: EventTemplate[] = [
       ],
     }),
   },
-  {
-    id: "transfer_berater_ausland",
-    category: "transfer",
-    minAge: 20,
-    maxAge: 34,
-    weight: 1,
-    condition: (p) => p.reputation > 40 && !p.wantsTransfer,
-    build: () => ({
-      category: "transfer",
-      title: "Der Berater regt einen Wechsel ins Ausland an",
-      // Bewusst noch OHNE konkreten Verein - eine Wechselbereitschaft signalisieren
-      // ist etwas anderes als ein reales Angebot (das kommt, wenn überhaupt, über
-      // das echte Transferangebot-Event mit einem konkret benannten Verein, siehe
-      // `buildClubOfferEvent`/"wishDriven" - garantiert im nächsten Transferfenster,
-      // sobald `wantsTransfer` gesetzt ist).
-      description: "Dein Berater hält dich für reif für einen Wechsel ins Ausland und regt an, offiziell Wechselbereitschaft zu signalisieren - noch gibt es keinen konkreten Verein, nur die Idee.",
-      choices: [
-        {
-          id: "ablehnen",
-          label: "Ablehnen, volle Konzentration auf die laufende Saison",
-          detail: "Kontinuität - stabile Form, Vereinstreue stärkt das Standing.",
-          effects: {
-            clubRelation: 6,
-            morale: 2,
-            traitDeltas: { arbeitsmoral: 1 },
-            logText: "hat die Idee eines Auslandswechsels vorerst verworfen und sich voll auf die laufende Saison konzentriert.",
-            logKind: "positive",
-          },
-        },
-        {
-          id: "sommer_planen",
-          label: "Wechselbereitschaft für den Sommer signalisieren, bis dahin abliefern",
-          detail: "Zielkonflikt zwischen Motivation und Abschied - garantiert konkrete Angebote im nächsten Transferfenster.",
-          effects: {
-            wantsTransfer: true,
-            reputation: 2,
-            clubRelation: -3,
-            logText: "signalisiert über den Berater Wechselbereitschaft für den Sommer, will bis dahin aber noch abliefern.",
-            logKind: "info",
-          },
-        },
-        {
-          id: "koketieren",
-          label: "Öffentlich mit einem Auslandswechsel kokettieren",
-          detail: "Kurzfristiger Verhandlungshebel - Vertrauensbruch mit dem aktuellen Verein, Reservistenrisiko.",
-          effects: {
-            reputation: 3,
-            wantsTransfer: true,
-            clubRelation: -10,
-            traitDeltas: { medienimage: -2 },
-            logText: "kokettiert öffentlich mit einem Auslandswechsel, um die eigene Verhandlungsposition zu verbessern.",
-            logKind: "negative",
-          },
-        },
-      ],
-    }),
-  },
-
   // ---------------------------------------------------------------------
   // PRIVATLEBEN & FAMILIE: Ereignisse jenseits von Beziehung/Heirat/Kindern -
   // Umzug, Krankheit im Umfeld, Medienrummel, Trennung, Freundeskreis,

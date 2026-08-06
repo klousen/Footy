@@ -1,6 +1,6 @@
 import { useState } from "react";
 import type { Player } from "../engine/types";
-import { buildClubTenures } from "../engine/careerEngine";
+import { buildClubTenures, PRO_DEBUT_AGE } from "../engine/careerEngine";
 
 // Feste, kategoriale Farbfolge (Dark-Mode-Steps aus der dataviz-Skill-Referenzpalette) -
 // gegen die App-Panelfläche (#161f2c) mit scripts/validate_palette.js geprüft: Kontrast,
@@ -17,7 +17,11 @@ const FALLBACK_COLOR = "#93a4bb";
  * es schlicht keinen "Verlauf" zu zeigen. */
 export function OverallScoreChart({ player }: { player: Player }) {
   const [activeIndex, setActiveIndex] = useState<number | null>(null);
-  const history = player.seasonHistory;
+  // Der Verlauf soll erst mit dem Profidebüt beginnen, nicht mit der
+  // Jugendakademie (siehe `PRO_DEBUT_AGE`) - die Jugendjahre haben eine ganz
+  // andere Wertespanne (deutlich niedrigere Gesamtstärke) und gehören
+  // erzählerisch nicht zur eigentlichen Profikarriere, die dieses Diagramm zeigt.
+  const history = player.seasonHistory.filter((s) => s.age >= PRO_DEBUT_AGE);
   if (history.length < 2) return null;
 
   const tenures = buildClubTenures(player);

@@ -107,24 +107,6 @@ export function Dashboard({
         </div>
       </div>
 
-      {lastStats && (
-        <div className="panel">
-          <h3>Letzte Saison ({lastStats.seasonLabel})</h3>
-          <div className="contract-grid">
-            <span>Spiele</span>
-            <span>{lastStats.matches}</span>
-            <span>Tore / Vorlagen</span>
-            <span>
-              {lastStats.goals} / {lastStats.assists}
-            </span>
-            <span>Ø Bewertung</span>
-            <span>{lastStats.avgRating}</span>
-            <span>Tabellenplatz</span>
-            <span>{lastStats.leaguePosition}.</span>
-          </div>
-        </div>
-      )}
-
       <div className="dashboard-actions">
         <button className="btn btn-primary" onClick={onStartSeason}>
           Neue Saison beginnen

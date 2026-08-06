@@ -1248,7 +1248,7 @@ export function applyLeaguePromotionRelegation(player: Player, league: LeagueSta
 // Sichtbare Vereinswechsel: Profidebüt, Transferangebote, Bankphasen-Druck
 // ---------------------------------------------------------------------------
 
-export type ClubOfferReason = "pro-debut" | "opportunity" | "pressure";
+export type ClubOfferReason = "pro-debut" | "opportunity" | "pressure" | "lockruf";
 
 const CLUB_OFFER_PREFIX = "club_offer:";
 
@@ -1277,8 +1277,15 @@ export function clubOfferTemplateId(reason: ClubOfferReason): string {
   return `${CLUB_OFFER_PREFIX}${reason}`;
 }
 
+/** Alter des Profidebüts - fest verdrahtet (siehe `shouldOfferProDebut`). Auch als
+ * Cutoff genutzt, um die Jugendakademie-Jahre aus rückblickenden Vereinstreue-/
+ * Karriereverlauf-Auswertungen auszuklammern (siehe `buildClubTenures`): die
+ * "Vereinszugehörigkeit" im Sinne der Karrierestatistik beginnt erst mit dem
+ * ersten Profivertrag, nicht mit der Jugendakademie. */
+export const PRO_DEBUT_AGE = 18;
+
 export function shouldOfferProDebut(player: Player): boolean {
-  return player.age === 18 && player.contract.squadRole === "Ausbildungsspieler";
+  return player.age === PRO_DEBUT_AGE && player.contract.squadRole === "Ausbildungsspieler";
 }
 
 export function shouldTriggerTransferPressure(player: Player): boolean {
@@ -1309,6 +1316,29 @@ export function shouldTriggerTransferOpportunity(player: Player): boolean {
   if (player.wantsTransfer) return true;
   const chance = notableSeasonEvent ? 0.92 : last?.scoreTier === "Überragende Saison" ? 0.75 : 0.55;
   return (goodForm || notableSeasonEvent) && rng() < chance;
+}
+
+/**
+ * Seltener, eigenständiger Auslöser für einen spontanen Lockversuch EINES
+ * einzelnen (meist größeren) Vereins - unabhängig vom regulären Wechselfenster-
+ * System (`shouldTriggerTransferOpportunity`), das schon auf gute Form reagiert
+ * und mehrere Kandidaten zeigt. Feuert nur bei nachweislich starker Leistung
+ * ("nur wenn die Leistungen stimmen") und nie parallel zu einem bereits aktiv
+ * geäußerten Wechselwunsch (der läuft über die reguläre, priorisierte Logik).
+ * Bewusst mit niedrigster Priorität in `decideClubOfferInjection` verdrahtet,
+ * damit es die bestehenden Auslöser nicht verdrängt, sondern nur die seltenen
+ * Lücken füllt, in denen sonst gar kein Vereins-Event fällig wäre.
+ */
+export function shouldTriggerSingleClubApproach(player: Player): boolean {
+  if (player.stage === "jugend") return false;
+  if (player.wantsTransfer) return false;
+  if (player.injury && player.injury.weeksOut > 0) return false;
+  if (player.seasonsSinceTransferEvent < 1) return false;
+  const last = player.seasonHistory[player.seasonHistory.length - 1];
+  if (!last) return false;
+  const strongForm = last.avgRating >= 7.0 || last.scoreTier === "Starke Saison" || last.scoreTier === "Überragende Saison";
+  if (!strongForm) return false;
+  return rng() < 0.22;
 }
 
 /** Baut die Liga-Pyramide eines fremden Landes lazy und cached sie danach dauerhaft -
@@ -1419,7 +1449,10 @@ function buildClubOfferEvent(
 
   let targetStrength: number;
   let excludeCurrent: boolean;
-  const totalCount = 3;
+  // "lockruf" zeigt bewusst nur EINEN konkreten Kandidaten (siehe unten) statt
+  // einer Auswahl - ein einzelner, überraschender Lockversuch fühlt sich anders
+  // an als organisches Scouting-Interesse mehrerer Vereine gleichzeitig.
+  const totalCount = reason === "lockruf" ? 1 : 3;
   if (reason === "pro-debut") {
     targetStrength = targetStrengthForReputation(player.reputation, overall);
     // Der eigene Jugendverein bekommt einen eigenen, klar erkennbaren
@@ -1447,14 +1480,25 @@ function buildClubOfferEvent(
     const ratingAnchor = overall - 3 + rng() * 8;
     targetStrength = clamp(Math.max(jumpTarget, ratingAnchor), 30, 96);
     excludeCurrent = true;
+  } else if (reason === "lockruf") {
+    // Deutlich über dem eigenen Vereinsniveau anpeilen - der Lockversuch soll
+    // sich klar wie ein "größerer Verein" anfühlen, nicht wie eine seitliche
+    // Bewegung.
+    const jumpTarget = currentStrength + 15 + rng() * 20;
+    const ratingAnchor = overall + rng() * 6;
+    targetStrength = clamp(Math.max(jumpTarget, ratingAnchor), 35, 97);
+    excludeCurrent = true;
   } else {
     targetStrength = clamp(currentStrength - 18, 22, 90);
     excludeCurrent = true;
   }
 
   // Ein Teil der Angebote kann aus dem Ausland kommen - realistisch auch schon für
-  // Jungspieler beim Profidebüt, nicht erst für etablierte Stars.
-  const wantsForeign = rng() < internationalOfferChance(reason, player, overall);
+  // Jungspieler beim Profidebüt, nicht erst für etablierte Stars. "lockruf" bleibt
+  // bewusst immer inländisch - ein einzelner Auslandskandidat würde die
+  // Total-Kandidatenzahl (genau 1, siehe oben) durcheinanderbringen und die
+  // pointierte "ein Verein will dich SOFORT"-Prämisse verwässern.
+  const wantsForeign = reason === "lockruf" ? false : rng() < internationalOfferChance(reason, player, overall);
   const veryFamous = player.reputation >= 70 || overall >= 80;
   const foreignCount = wantsForeign ? (veryFamous && rng() < 0.3 ? 2 : 1) : 0;
   const domesticCount = totalCount - foreignCount;
@@ -1509,7 +1553,7 @@ function buildClubOfferEvent(
   // einmal länger war ("Rückkehr zu alten Wirkungsstätten") statt nur von völlig
   // neuen Vereinen - ersetzt dazu mit einer gewissen Wahrscheinlichkeit einen der
   // sonst zufällig gewählten Kandidaten (siehe `pastClubCandidate`).
-  if ((player.stage === "veteran" || player.stage === "spaetphase") && reason !== "pro-debut" && rng() < 0.45) {
+  if ((player.stage === "veteran" || player.stage === "spaetphase") && reason !== "pro-debut" && reason !== "lockruf" && rng() < 0.45) {
     const past = pastClubCandidate(player, league, foreignLeagues);
     if (past && candidates.length > 0 && !candidates.some((c) => c.club.id === past.club.id)) {
       candidates[Math.floor(rng() * candidates.length)] = past;
@@ -1535,7 +1579,10 @@ function buildClubOfferEvent(
       label: cand.isForeign
         ? `Auslandswechsel zu ${cand.club.city} (${cand.flag} ${cand.countryName})`
         : `Wechsel zu ${cand.club.city}`,
-      detail: `${cand.leagueLabel} · Vereinsstärke ${cand.club.strength} · Einsatzminuten-Versprechen: ${promisedRole} (${Math.round(promiseChance * 100)}% Erfolgschance) · Gehalt ca. ${formatMoney(wagePreview)}/Jahr${cand.isForeign ? " · Auslandswechsel" : ""}`,
+      // Vereinsstärke des Kandidaten DIREKT neben der des aktuellen Vereins, damit
+      // der Sprung (oder Rückschritt) auf einen Blick erkennbar ist, statt den
+      // eigenen Vereinswert erst im Dashboard nachschlagen zu müssen.
+      detail: `${cand.leagueLabel} · Vereinsstärke ${cand.club.strength} (aktuell: ${currentStrength}) · Einsatzminuten-Versprechen: ${promisedRole} (${Math.round(promiseChance * 100)}% Erfolgschance) · Gehalt ca. ${formatMoney(wagePreview)}/Jahr${cand.isForeign ? " · Auslandswechsel" : ""}`,
       effects: {},
     };
   });
@@ -1558,11 +1605,11 @@ function buildClubOfferEvent(
       detail: `Bleib deinem Jugendverein treu · Rolle voraussichtlich ${squadRoleForOverall(overall, currentStrength)} · Gehalt ca. ${formatMoney(stayWagePreview)}/Jahr · Vertrauensbonus durch die vertraute Umgebung`,
       effects: {},
     });
-  } else if (reason === "opportunity") {
+  } else if (reason === "opportunity" || reason === "lockruf") {
     choices.push({
       id: "stay",
       label: `Bei ${player.club.name} bleiben`,
-      detail: "Zeigt dem Verein die Treue - stärkt die Vereinsbeziehung.",
+      detail: `Zeigt dem Verein die Treue - stärkt die Vereinsbeziehung. Vereinsstärke bleibt bei ${currentStrength}.`,
       effects: {},
     });
   } else if (reason === "pressure") {
@@ -1581,6 +1628,12 @@ function buildClubOfferEvent(
   // immer pauschal "Scouts sind aufmerksam geworden" behaupten, wenn der Spieler
   // selbst den Wechsel eingefordert hat (siehe `shouldTriggerTransferOpportunity`).
   const wishDriven = reason === "opportunity" && player.wantsTransfer && !relegatedEscape && !promotedReward;
+  // "lockruf" zeigt IMMER genau einen Kandidaten (siehe totalCount oben) - die
+  // Rahmung wechselt zufällig zwischen "der Berater bringt es mit" und "der
+  // Verein meldet sich direkt", damit die neue Mechanik nicht bei jeder Karriere
+  // exakt gleich klingt.
+  const lockrufClub = reason === "lockruf" ? candidates[0]?.club.city : undefined;
+  const lockrufBeraterFraming = reason === "lockruf" && rng() < 0.5;
 
   const title =
     reason === "pro-debut"
@@ -1591,6 +1644,10 @@ function buildClubOfferEvent(
       ? "Der Aufstieg zahlt sich im Sommer aus"
       : wishDriven
       ? "Dein Wechselwunsch trägt Früchte"
+      : reason === "lockruf"
+      ? lockrufBeraterFraming
+        ? "Dein Berater bringt ein konkretes Angebot mit"
+        : `${lockrufClub} will dich sofort verpflichten`
       : reason === "opportunity"
       ? "Interesse von anderen Vereinen im Sommertransferfenster"
       : "Wechselgerüchte im Winterfenster";
@@ -1623,6 +1680,10 @@ function buildClubOfferEvent(
       ? `Dein starker Anteil am Aufstieg mit ${player.club.name} beweist deine Extraklasse - im Sommertransferfenster werden auch größere Vereine auf dich aufmerksam. ${count} Vereine erkundigen sich.${foreignNote}`
       : wishDriven
       ? `Dein öffentlich geäußerter Wechselwunsch bleibt nicht ungehört - im Sommertransferfenster melden sich prompt ${count} Vereine, die genau darauf gewartet haben.${foreignNote}`
+      : reason === "lockruf"
+      ? lockrufBeraterFraming
+        ? `${lastSeasonRef}hat dein Berater im Hintergrund die Fühler ausgestreckt - ${lockrufClub} (Vereinsstärke ${candidates[0]?.club.strength}) legt jetzt ein einzelnes, konkretes Angebot auf den Tisch. Kein Vorgeplänkel, direkt mit Konditionen: annehmen oder bei ${player.club.name} (Vereinsstärke ${currentStrength}) bleiben.`
+        : `${lastSeasonRef}meldet sich völlig überraschend ${lockrufClub} (Vereinsstärke ${candidates[0]?.club.strength}) mit einem einzelnen, konkreten Angebot. Kein Vorgeplänkel, direkt mit Konditionen: annehmen oder bei ${player.club.name} (Vereinsstärke ${currentStrength}) bleiben.`
       : reason === "opportunity"
       ? `${lastSeasonRef}sind Scouts auf ${player.name} bei ${player.club.name} aufmerksam geworden. Im Sommertransferfenster erkundigen sich ${count} Vereine nach dir.${foreignNote}`
       : `${pressureReason}. Im Winterfenster wäre der Verein offen für einen Wechsel - ${count} Vereine haben bereits angefragt.${foreignNote}`;
@@ -1674,6 +1735,13 @@ export function decideClubOfferInjection(player: Player): ClubOfferReason | null
   if (shouldTriggerTransferOpportunity(player)) {
     player.seasonsSinceTransferEvent = 0;
     return "opportunity";
+  }
+  // Niedrigste Priorität: der seltene, direkte Lockversuch eines einzelnen
+  // Vereins füllt nur die Lücken, in denen keiner der obigen (höher
+  // priorisierten) Auslöser schon gegriffen hat.
+  if (shouldTriggerSingleClubApproach(player)) {
+    player.seasonsSinceTransferEvent = 0;
+    return "lockruf";
   }
   return null;
 }
@@ -1978,7 +2046,12 @@ export function applyClubOfferChoice(
  */
 export function buildClubTenures(player: Player): ClubTenure[] {
   const tenures: ClubTenure[] = [];
+  // Vereinszugehörigkeit im Sinne der Karrierestatistik ("Vereinstreue",
+  // Karriereverlauf, "Vereinsgeschichte von X") beginnt erst mit dem ersten
+  // Profivertrag - die Jugendakademie-Jahre zählen bewusst nicht mit (siehe
+  // `PRO_DEBUT_AGE`).
   for (const s of player.seasonHistory) {
+    if (s.age < PRO_DEBUT_AGE) continue;
     const last = tenures[tenures.length - 1];
     if (last && last.club === s.club) {
       last.toAge = s.age;
