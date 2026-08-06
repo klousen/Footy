@@ -1242,6 +1242,7 @@ export const EVENT_TEMPLATES: EventTemplate[] = [
     minAge: 18,
     maxAge: 22,
     weight: 2,
+    exclusiveGroup: "beziehung_start",
     condition: (p) => p.relationshipStatus === "single",
     build: (_p, ctx) => {
       const name = randomPartnerName(ctx.rng);
@@ -1277,6 +1278,7 @@ export const EVENT_TEMPLATES: EventTemplate[] = [
     minAge: 20,
     maxAge: 34,
     weight: 2,
+    exclusiveGroup: "beziehung_start",
     condition: (p) => p.relationshipStatus === "single",
     build: (_p, ctx) => {
       const name = randomPartnerName(ctx.rng);
@@ -1300,12 +1302,85 @@ export const EVENT_TEMPLATES: EventTemplate[] = [
     },
   },
   {
+    id: "beziehung_liebe_im_alter",
+    category: "beziehung",
+    minAge: 30,
+    maxAge: 41,
+    weight: 1.8,
+    exclusiveGroup: "beziehung_start",
+    condition: (p) => p.relationshipStatus === "single" && p.age >= 30,
+    build: (p, ctx) => {
+      const name = randomPartnerName(ctx.rng);
+      const hasKids = p.children > 0;
+      return {
+        category: "beziehung",
+        title: "Zweite Chance auf die große Liebe",
+        description: hasKids
+          ? `Mit ${p.age} Jahren lernst du überraschend ${name} kennen - eine zweite Chance auf die große Liebe, die du nicht mehr erwartet hattest. Mit ${p.children} Kind(ern) ist die Entscheidung diesmal aber nicht nur deine eigene.`
+          : `Mit ${p.age} Jahren lernst du überraschend ${name} kennen - eine zweite Chance auf die große Liebe, die du nicht mehr erwartet hattest.`,
+        choices: hasKids
+          ? [
+              {
+                id: "einlassen",
+                label: "Sich vorsichtig darauf einlassen, Kinder im Blick behalten",
+                detail: "Schön, aber emotional nicht einfach - die Familiensituation macht es komplizierter.",
+                effects: {
+                  relationshipStatus: "in_beziehung",
+                  partnerName: name,
+                  morale: 6,
+                  attributes: { mentalitaet: -1 },
+                  logText: `lässt sich vorsichtig auf die unerwartete neue Liebe mit ${name} ein - mit Rücksicht auf die Kinder emotional keine leichte Entscheidung.`,
+                  logKind: "positive",
+                },
+              },
+              {
+                id: "abwarten",
+                label: "Erstmal abwarten - die Kinder sollen nicht noch mehr Veränderung erleben",
+                effects: { logText: "stellt die Bedürfnisse der Kinder vorerst über die eigene neue Liebe.", logKind: "info" },
+              },
+            ]
+          : [
+              {
+                id: "einlassen",
+                label: "Sich voll darauf einlassen",
+                effects: {
+                  relationshipStatus: "in_beziehung",
+                  partnerName: name,
+                  morale: 10,
+                  logText: `hat sich mit ${name} auf eine unerwartete zweite Liebe eingelassen.`,
+                  logKind: "positive",
+                },
+              },
+              {
+                id: "abwarten",
+                label: "Vorsichtig bleiben",
+                effects: { logText: "bleibt vorerst vorsichtig - noch nicht bereit für eine neue Beziehung.", logKind: "info" },
+              },
+            ],
+      };
+    },
+  },
+  {
     id: "beziehungskonflikt",
     category: "beziehung",
     minAge: 18,
     maxAge: 36,
     weight: 2,
-    condition: (p) => p.relationshipStatus === "in_beziehung" || p.relationshipStatus === "verlobt" || p.relationshipStatus === "verheiratet",
+    exclusiveGroup: "beziehung_crisis",
+    // Echter Auslöser statt reiner Stimmungstext: die Beschreibung spricht von
+    // "vielen Reisen und Einsätzen" - das soll auch mechanisch stimmen, nicht
+    // pauschal für jeden Spieler in einer Beziehung gelten. Greift daher nur bei
+    // einer wirklich reisereichen Kaderrolle (Stammspieler/Rotation) ODER einer
+    // nachweislich vollen letzten Saison (viele Spiele).
+    condition: (p) => {
+      if (!(p.relationshipStatus === "in_beziehung" || p.relationshipStatus === "verlobt" || p.relationshipStatus === "verheiratet")) {
+        return false;
+      }
+      const busyRole = p.contract.squadRole === "Stammspieler" || p.contract.squadRole === "Rotation";
+      const lastSeason = p.seasonHistory[p.seasonHistory.length - 1];
+      const busySchedule = lastSeason ? lastSeason.matches >= 12 : false;
+      return busyRole || busySchedule;
+    },
     build: (p) => ({
       category: "beziehung",
       title: "Stress in der Beziehung",
@@ -1340,6 +1415,157 @@ export const EVENT_TEMPLATES: EventTemplate[] = [
         },
       ],
     }),
+  },
+  {
+    id: "beziehung_auslandswechsel_risiko",
+    category: "beziehung",
+    minAge: 19,
+    maxAge: 37,
+    weight: 1.6,
+    exclusiveGroup: "beziehung_crisis",
+    // Auslöser: ein FRISCHER Wechsel, der aktuell im Ausland endet - entweder der
+    // erste Schritt weg von der Heimat oder ein weiterer Sprung von einem
+    // Auslandsverein zum nächsten. Beides stellt eine bestehende Beziehung vor
+    // dieselbe Grundfrage: mitziehen, Fernbeziehung wagen oder trennen.
+    condition: (p) =>
+      (p.relationshipStatus === "in_beziehung" || p.relationshipStatus === "verlobt" || p.relationshipStatus === "verheiratet") &&
+      p.country !== p.homeCountryId &&
+      recentlyTransferred(p),
+    build: (p) => {
+      const name = p.partnerName ?? "deine Partnerin/dein Partner";
+      return {
+        category: "beziehung",
+        title: "Fernbeziehung oder Umzug?",
+        description: `Der Wechsel ins Ausland zu ${club(p)} stellt die Beziehung mit ${name} auf die Probe: gemeinsam auswandern, die Distanz überbrücken oder einen Schlussstrich ziehen?`,
+        choices: [
+          {
+            id: "umzug",
+            label: `${name} zieht mit`,
+            detail: "Große gemeinsame Veränderung - kostet Geld und Eingewöhnungszeit, stärkt aber den Rückhalt.",
+            effects: {
+              wealth: -15000,
+              morale: 6,
+              clubRelation: 2,
+              logText: `ist mit ${name} gemeinsam ins Ausland gezogen - ein mutiger Neuanfang zu zweit.`,
+              logKind: "positive",
+            },
+          },
+          {
+            id: "fernbeziehung",
+            label: "Fernbeziehung wagen",
+            detail: "Bleibt vorerst getrennt wohnen - ob die Beziehung die Distanz übersteht, ist offen.",
+            effects: {},
+            followUpChance: {
+              chance: 0.5,
+              success: {
+                morale: 2,
+                traitDeltas: { disziplin: 1 },
+                logText: `hält die Fernbeziehung mit ${name} über die Distanz erstaunlich gut durch.`,
+                logKind: "positive",
+              },
+              failure: {
+                relationshipStatus: "single",
+                partnerName: null,
+                morale: -9,
+                logText: `Die Fernbeziehung mit ${name} ist an der Distanz zum neuen Auslandsverein zerbrochen.`,
+                logKind: "negative",
+              },
+            },
+          },
+          {
+            id: "trennen",
+            label: "Einvernehmlich trennen",
+            detail: "Reiner Schnitt vor dem Neuanfang - schmerzhaft, aber klar.",
+            effects: {
+              relationshipStatus: "single",
+              partnerName: null,
+              morale: -5,
+              logText: `hat sich vor dem Auslandswechsel einvernehmlich von ${name} getrennt.`,
+              logKind: "negative",
+            },
+          },
+        ],
+      };
+    },
+  },
+  {
+    id: "beziehung_eigene_lustlosigkeit",
+    category: "beziehung",
+    minAge: 21,
+    maxAge: 38,
+    weight: 1.4,
+    exclusiveGroup: "beziehung_crisis",
+    // Bewusster Gegenpol zu "beziehungskonflikt" (Belastung durch die Karriere)
+    // und "beziehung_auslandswechsel_risiko" (äußerer Auslöser): hier liegt es
+    // nicht am Partner oder den Umständen, sondern an der eigenen schwindenden
+    // Begeisterung - ein ehrlicherer, unbequemerer Auslöser.
+    condition: (p) => p.relationshipStatus === "in_beziehung" || p.relationshipStatus === "verlobt" || p.relationshipStatus === "verheiratet",
+    build: (p) => {
+      const name = p.partnerName ?? "deiner Partnerin/deinem Partner";
+      return {
+        category: "beziehung",
+        title: "Der Funke fehlt",
+        description: `Du merkst: Die Begeisterung für die Beziehung mit ${name} ist nicht mehr da wie früher - und es liegt diesmal nicht am Trubel um die Karriere, sondern an dir selbst.`,
+        choices: [
+          {
+            id: "ansprechen",
+            label: "Ehrlich ansprechen und aktiv daran arbeiten",
+            detail: "Unangenehmes Gespräch - echte Chance, die Beziehung neu zu beleben.",
+            effects: {},
+            followUpChance: {
+              chance: 0.6,
+              success: {
+                morale: 5,
+                traitDeltas: { fuehrung: 1 },
+                logText: `hat die eigene Lustlosigkeit offen angesprochen - das ehrliche Gespräch hat die Beziehung mit ${name} neu belebt.`,
+                logKind: "positive",
+              },
+              failure: {
+                relationshipStatus: "single",
+                partnerName: null,
+                morale: -4,
+                logText: `hat die eigene Lustlosigkeit offen angesprochen - das Gespräch hat nur bestätigt, dass es vorbei ist mit ${name}.`,
+                logKind: "negative",
+              },
+            },
+          },
+          {
+            id: "beenden",
+            label: "Sich ehrlich eingestehen und Schluss machen",
+            detail: "Kein äußerer Anlass, nur die eigene Ehrlichkeit - ein sauberer, fairer Schnitt.",
+            effects: {
+              relationshipStatus: "single",
+              partnerName: null,
+              morale: -4,
+              traitDeltas: { disziplin: 1 },
+              logText: `hat sich eingestanden, selbst nicht mehr voll bei der Sache zu sein, und sich ehrlich von ${name} getrennt.`,
+              logKind: "negative",
+            },
+          },
+          {
+            id: "ignorieren",
+            label: "Einfach weiterlaufen lassen, ohne es anzusprechen",
+            detail: "Wenig Ehrlichkeit sich selbst gegenüber - riskiert ein böses Erwachen.",
+            effects: {},
+            followUpChance: {
+              chance: 0.35,
+              success: {
+                logText: "hat die eigene Lustlosigkeit einfach ignoriert - die Beziehung läuft äußerlich unverändert weiter.",
+                logKind: "info",
+              },
+              failure: {
+                relationshipStatus: "single",
+                partnerName: null,
+                morale: -9,
+                reputation: -1,
+                logText: `hat die eigene Lustlosigkeit einfach ignoriert, bis die Beziehung mit ${name} daran zerbrochen ist.`,
+                logKind: "negative",
+              },
+            },
+          },
+        ],
+      };
+    },
   },
   {
     id: "heiratsantrag",
@@ -4609,6 +4835,7 @@ export const EVENT_TEMPLATES: EventTemplate[] = [
     minAge: 19,
     maxAge: 38,
     weight: 1,
+    exclusiveGroup: "beziehung_crisis",
     condition: (p) => p.relationshipStatus === "in_beziehung",
     build: (p) => ({
       category: "beziehung",

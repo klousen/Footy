@@ -183,6 +183,7 @@ export function createPlayer(
       definingMoment: null,
       edeljokerLocked: false,
       formSlumpSeasons: 0,
+      secondSpringSeasons: 0,
     },
   };
 }
@@ -302,7 +303,12 @@ export function pickSeasonTemplateIds(
       const categoryRecencyFactor =
         catLastSeason === undefined ? 1 : clamp((seasonNumber - catLastSeason) / 2, 0.4, 1);
       const injuryFocusFactor = injured && t.category === "verletzung" ? 4 : 1;
-      return t.weight * categoryFactor * recencyFactor * categoryRecencyFactor * injuryFocusFactor;
+      // "Zweiter Frühling" (siehe `applyEffects`): nach einer kinderlosen Trennung
+      // sind "neue Beziehung"-Templates (exclusiveGroup "beziehung_start") für
+      // einige Saisons deutlich wahrscheinlicher.
+      const secondSpringFactor =
+        t.exclusiveGroup === "beziehung_start" && player.secondSpringSeasons > 0 ? 3 : 1;
+      return t.weight * categoryFactor * recencyFactor * categoryRecencyFactor * injuryFocusFactor * secondSpringFactor;
     });
     const totalWeight = weights.reduce((a, b) => a + b, 0);
     let r = rng() * totalWeight;
@@ -317,6 +323,17 @@ export function pickSeasonTemplateIds(
     usedCategoriesThisSeason.set(template.category, (usedCategoriesThisSeason.get(template.category) ?? 0) + 1);
     recentTemplateSeasons[template.id] = seasonNumber;
     localPool.splice(idx, 1);
+    // Exklusivgruppe: kein zweites Template DERSELBEN Gruppe darf in dieser
+    // Saison noch gezogen werden - verhindert z.B. zwei "neue Beziehung"-
+    // Events in derselben Saison (beide wären beim Auswählen noch gültig
+    // gewesen, weil der Spieler zu diesem Zeitpunkt noch "single" war -
+    // siehe Bugreport: zwei Partnerinnen in derselben Saison ohne Trennung
+    // dazwischen).
+    if (template.exclusiveGroup) {
+      for (let j = localPool.length - 1; j >= 0; j--) {
+        if (localPool[j].exclusiveGroup === template.exclusiveGroup) localPool.splice(j, 1);
+      }
+    }
   }
 
   return chosen;
@@ -346,20 +363,31 @@ export function buildEventFromId(
     const reason = id.slice(CLUB_OFFER_PREFIX.length) as ClubOfferReason;
     return buildClubOfferEvent(player, league, reason, foreignLeagues);
   }
+  const quietWeekFallback = (): GameEvent => ({
+    id: `fallback-${player.age}-${Math.round(rng() * 1e6)}`,
+    templateId: id,
+    category: "meilenstein",
+    title: "Ruhige Woche",
+    description: `Bei ${player.club.name} verläuft die Woche ereignislos.`,
+    choices: [{ id: "ok", label: "Weiter", effects: {} }],
+  });
   const template = getTemplateById(id);
   if (!template) {
     // Sollte praktisch nie vorkommen, aber sicherheitshalber ein neutraler Fallback
-    return {
-      id: `fallback-${player.age}-${Math.round(rng() * 1e6)}`,
-      templateId: id,
-      category: "meilenstein",
-      title: "Ruhige Woche",
-      description: `Bei ${player.club.name} verläuft die Woche ereignislos.`,
-      choices: [{ id: "ok", label: "Weiter", effects: {} }],
-    };
+    return quietWeekFallback();
   }
   // Fortsetzungs-Stufen tragen ihren Kontext (z.B. Namen) im passenden StoryThread.
   const thread = player.activeStorylines.find((t) => t.nextTemplateId === id);
+  // Sicherheitsnetz: `condition` wurde nur EINMAL zu Saisonbeginn geprüft (siehe
+  // `pickSeasonTemplateIds`) - ein FRÜHERES Event derselben Saison kann den
+  // Spielerzustand seither verändert haben (z.B. eine Trennung), wodurch ein
+  // schon gewähltes Template inhaltlich nicht mehr passt (z.B. ein zweites
+  // "neue Beziehung"-Event, obwohl der Spieler durch das erste bereits wieder
+  // vergeben ist). Garantierte Storyline-Fortsetzungen (`thread` gesetzt) sind
+  // davon ausgenommen - die laufen unabhängig von `condition`.
+  if (!thread && template.condition && !template.condition(player)) {
+    return quietWeekFallback();
+  }
   const built = template.build(player, { rng, storyData: thread?.data });
   return { ...built, id: `${template.id}-${player.age}-${Math.round(rng() * 1e6)}`, templateId: template.id };
 }
@@ -423,6 +451,16 @@ function applyEffects(player: Player, effects: EventChoice["effects"], season: n
     player.contract.wagePerYear = Math.round((player.contract.wagePerYear * effects.wageMultiplier) / 100) * 100;
   }
   if (effects.relationshipStatus) player.relationshipStatus = effects.relationshipStatus;
+  // "Zweiter Frühling": jede Trennung (relationshipStatus -> "single") OHNE
+  // Kinder erhöht für einige Saisons die Chance, eine neue Partnerin/einen
+  // neuen Partner zu finden (siehe `pickSeasonTemplateIds`, exclusiveGroup
+  // "beziehung_start") - zentral hier statt in jedem einzelnen Trennungs-Event
+  // einzeln, damit sich der Effekt automatisch auf JEDE Trennung anwendet
+  // (auch künftige Events), nicht nur auf die, bei denen es explizit
+  // eingebaut wurde.
+  if (effects.relationshipStatus === "single" && player.children === 0) {
+    player.secondSpringSeasons = Math.max(player.secondSpringSeasons, 3);
+  }
   if (effects.partnerName !== undefined) player.partnerName = effects.partnerName;
   if (effects.childrenDelta) player.children = Math.max(0, player.children + effects.childrenDelta);
   if (effects.capsDelta) player.nationalTeamCaps = Math.max(0, player.nationalTeamCaps + effects.capsDelta);
@@ -1020,6 +1058,7 @@ export function ageUpPlayer(player: Player): void {
   if (player.startingRoleGuaranteeSeasons > 0) player.startingRoleGuaranteeSeasons -= 1;
   if (player.trainingBoostSeasons > 0) player.trainingBoostSeasons -= 1;
   if (player.formSlumpSeasons > 0) player.formSlumpSeasons -= 1;
+  if (player.secondSpringSeasons > 0) player.secondSpringSeasons -= 1;
 
   if (player.injury) {
     const remaining = player.injury.weeksOut - 16; // Sommerpause heilt viel

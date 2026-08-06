@@ -342,6 +342,14 @@ export interface EventTemplate {
    * nicht in `eligibleTemplates()` auf.
    */
   storylineOnly?: boolean;
+  /**
+   * Templates mit derselben `exclusiveGroup` können nie in derselben Saison
+   * beide gezogen werden (siehe `pickSeasonTemplateIds`) - verhindert z.B.,
+   * dass zwei "neue Beziehung"-Events in derselben Saison feuern, obwohl
+   * beide beim Auswählen (Saisonbeginn) noch unabhängig voneinander gültig
+   * waren (der Spieler war zu dem Zeitpunkt noch bei beiden "single").
+   */
+  exclusiveGroup?: string;
   build: (
     player: Player,
     ctx: { rng: () => number; storyData?: Record<string, string> }
@@ -447,6 +455,11 @@ export interface Player {
   /** Solange > 0, drückt ein Formtief (siehe "sommermaerchen_delle_1") zusätzlich
    * auf die Saison-Bewertung in `simulateSeason` - klingt über die Saisons ab. */
   formSlumpSeasons: number;
+  /** "Zweiter Frühling": solange > 0, sind Templates mit `exclusiveGroup:
+   * "beziehung_start"` in `pickSeasonTemplateIds` deutlich wahrscheinlicher -
+   * wird nach einer Trennung OHNE Kinder gesetzt (siehe `applyEffects`), klingt
+   * über die Saisons ab. */
+  secondSpringSeasons: number;
 }
 
 export interface Achievement {
