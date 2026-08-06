@@ -46,9 +46,8 @@ export function SeasonSummary({
         {stats.possibleMinutes > 0 && (
           <SummaryStat
             label="Einsatzquote"
-            value={`${stats.minutesPlayed}/${stats.possibleMinutes} Min. (${Math.round(
-              (stats.minutesPlayed / stats.possibleMinutes) * 100
-            )}%)`}
+            value={`${Math.round((stats.minutesPlayed / stats.possibleMinutes) * 100)}%`}
+            detail={`${stats.minutesPlayed}/${stats.possibleMinutes} Min.`}
           />
         )}
         {stats.capsThisSeason > 0 && (
@@ -128,10 +127,15 @@ export function SeasonSummary({
   );
 }
 
-function SummaryStat({ label, value }: { label: string; value: string }) {
+function SummaryStat({ label, value, detail }: { label: string; value: string; detail?: string }) {
   return (
     <div className="stat-chip">
       <span className="stat-value">{value}</span>
+      {/* Optionale kleine Detailzeile (z.B. die rohen Einsatzminuten hinter der
+          Prozentzahl) - bewusst getrennt vom Hauptwert, statt beides in einen
+          langen String zu packen: ein langer String wie "93/1980 Min. (5%)"
+          brach in der schmalen Chip-Box auf drei Zeilen um und wirkte kaputt. */}
+      {detail && <span className="stat-detail">{detail}</span>}
       <span className="stat-label">{label}</span>
     </div>
   );

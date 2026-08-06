@@ -200,13 +200,20 @@ export function simulateLeaguePromotionRelegation(
  * die Tabelle beim Runterlesen nie wieder "ansteigt" (wie in einer echten Liga).
  * Die Punktzahl ist danach immer exakt 3×Siege+Unentschieden - keine
  * kosmetische Rundungsdifferenz zwischen den Spalten.
+ *
+ * Die Spielanzahl (`G`) ergibt sich aus einer ECHTEN Hin- und Rückrunde
+ * (jeder Verein spielt gegen jeden anderen zweimal, 2×(Vereinsanzahl-1)) - NICHT
+ * aus der pauschalen Saison-Spielanzahl des Spielers (die variiert je nach
+ * Kaderrolle/Verletzung und hat mit der Liga-Größe nichts zu tun). Die
+ * Vereinsanzahl je Liga-Ebene schwankt in diesem Spiel real zwischen 12 und 24
+ * (siehe leagues.ts) - eine feste Zahl wie 34 wäre für die meisten Ligen schlicht
+ * falsch (12 Vereine → 22 Spiele, 24 Vereine → 46 Spiele, nicht 30/34).
  */
 function buildLeagueTable(
   clubs: ClubState[],
   playerClubId: string,
   playerClubName: string,
   leaguePosition: number,
-  matches: number,
   rngFn: () => number
 ): TableRow[] {
   const total = clubs.length;
@@ -233,7 +240,7 @@ function buildLeagueTable(
     }
   }
 
-  const G = Math.max(1, matches);
+  const G = Math.max(2, 2 * (total - 1)); // Hin- und Rückrunde
   const topPts = Math.round(2.15 * G);
   const bottomPts = Math.round(0.55 * G);
   const avgStep = total > 1 ? (topPts - bottomPts) / (total - 1) : 0;
@@ -303,11 +310,10 @@ export function buildTableSnapshot(
   playerClubId: string,
   playerClubName: string,
   leaguePosition: number,
-  matches: number,
   rngFn: () => number
 ): TableRow[] {
   const clubs = clubsForTier(league, tier);
-  const fullTable = buildLeagueTable(clubs, playerClubId, playerClubName, leaguePosition, matches, rngFn);
+  const fullTable = buildLeagueTable(clubs, playerClubId, playerClubName, leaguePosition, rngFn);
   const idx = fullTable.findIndex((r) => r.isPlayerClub);
   if (idx === -1) return fullTable.slice(0, 7);
   const start = Math.max(0, idx - 3);

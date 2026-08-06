@@ -687,15 +687,16 @@ export function simulateSeason(player: Player, seasonNumber: number, league: Lea
   const leaguePosition = clamp(Math.round(18 - (effectiveStrength / 93) * 17), 1, 18);
 
   // Tabellen-Ausschnitt für den Saisonrückblick (3 Vereine über/unter dem eigenen,
-  // siehe `buildTableSnapshot`) - nutzt `baseMatches` (Team-Saisonspiele), NICHT
-  // `matches` (die um Kaderrolle/Verletzung reduzierten PERSÖNLICHEN Einsätze).
+  // siehe `buildTableSnapshot`) - die Spielanzahl ergibt sich dort aus einer
+  // ECHTEN Hin-/Rückrunde der tatsächlichen Vereinsanzahl dieser Liga-Ebene,
+  // nicht aus `baseMatches` (das sind die um Kaderrolle/Verletzung reduzierten
+  // PERSÖNLICHEN Einsätze des Spielers, mit der Liga-Größe unverwandt).
   const tableSnapshot = buildTableSnapshot(
     league,
     player.club.tier,
     player.club.clubId,
     player.club.name,
     leaguePosition,
-    baseMatches,
     rng
   );
 
