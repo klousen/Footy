@@ -34,6 +34,26 @@ function randomFullName(rng: () => number): string {
   return `${FIRST_NAMES[Math.floor(rng() * FIRST_NAMES.length)]} ${LAST_NAMES[Math.floor(rng() * LAST_NAMES.length)]}`;
 }
 
+// Hilfsfunktion: true, wenn der Spieler höchstens eine abgeschlossene Saison beim
+// AKTUELLEN Verein hat - d.h. gerade erst gewechselt ist und sich noch in der
+// frühen Eingewöhnungsphase befindet. Basis für Ankunfts-/Eingewöhnungs-Events
+// nach einem Transfer (siehe z.B. "vertrag_neuankunft_schwierig",
+// "beziehung_familie_umzug"). Bewusst über abgeschlossene Saisons gezählt (nicht
+// "seasonHistory letzter Eintrag != aktueller Verein"): Die Events für eine Saison
+// werden alle VOR etwaigen Wechseln in dieser Saison ausgewählt (siehe
+// `pickSeasonTemplateIds`), und `simulateSeason` trägt den bereits aktualisierten
+// Verein in den Saisoneintrag ein - direkt nach einem Wechsel wäre der letzte
+// Eintrag daher fälschlich schon der NEUE Verein, ein reiner Vergleich mit dem
+// letzten Eintrag würde das Fenster praktisch nie treffen.
+function recentlyTransferred(p: Player): boolean {
+  let seasonsAtCurrentClub = 0;
+  for (let i = p.seasonHistory.length - 1; i >= 0; i--) {
+    if (p.seasonHistory[i].club !== p.club.name) break;
+    seasonsAtCurrentClub++;
+  }
+  return seasonsAtCurrentClub <= 1;
+}
+
 export const EVENT_TEMPLATES: EventTemplate[] = [
   // ---------------------------------------------------------------------
   // JUGEND (14-17)
@@ -1409,23 +1429,58 @@ export const EVENT_TEMPLATES: EventTemplate[] = [
     // Höheres Gewicht aus demselben Grund wie bei "heiratsantrag" - die Bedingung
     // grenzt den Pool bereits stark ein.
     weight: 3,
+    // Auf Wunsch bewusst auch für "in_beziehung" geöffnet (nicht nur verlobt/
+    // verheiratet) - Nachwuchs ohne Trauschein ist realistisch genauso möglich.
     condition: (p) =>
-      (p.relationshipStatus === "verheiratet" || p.relationshipStatus === "verlobt") &&
+      (p.relationshipStatus === "verheiratet" || p.relationshipStatus === "verlobt" || p.relationshipStatus === "in_beziehung") &&
       p.age >= minMarriageAge(p.education) + 2,
     build: (p) => ({
       category: "beziehung",
       title: "Nachwuchs",
-      description: `${p.partnerName ?? "Deine Partnerin/dein Partner"} und du werdet Eltern!`,
+      description: `${p.partnerName ?? "Deine Partnerin/dein Partner"} und du werdet Eltern - wie organisiert ihr die ersten Monate?`,
       choices: [
         {
           id: "elternzeit",
-          label: "Die ersten Wochen bewusst auskosten",
-          effects: { morale: 15, fitness: -5, childrenDelta: 1, logText: "ist Elternteil geworden und hat sich bewusst Zeit für die Familie genommen.", logKind: "milestone" },
+          label: "Elternzeit voll ausschöpfen, Verein informieren",
+          detail: "Kurzer Ausfall, klare Kommunikation - danach meist stabilisierender Effekt.",
+          effects: {
+            morale: 15,
+            injuryWeeksOut: 2,
+            injuryLabel: "Elternzeit",
+            childrenDelta: 1,
+            logText: "ist Elternteil geworden und hat die Elternzeit voll ausgeschöpft.",
+            logKind: "milestone",
+          },
         },
         {
           id: "training",
-          label: "Schnell zurück ins Training",
-          effects: { morale: 6, attributes: { physis: 1 }, childrenDelta: 1, logText: "ist Elternteil geworden, war aber schon nach kurzer Zeit zurück im Training.", logKind: "milestone" },
+          label: "Sehr kurze Pause, schnell zurück ins Training",
+          detail: "Wenig Ausfallzeit, aber Schlafmangel kann auf die Form drücken.",
+          effects: {},
+          followUpChance: {
+            chance: 0.5,
+            success: { morale: 8, attributes: { physis: 1 }, childrenDelta: 1, logText: "ist Elternteil geworden, war aber schon nach kurzer Zeit zurück im Training - die Balance gelingt.", logKind: "milestone" },
+            failure: {
+              morale: 2,
+              fitness: -5,
+              childrenDelta: 1,
+              logText: "ist Elternteil geworden und schnell zurück ins Training - der Schlafmangel drückt spürbar auf die Form.",
+              logKind: "negative",
+            },
+          },
+        },
+        {
+          id: "unterstuetzung",
+          label: "Familie organisiert Unterstützung (Großeltern, Nanny)",
+          detail: "Moderate Belastung, meist eine gute Balance.",
+          effects: {
+            wealth: -8000,
+            morale: 10,
+            fitness: -1,
+            childrenDelta: 1,
+            logText: "ist Elternteil geworden und hat sich mit organisierter Unterstützung (Großeltern, Nanny) eine gute Balance geschaffen.",
+            logKind: "milestone",
+          },
         },
       ],
     }),
@@ -3883,6 +3938,882 @@ export const EVENT_TEMPLATES: EventTemplate[] = [
           id: "verschieben",
           label: "Auf die Zeit nach der Karriere verschieben",
           effects: { logText: "verschiebt die Idee einer eigenen Fußballschule auf die Zeit nach der Karriere.", logKind: "info" },
+        },
+      ],
+    }),
+  },
+
+  // ---------------------------------------------------------------------
+  // KARRIERE-PSYCHOLOGIE: Vereinswechsel, Trainer, Medien, Konkurrenz - wie
+  // man mit den mentalen Kernsituationen einer Profikarriere umgeht. Bewusst
+  // klar von verwandten bestehenden Ereignissen abgegrenzt: "vertrag_neuankunft_schwierig"
+  // greift NUR direkt nach einem echten Wechsel (siehe `recentlyTransferred`),
+  // "taktik_neuer_trainer_infrage" schließt sich mit der laufenden "trainerzoff"-
+  // Storyline gegenseitig aus, "taktik_stammplatz_verloren" respektiert eine aktive
+  // Stammplatzgarantie (kein Widerspruch zu deren Rollen-Floor).
+  // ---------------------------------------------------------------------
+  {
+    id: "vertrag_neuankunft_schwierig",
+    category: "vertrag",
+    minAge: 18,
+    maxAge: 38,
+    weight: 1.5,
+    condition: (p) => p.stage !== "jugend" && p.clubChangesCount > 0 && recentlyTransferred(p),
+    build: (p) => ({
+      category: "vertrag",
+      title: "Ankommen beim neuen Verein",
+      description: `Der Wechsel zu ${club(p)} ist vollzogen, aber du tust dich schwer, im neuen Umfeld richtig anzukommen - neue Mitspieler, neues System, neue Erwartungen.`,
+      choices: [
+        {
+          id: "geduldig",
+          label: "Geduldig unterordnen, auf der Bank Vertrauen erarbeiten",
+          detail: "Langsamer Start, wenig Druck - späte, aber stabile Stammplatzetablierung.",
+          effects: {
+            clubRelation: 4,
+            morale: -2,
+            roleProtectionSeasons: 1,
+            traitDeltas: { disziplin: 2, arbeitsmoral: 2 },
+            logText: "hat sich beim neuen Verein zunächst geduldig einsortiert und Vertrauen erarbeitet.",
+            logKind: "info",
+          },
+        },
+        {
+          id: "draengen",
+          label: "Sofort beim Trainer auf Einsatzzeit drängen",
+          detail: "Kurzfristig evtl. Chance, aber Reibung mit dem Trainer möglich.",
+          effects: {},
+          followUpChance: {
+            chance: 0.45,
+            success: {
+              clubRelation: 2,
+              morale: 4,
+              attributes: { mentalitaet: 1 },
+              logText: "hat beim Trainer auf Einsatzzeit gedrängt und sich so tatsächlich Chancen erspielt.",
+              logKind: "positive",
+            },
+            failure: {
+              clubRelation: -6,
+              morale: -4,
+              logText: "ist beim Trainer mit dem Drängen auf Einsatzzeit angeeckt - das Verhältnis bleibt unstet.",
+              logKind: "negative",
+            },
+          },
+        },
+        {
+          id: "mentor",
+          label: "Über Nebenleute/Mentor im Kader Rückhalt aufbauen",
+          detail: "Mittleres Tempo, sozial abgesichert - feste Rolle ab der Winterpause.",
+          effects: {
+            clubRelation: 6,
+            morale: 5,
+            roleProtectionSeasons: 1,
+            traitDeltas: { fuehrung: 1 },
+            logText: "hat sich über einen Mentor im Kader Rückhalt beim neuen Verein aufgebaut.",
+            logKind: "positive",
+          },
+        },
+      ],
+    }),
+  },
+  {
+    id: "taktik_neuer_trainer_infrage",
+    category: "taktik",
+    minAge: 21,
+    maxAge: 35,
+    weight: 1,
+    condition: (p) =>
+      p.contract.squadRole !== "Ausbildungsspieler" &&
+      p.startingRoleGuaranteeSeasons === 0 &&
+      !p.activeStorylines.some((t) => t.storylineId === "trainerzoff"),
+    build: (p) => ({
+      category: "taktik",
+      title: "Neuer Trainer stellt dich infrage",
+      description: `Ein neuer Trainer übernimmt bei ${club(p)} und stellt vor der versammelten Mannschaft offen infrage, ob du noch gesetzt bist.`,
+      choices: [
+        {
+          id: "ruhig",
+          label: "Öffentlich ruhig bleiben, im Training überzeugen",
+          detail: "Risikoarm, langsamer Effekt - schrittweise Vertrauensrückgewinnung.",
+          effects: {
+            clubRelation: 3,
+            attributes: { mentalitaet: 1 },
+            traitDeltas: { disziplin: 2 },
+            logText: "ist auf die Infragestellung durch den neuen Trainer ruhig geblieben und hat im Training überzeugt.",
+            logKind: "info",
+          },
+        },
+        {
+          id: "gespraech",
+          label: "Direktes Gespräch unter vier Augen einfordern",
+          detail: "Klärend, aber Konfrontation möglich - klare Rolle, keine Grauzone mehr.",
+          effects: {},
+          followUpChance: {
+            chance: 0.5,
+            success: {
+              clubRelation: 8,
+              morale: 4,
+              roleProtectionSeasons: 1,
+              traitDeltas: { fuehrung: 2 },
+              logText: "hat das direkte Gespräch mit dem neuen Trainer gesucht - eine klare, positive Rollenklärung.",
+              logKind: "positive",
+            },
+            failure: {
+              clubRelation: -8,
+              morale: -4,
+              squadRoleOverride: "Ergänzungsspieler",
+              logText: "hat das direkte Gespräch mit dem neuen Trainer gesucht - die Rolle klärt sich, aber negativ.",
+              logKind: "negative",
+            },
+          },
+        },
+        {
+          id: "berater",
+          label: "Berater/Agenten einschalten, Druck über Medien/Umfeld",
+          detail: "Schnelle Wirkung möglich, aber Vertrauensverlust - Etikett \"schwierig\", Bankplatz-Risiko steigt.",
+          effects: {
+            clubRelation: -10,
+            reputation: 2,
+            traitDeltas: { medienimage: -4 },
+            logText: "hat über den Berater Druck über die Medien aufgebaut - kurzfristig Aufmerksamkeit, aber das Vertrauen beim Trainer ist beschädigt.",
+            logKind: "negative",
+          },
+        },
+      ],
+    }),
+  },
+  {
+    id: "taktik_rote_karte_wichtig",
+    category: "taktik",
+    minAge: 18,
+    maxAge: 38,
+    weight: 1,
+    build: (p) => ({
+      category: "taktik",
+      title: "Rot in einem wichtigen Spiel",
+      description: `In einem wichtigen Spiel für ${club(p)} siehst du die Rote Karte - ein folgenschwerer Moment.`,
+      choices: [
+        {
+          id: "annehmen",
+          label: "Sperre annehmen, öffentlich Verantwortung übernehmen",
+          detail: "Standardfolge: ein Spiel Ausfall, das Image bleibt intakt.",
+          effects: {
+            injuryWeeksOut: 1,
+            injuryLabel: "Sperre nach Platzverweis",
+            traitDeltas: { disziplin: 1 },
+            logText: "hat nach einem Platzverweis die Sperre klaglos angenommen und öffentlich Verantwortung übernommen.",
+            logKind: "info",
+          },
+        },
+        {
+          id: "einspruch",
+          label: "Einspruch einlegen lassen",
+          detail: "Ungewisser Ausgang - bei Erfolg kein Ausfall, bei Misserfolg zusätzlicher Imageschaden.",
+          effects: {},
+          followUpChance: {
+            chance: 0.4,
+            success: { wealth: -3000, reputation: 2, logText: "hat erfolgreich Einspruch gegen die Rote Karte eingelegt - keine Sperre.", logKind: "positive" },
+            failure: {
+              injuryWeeksOut: 1,
+              injuryLabel: "Sperre nach Platzverweis",
+              wealth: -3000,
+              reputation: -3,
+              traitDeltas: { medienimage: -2 },
+              logText: "ist mit dem Einspruch gegen die Rote Karte gescheitert - zusätzlicher Imageschaden.",
+              logKind: "negative",
+            },
+          },
+        },
+        {
+          id: "nachtreten",
+          label: "Emotional nachtreten (Interview, Social Media)",
+          detail: "Kurzfristige Entlastung fürs eigene Ego - Verbandsstrafe droht, Ruf als Hitzkopf.",
+          effects: {},
+          followUpChance: {
+            chance: 0.5,
+            success: {
+              injuryWeeksOut: 1,
+              injuryLabel: "Sperre nach Platzverweis",
+              morale: 3,
+              traitDeltas: { medienimage: -3 },
+              logText: "hat nach dem Platzverweis emotional nachgetreten - kurzfristig Luft abgelassen, der Ruf als Hitzkopf bleibt.",
+              logKind: "negative",
+            },
+            failure: {
+              injuryWeeksOut: 3,
+              injuryLabel: "Verbandsstrafe nach Platzverweis",
+              reputation: -5,
+              traitDeltas: { medienimage: -6 },
+              logText: "hat nach dem Platzverweis emotional nachgetreten - der Verband verhängt eine zusätzliche Strafe.",
+              logKind: "negative",
+            },
+          },
+        },
+      ],
+    }),
+  },
+  {
+    id: "medien_fans_pfeifen",
+    category: "medien",
+    minAge: 18,
+    maxAge: 40,
+    weight: 1,
+    condition: (p) => {
+      const last = p.seasonHistory[p.seasonHistory.length - 1];
+      return !!last && (last.avgRating < 6.2 || last.scoreTier === "Schwierige Saison" || last.scoreTier === "Durchwachsene Saison");
+    },
+    build: (p) => ({
+      category: "medien",
+      title: "Ausgepfiffen von den eigenen Fans",
+      description: `Nach einer schwachen Phase pfeifen dich die eigenen Fans von ${club(p)} bei jeder Ballberührung aus.`,
+      choices: [
+        {
+          id: "ruhig",
+          label: "Ruhig bleiben, Leistung sprechen lassen",
+          detail: "Langsamer Vertrauensaufbau - allmähliche Wiederannäherung.",
+          effects: {
+            clubRelation: 2,
+            attributes: { mentalitaet: 1 },
+            traitDeltas: { disziplin: 2 },
+            logText: "hat auf die Pfiffe der eigenen Fans ruhig reagiert und auf die Leistung gesetzt.",
+            logKind: "info",
+          },
+        },
+        {
+          id: "statement",
+          label: "Öffentlich Stellung nehmen (Interview/Statement)",
+          detail: "Schnelle Reaktion, aber Risiko der Eskalation - Versöhnung oder verhärtete Fronten.",
+          effects: {},
+          followUpChance: {
+            chance: 0.5,
+            success: {
+              reputation: 3,
+              morale: 6,
+              traitDeltas: { medienimage: 3 },
+              logText: "hat sich öffentlich zu den Pfiffen geäußert - die Fans reagieren versöhnlich.",
+              logKind: "positive",
+            },
+            failure: {
+              reputation: -3,
+              morale: -5,
+              traitDeltas: { medienimage: -4 },
+              logText: "hat sich öffentlich zu den Pfiffen geäußert - die Fronten verhärten sich weiter.",
+              logKind: "negative",
+            },
+          },
+        },
+        {
+          id: "abschalten",
+          label: "Innerlich abschalten, Rückzug ins Private",
+          detail: "Schützt mental, wirkt aber distanziert - Entfremdung, Leistungsabfall möglich.",
+          effects: {
+            morale: 3,
+            clubRelation: -3,
+            attributes: { charisma: -1 },
+            logText: "hat sich innerlich von den Pfiffen der Fans abgeschottet und zieht sich ins Private zurück.",
+            logKind: "negative",
+          },
+        },
+      ],
+    }),
+  },
+  {
+    id: "nationalmannschaft_erste_berufung_status",
+    category: "nationalmannschaft",
+    minAge: 18,
+    maxAge: 34,
+    weight: 1,
+    unique: true,
+    condition: (p) => p.nationalTeamCaps > 0,
+    build: () => ({
+      category: "nationalmannschaft",
+      title: "Erstmals im Nationaltrikot - was jetzt?",
+      description: "Die erste Berufung in die Nationalmannschaft ist Geschichte - wie gehst du mit dem neuen Status um?",
+      choices: [
+        {
+          id: "fokus_nt",
+          label: "Fokus voll auf die Nationalmannschaft legen",
+          detail: "Prestige, aber Belastungssteigerung - das Verletzungsrisiko im Verein steigt.",
+          effects: {
+            reputation: 6,
+            fitness: -6,
+            attributes: { mentalitaet: 1 },
+            logText: "legt den Fokus voll auf die Nationalmannschaft - die zusätzliche Belastung ist spürbar.",
+            logKind: "info",
+          },
+        },
+        {
+          id: "zurueckhaltend",
+          label: "Zurückhaltend/dankbar auftreten, Rolle im Verein priorisieren",
+          detail: "Weniger medialer Druck - stabile Klubform, langsamerer Nationalmannschafts-Ausbau.",
+          effects: {
+            clubRelation: 4,
+            morale: 3,
+            traitDeltas: { disziplin: 1 },
+            logText: "tritt nach der ersten Nationalmannschafts-Berufung zurückhaltend auf und priorisiert den Verein.",
+            logKind: "positive",
+          },
+        },
+        {
+          id: "ansprueche",
+          label: "Selbstbewusst neue Ansprüche im Verein anmelden",
+          detail: "Kurzfristiger Machtgewinn möglich - Spannungen mit der Vereinsführung.",
+          effects: {
+            wageMultiplier: 1.1,
+            clubRelation: -6,
+            traitDeltas: { fuehrung: 2 },
+            logText: "meldet nach der ersten Nationalmannschafts-Berufung selbstbewusst neue Ansprüche beim Verein an.",
+            logKind: "negative",
+          },
+        },
+      ],
+    }),
+  },
+  {
+    id: "taktik_stammplatz_verloren",
+    category: "taktik",
+    minAge: 20,
+    maxAge: 35,
+    weight: 1,
+    condition: (p) =>
+      p.contract.squadRole === "Stammspieler" &&
+      p.startingRoleGuaranteeSeasons === 0 &&
+      !p.activeStorylines.some((t) => t.storylineId === "rivalitaet"),
+    build: (p) => ({
+      category: "taktik",
+      title: "Der Stammplatz ist weg",
+      description: `Ein Konkurrent im eigenen Kader von ${club(p)} hat dir überraschend den Stammplatz streitig gemacht.`,
+      choices: [
+        {
+          id: "akzeptieren",
+          label: "Akzeptieren, im Training Geduld zeigen",
+          detail: "Risikoarm - Chance bei der nächsten Formkrise des Konkurrenten.",
+          effects: {
+            morale: -2,
+            roleProtectionSeasons: 1,
+            traitDeltas: { disziplin: 2, arbeitsmoral: 2 },
+            logText: "hat den Verlust des Stammplatzes akzeptiert und im Training geduldig weitergearbeitet.",
+            logKind: "info",
+          },
+        },
+        {
+          id: "wechsel",
+          label: "Wechsel im Winter forcieren",
+          detail: "Schnelle Lösung, aber Vereinsverlust an Bindung - neues Umfeld, Anpassungsphase.",
+          effects: {
+            wantsTransfer: true,
+            clubRelation: -6,
+            logText: "forciert nach dem Verlust des Stammplatzes einen Wechsel im Winter.",
+            logKind: "negative",
+          },
+        },
+        {
+          id: "erklaerung",
+          label: "Offen um Erklärung beim Trainer bitten und Einsatz einfordern",
+          detail: "Klärend, aber Konfliktrisiko - Rehabilitation oder endgültiger Bruch.",
+          effects: {},
+          followUpChance: {
+            chance: 0.5,
+            success: {
+              clubRelation: 6,
+              morale: 4,
+              squadRoleOverride: "Rotation",
+              roleProtectionSeasons: 1,
+              logText: "hat den Trainer offen um eine Erklärung gebeten - die Aussprache führt zur Rehabilitation.",
+              logKind: "positive",
+            },
+            failure: {
+              clubRelation: -10,
+              morale: -5,
+              squadRoleOverride: "Ergänzungsspieler",
+              wantsTransfer: true,
+              logText: "hat den Trainer offen um eine Erklärung gebeten - die Aussprache endet im endgültigen Bruch.",
+              logKind: "negative",
+            },
+          },
+        },
+      ],
+    }),
+  },
+  {
+    id: "medien_kritik_formkrise",
+    category: "medien",
+    minAge: 18,
+    maxAge: 40,
+    weight: 1,
+    condition: (p) => {
+      const last = p.seasonHistory[p.seasonHistory.length - 1];
+      return !!last && (last.avgRating < 6.2 || last.scoreTier === "Schwierige Saison" || last.scoreTier === "Durchwachsene Saison");
+    },
+    build: (p) => ({
+      category: "medien",
+      title: "Kritik nach einer Schwächephase",
+      description: `Nach einer schwachen Serie für ${club(p)} häufen sich kritische Kommentare in den Medien.`,
+      choices: [
+        {
+          id: "ignorieren",
+          label: "Medien komplett ignorieren, nur auf Training fokussieren",
+          detail: "Stabilisierend - langsame, aber solide Erholung.",
+          effects: {
+            attributes: { mentalitaet: 1 },
+            traitDeltas: { disziplin: 2 },
+            logText: "hat die Medienkritik komplett ignoriert und sich nur auf das Training konzentriert.",
+            logKind: "info",
+          },
+        },
+        {
+          id: "selbstkritisch",
+          label: "Selbstkritisch im Interview reagieren",
+          detail: "Sympathisch, aber Angriffsfläche - der Druck von außen sinkt leicht.",
+          effects: {
+            reputation: -1,
+            morale: 3,
+            traitDeltas: { medienimage: 3 },
+            logText: "hat sich in einem Interview selbstkritisch zur Formkrise geäußert.",
+            logKind: "positive",
+          },
+        },
+        {
+          id: "zurueckweisen",
+          label: "Medien scharf zurückweisen, Gegenangriff",
+          detail: "Kurzfristig Genugtuung - Lagerbildung, erhöhter Druck bei nächstem Fehler.",
+          effects: {
+            morale: 4,
+            reputation: -2,
+            clubRelation: -2,
+            traitDeltas: { medienimage: -5 },
+            logText: "hat die Medienkritik scharf zurückgewiesen und den Gegenangriff gesucht.",
+            logKind: "negative",
+          },
+        },
+      ],
+    }),
+  },
+  {
+    id: "transfer_berater_ausland",
+    category: "transfer",
+    minAge: 20,
+    maxAge: 34,
+    weight: 1,
+    condition: (p) => p.reputation > 40 && !p.wantsTransfer,
+    build: () => ({
+      category: "transfer",
+      title: "Lukratives Angebot aus dem Ausland",
+      description: "Dein Berater bringt ein lukratives Wechselangebot aus dem Ausland ins Gespräch - noch ist nichts entschieden.",
+      choices: [
+        {
+          id: "ablehnen",
+          label: "Angebot ablehnen, volle Konzentration auf die laufende Saison",
+          detail: "Kontinuität - stabile Form, Vereinstreue stärkt das Standing.",
+          effects: {
+            clubRelation: 6,
+            morale: 2,
+            traitDeltas: { arbeitsmoral: 1 },
+            logText: "hat ein lukratives Auslandsangebot abgelehnt und sich voll auf die laufende Saison konzentriert.",
+            logKind: "positive",
+          },
+        },
+        {
+          id: "sommer_planen",
+          label: "Wechsel im Sommer fest einplanen, bis dahin abliefern",
+          detail: "Zielkonflikt zwischen Motivation und Abschied - Risiko nachlassender Bindung in der Schlussphase.",
+          effects: {
+            wantsTransfer: true,
+            reputation: 2,
+            clubRelation: -3,
+            logText: "plant den Wechsel für den Sommer fest ein, will bis dahin aber noch abliefern.",
+            logKind: "info",
+          },
+        },
+        {
+          id: "koketieren",
+          label: "Öffentlich mit dem Wechsel kokettieren",
+          detail: "Kurzfristiger Verhandlungshebel - Vertrauensbruch mit dem aktuellen Verein, Reservistenrisiko.",
+          effects: {
+            reputation: 3,
+            wantsTransfer: true,
+            clubRelation: -10,
+            traitDeltas: { medienimage: -2 },
+            logText: "kokettiert öffentlich mit dem Auslandsangebot, um die eigene Verhandlungsposition zu verbessern.",
+            logKind: "negative",
+          },
+        },
+      ],
+    }),
+  },
+
+  // ---------------------------------------------------------------------
+  // PRIVATLEBEN & FAMILIE: Ereignisse jenseits von Beziehung/Heirat/Kindern -
+  // Umzug, Krankheit im Umfeld, Medienrummel, Trennung, Freundeskreis,
+  // Vorbildrolle. "beziehung_familie_umzug" greift wie
+  // "vertrag_neuankunft_schwierig" nur direkt nach einem echten Wechsel.
+  // ---------------------------------------------------------------------
+  {
+    id: "beziehung_familie_umzug",
+    category: "beziehung",
+    minAge: 20,
+    maxAge: 38,
+    weight: 1.3,
+    condition: (p) => (p.relationshipStatus !== "single" || p.children > 0) && p.clubChangesCount > 0 && recentlyTransferred(p),
+    build: (p) => ({
+      category: "beziehung",
+      title: "Der Umzug der Familie",
+      description: `Nach dem Wechsel zu ${club(p)} gestaltet sich der Umzug der Familie in die neue Stadt schwieriger als gedacht.`,
+      choices: [
+        {
+          id: "pendeln",
+          label: "Familie vorerst am alten Wohnort lassen, selbst pendeln",
+          detail: "Mentale Doppelbelastung - Konzentrationsschwankungen, Heimweh-Thematik.",
+          effects: {
+            morale: -5,
+            attributes: { mentalitaet: -1 },
+            logText: "lässt die Familie vorerst am alten Wohnort und pendelt selbst - die Doppelbelastung ist spürbar.",
+            logKind: "negative",
+          },
+        },
+        {
+          id: "komplett",
+          label: "Kompletten Umzug durchziehen, auch mit Reibung",
+          detail: "Kurzfristiger Stress für alle - nach der Übergangsphase ein stabileres privates Umfeld.",
+          effects: {
+            morale: -3,
+            fitness: -2,
+            clubRelation: 2,
+            logText: "zieht mit der ganzen Familie um - nach anfänglicher Reibung stabilisiert sich das private Umfeld.",
+            logKind: "info",
+          },
+        },
+        {
+          id: "unterstuetzung",
+          label: "Externe Unterstützung organisieren (Umzugsservice, Sprachcoach)",
+          detail: "Kostet Geld und Aufwand - schnellere Integration der Familie, weniger Ablenkung im Alltag.",
+          effects: {
+            wealth: -12000,
+            morale: 4,
+            logText: "organisiert externe Unterstützung für den Umzug der Familie - die Integration gelingt spürbar schneller.",
+            logKind: "positive",
+          },
+        },
+      ],
+    }),
+  },
+  {
+    id: "beziehung_angehoeriger_krank",
+    category: "beziehung",
+    minAge: 19,
+    maxAge: 40,
+    weight: 1,
+    condition: (p) => p.stage !== "jugend",
+    build: () => ({
+      category: "beziehung",
+      title: "Sorge um einen nahestehenden Menschen",
+      description: "Ein enger Freund oder ein Familienmitglied wird schwer krank - die Nachricht trifft dich mitten in der Saison.",
+      choices: [
+        {
+          id: "auszeit",
+          label: "Auszeit vom Verein beantragen",
+          detail: "Der Verein muss Verständnis zeigen - Formdelle durch Trainingsrückstand, aber mentale Entlastung.",
+          effects: {
+            fitness: -4,
+            morale: 5,
+            clubRelation: -1,
+            logText: "hat sich wegen der Erkrankung eines nahestehenden Menschen eine Auszeit vom Verein genommen.",
+            logKind: "info",
+          },
+        },
+        {
+          id: "weiter",
+          label: "Weitertrainieren wie gewohnt, Gefühle kompartimentalisieren",
+          detail: "Funktioniert kurzfristig - Risiko eines späteren emotionalen Einbruchs.",
+          effects: {},
+          followUpChance: {
+            chance: 0.5,
+            success: {
+              attributes: { mentalitaet: 1 },
+              logText: "hat trotz der Sorge um einen nahestehenden Menschen einfach weitertrainiert - es hält.",
+              logKind: "info",
+            },
+            failure: {
+              morale: -9,
+              fitness: -3,
+              logText: "hat die Sorge um einen nahestehenden Menschen verdrängt - der emotionale Einbruch kommt später umso härter.",
+              logKind: "negative",
+            },
+          },
+        },
+        {
+          id: "teilpensum",
+          label: "Reduziertes Pensum mit dem Verein vereinbaren",
+          detail: "Kompromiss - moderate Formschwankung, aber eine tragbare Balance.",
+          effects: {
+            fitness: -2,
+            morale: 2,
+            clubRelation: 1,
+            logText: "vereinbart mit dem Verein ein reduziertes Trainingspensum, um für die Familie da zu sein.",
+            logKind: "info",
+          },
+        },
+      ],
+    }),
+  },
+  {
+    id: "medien_paparazzi_privatleben",
+    category: "medien",
+    minAge: 20,
+    maxAge: 40,
+    weight: 1,
+    condition: (p) => p.reputation > 45,
+    build: () => ({
+      category: "medien",
+      title: "Paparazzi vor der Haustür",
+      description: "Das mediale Interesse an deinem Privatleben wächst spürbar - Boulevardblätter und Paparazzi lauern zunehmend.",
+      choices: [
+        {
+          id: "abschotten",
+          label: "Komplett abschotten, keine Social-Media-Präsenz",
+          detail: "Schützt die Privatsphäre - weniger Ablenkung, aber der Imageaufbau leidet.",
+          effects: {
+            morale: 2,
+            traitDeltas: { medienimage: -3 },
+            logText: "schottet sich medial komplett ab, um die Privatsphäre zu schützen.",
+            logKind: "info",
+          },
+        },
+        {
+          id: "einblicke",
+          label: "Teilweise Einblicke gewähren, um das Narrativ zu kontrollieren",
+          detail: "Zeitaufwand - positiveres öffentliches Bild, aber die Grenze privat/öffentlich verschwimmt.",
+          effects: {
+            reputation: 3,
+            morale: -1,
+            traitDeltas: { medienimage: 4 },
+            logText: "gewährt bewusst teilweise Einblicke ins Privatleben, um die Kontrolle über das öffentliche Bild zu behalten.",
+            logKind: "positive",
+          },
+        },
+        {
+          id: "rechtlich",
+          label: "Rechtlich gegen die Berichterstattung vorgehen",
+          detail: "Energie- und Zeitaufwand - kurzfristige Ruhe, aber ein angespanntes Medienverhältnis auf Dauer.",
+          effects: {
+            wealth: -10000,
+            morale: 1,
+            traitDeltas: { medienimage: -2 },
+            logText: "geht rechtlich gegen die Berichterstattung über das Privatleben vor.",
+            logKind: "info",
+          },
+        },
+      ],
+    }),
+  },
+  {
+    id: "beziehung_trennung_saison",
+    category: "beziehung",
+    minAge: 19,
+    maxAge: 38,
+    weight: 1,
+    condition: (p) => p.relationshipStatus === "in_beziehung",
+    build: (p) => ({
+      category: "beziehung",
+      title: "Plötzliches Beziehungsende",
+      description: `Die Beziehung mit ${p.partnerName ?? "deiner Partnerin/deinem Partner"} zerbricht mitten in der Saison.`,
+      choices: [
+        {
+          id: "ablenkung",
+          label: "Sofort wieder ins Training stürzen, Ablenkung suchen",
+          detail: "Kurzfristig funktional - Leistungsschwankungen durch unverarbeitete Emotionen.",
+          effects: {
+            relationshipStatus: "single",
+            partnerName: null,
+            morale: -6,
+            attributes: { mentalitaet: -1 },
+            logText: "hat sich nach dem plötzlichen Beziehungsende sofort wieder ins Training gestürzt.",
+            logKind: "negative",
+          },
+        },
+        {
+          id: "pause",
+          label: "Bewusst Pause einlegen, mit Mentalcoach arbeiten",
+          detail: "Zeitintensiv - langsamere, aber nachhaltigere Stabilisierung.",
+          effects: {
+            relationshipStatus: "single",
+            partnerName: null,
+            morale: -3,
+            fitness: -3,
+            traitDeltas: { disziplin: 1 },
+            logText: "legt nach dem Beziehungsende bewusst eine Pause ein und arbeitet mit einem Mentalcoach an der Verarbeitung.",
+            logKind: "info",
+          },
+        },
+        {
+          id: "rueckzug",
+          label: "Sich ins Umfeld/Freunde zurückziehen, Verein wenig einbeziehen",
+          detail: "Wenig Unterstützung von außen - unberechenbare Form, abhängig von der privaten Verarbeitung.",
+          effects: {},
+          followUpChance: {
+            chance: 0.45,
+            success: {
+              relationshipStatus: "single",
+              partnerName: null,
+              morale: 1,
+              logText: "hat sich nach dem Beziehungsende ins private Umfeld zurückgezogen - die Verarbeitung gelingt überraschend gut.",
+              logKind: "info",
+            },
+            failure: {
+              relationshipStatus: "single",
+              partnerName: null,
+              morale: -8,
+              fitness: -2,
+              logText: "hat sich nach dem Beziehungsende ins private Umfeld zurückgezogen, ohne den Verein einzubeziehen - die Form leidet spürbar.",
+              logKind: "negative",
+            },
+          },
+        },
+      ],
+    }),
+  },
+  {
+    id: "beziehung_alte_freunde_belastung",
+    category: "beziehung",
+    minAge: 22,
+    maxAge: 40,
+    weight: 1,
+    condition: (p) => p.reputation > 35 && p.wealth > 50000,
+    build: () => ({
+      category: "beziehung",
+      title: "Alte Freunde, neue Erwartungen",
+      description: "Der Freundeskreis aus der Zeit vor dem Erfolg wird zunehmend zur Belastung - Neid und Bitten um Unterstützung häufen sich.",
+      choices: [
+        {
+          id: "grenzen",
+          label: "Klare Grenzen ziehen, Kontakt reduzieren",
+          detail: "Schützt, aber schmerzhaft - mentale Entlastung, eventuell Einsamkeitsgefühl.",
+          effects: {
+            morale: 2,
+            attributes: { mentalitaet: 1 },
+            traitDeltas: { disziplin: 1 },
+            logText: "hat klare Grenzen zum alten Freundeskreis gezogen und den Kontakt reduziert.",
+            logKind: "info",
+          },
+        },
+        {
+          id: "weiterlaufen",
+          label: "Alles wie gewohnt weiterlaufen lassen",
+          detail: "Keine Konfrontation - schleichende Unruhe, Energieverlust durch ungelöste Konflikte.",
+          effects: {
+            morale: -4,
+            wealth: -5000,
+            logText: "lässt die Situation mit dem alten Freundeskreis einfach weiterlaufen - die schleichende Unruhe bleibt.",
+            logKind: "negative",
+          },
+        },
+        {
+          id: "neuer_kreis",
+          label: "Neuen, kleineren Vertrauenskreis aufbauen",
+          detail: "Aktiver Umbau - stabileres Umfeld, aber eine Übergangsphase mit Unsicherheit.",
+          effects: {
+            morale: -1,
+            clubRelation: 2,
+            traitDeltas: { fuehrung: 1 },
+            logText: "baut sich einen neuen, kleineren Vertrauenskreis aus Familie, Berater und wenigen engen Freunden auf.",
+            logKind: "info",
+          },
+        },
+      ],
+    }),
+  },
+  {
+    id: "beziehung_angehoeriger_gesundheitsschreck",
+    category: "beziehung",
+    minAge: 20,
+    maxAge: 40,
+    weight: 1,
+    condition: (p) => p.country !== p.homeCountryId,
+    build: () => ({
+      category: "beziehung",
+      title: "Gesundheitlicher Schreck in der Heimat",
+      description: "Ein Gesundheitsschreck bei einem Elternteil bzw. nahen Angehörigen in der Heimat erfordert plötzlich häufige Heimreisen.",
+      choices: [
+        {
+          id: "kurztrips",
+          label: "Regelmäßige Kurztrips in Kauf nehmen",
+          detail: "Körperliche Zusatzbelastung - erhöhte Ermüdung, Trainingsrückstand.",
+          effects: {
+            fitness: -5,
+            morale: 2,
+            logText: "nimmt regelmäßige Kurztrips in die Heimat in Kauf, um bei der Familie zu sein.",
+            logKind: "info",
+          },
+        },
+        {
+          id: "umzug_nahe",
+          label: "Angehörige näher zu sich holen (Umzug in die Nähe)",
+          detail: "Organisatorischer Aufwand - langfristige Entlastung, kurzfristige Umstellungsphase.",
+          effects: {
+            wealth: -20000,
+            morale: -2,
+            logText: "organisiert den Umzug der Angehörigen in die Nähe - aufwendig, aber langfristig entlastend.",
+            logKind: "info",
+          },
+        },
+        {
+          id: "distanz",
+          label: "Situation aus der Distanz per Telefon/Video begleiten",
+          detail: "Weniger körperliche Belastung - mentale Belastung durch Schuldgefühle.",
+          effects: {
+            morale: -6,
+            attributes: { mentalitaet: -1 },
+            logText: "begleitet den Gesundheitsschreck der Angehörigen vor allem aus der Distanz - die Schuldgefühle nagen.",
+            logKind: "negative",
+          },
+        },
+      ],
+    }),
+  },
+  {
+    id: "beziehung_vorbild_heimat",
+    category: "beziehung",
+    minAge: 30,
+    maxAge: 40,
+    weight: 1,
+    build: () => ({
+      category: "beziehung",
+      title: "Vorbild für die nächste Generation",
+      description: "Jüngere Verwandte und Menschen aus deinem Heimatort sehen in dir zunehmend eine Vorbild- und Vaterfigur - der Erwartungsdruck wächst.",
+      choices: [
+        {
+          id: "verantwortung",
+          label: "Aktiv Verantwortung übernehmen (finanziell, mental)",
+          detail: "Zeitaufwand - emotionale Erfüllung, aber zusätzliche Belastung im Alltag.",
+          effects: {
+            wealth: -15000,
+            morale: 6,
+            traitDeltas: { fuehrung: 2 },
+            logText: "übernimmt aktiv Verantwortung für jüngere Verwandte aus der Heimat - emotional erfüllend, aber zeitintensiv.",
+            logKind: "positive",
+          },
+        },
+        {
+          id: "distanz",
+          label: "Höflich Distanz halten, Erwartungen dämpfen",
+          detail: "Schützt eigene Ressourcen - mögliche Kritik aus dem Umfeld, aber mentale Entlastung.",
+          effects: {
+            morale: 3,
+            reputation: -1,
+            logText: "hält höflich Distanz und dämpft die Erwartungen aus der Heimat.",
+            logKind: "info",
+          },
+        },
+        {
+          id: "stiftung",
+          label: "Stiftung/strukturierte Unterstützung statt individueller Hilfe",
+          detail: "Einmaliger Organisationsaufwand - nachhaltige Lösung, positive Außenwirkung.",
+          effects: {
+            wealth: -40000,
+            reputation: 5,
+            traitDeltas: { medienimage: 3, fuehrung: 1 },
+            logText: "baut eine strukturierte Stiftung auf, statt einzelne Bitten aus der Heimat individuell zu bedienen.",
+            logKind: "positive",
+          },
         },
       ],
     }),
