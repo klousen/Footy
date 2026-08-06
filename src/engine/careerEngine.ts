@@ -844,6 +844,28 @@ function squadRoleForOverall(overall: number, clubStrength: number): SquadRole {
 }
 
 /**
+ * Wie `squadRoleForOverall`, aber für die laufende Kaderrolle beim AKTUELLEN
+ * Verein (siehe `resolveClubSituation`): reine Gesamtstärke vs. Vereinsstärke
+ * ignorierte bislang komplett, wie man beim Trainer dasteht und ob man gerade
+ * eine Sahne- oder Krisenserie hinter sich hat - zwei Spieler mit identischer
+ * Gesamtstärke sollten bei gutem Verhältnis + starker Form eher Stammspieler
+ * sein als bei zerrüttetem Verhältnis + Formkrise. Für die Vorschau bei einem
+ * NEUEN Verein (Angebotskarte) bleibt bewusst die einfache Formel gültig -
+ * dort gibt es noch keine etablierte Beziehung/Form an diesem Verein.
+ */
+function currentSquadRole(player: Player, clubStrength: number): SquadRole {
+  const overall = overallRating(player);
+  const lastStats = player.seasonHistory[player.seasonHistory.length - 1];
+  const relationFactor = (player.clubRelation - 50) / 10; // -5 .. +5
+  const formFactor = lastStats ? (lastStats.avgRating - 6.5) * 1.8 : 0; // ca. -10 .. +6
+  const roleScore = overall - clubStrength + relationFactor + formFactor;
+  if (roleScore >= 5) return "Stammspieler";
+  if (roleScore >= -5) return "Rotation";
+  if (roleScore >= -15) return "Ergänzungsspieler";
+  return "Ersatzbank";
+}
+
+/**
  * Pflegt Vertrag, Kaderrolle und Vereinszugehörigkeit zwischen den Saisons - OHNE
  * automatische, unsichtbare Vereinswechsel. Transfers laufen ausschließlich über
  * die sichtbaren `club_offer`-Events (siehe `decideClubOfferInjection`). Diese
@@ -869,9 +891,8 @@ export function resolveClubSituation(player: Player, league: LeagueState): LogEn
     return null;
   }
 
-  const overall = overallRating(player);
   const oldRole = player.contract.squadRole;
-  let newRole = squadRoleForOverall(overall, player.club.strength);
+  let newRole = currentSquadRole(player, player.club.strength);
   // Eine erfolgreich genutzte Bewährungschance schützt die Kaderrolle noch einige
   // Saisons vor dem Abrutschen unter "Rotation" - der Durchbruch bleibt spürbar.
   if (player.roleProtectionSeasons > 0 && SQUAD_ROLE_RANK[newRole] < SQUAD_ROLE_RANK["Rotation"]) {
@@ -1071,7 +1092,12 @@ function buildClubOfferEvent(
   const totalCount = 3;
   if (reason === "pro-debut") {
     targetStrength = targetStrengthForReputation(player.reputation, overall);
-    excludeCurrent = false;
+    // Der eigene Jugendverein bekommt einen eigenen, klar erkennbaren
+    // "Treue"-Auswahlpunkt (siehe unten) statt zufällig als einer von drei
+    // "Wechsel zu ..."-Kandidaten aufzutauchen - realistisch bekommt die
+    // Mehrheit der Jugendspieler ihren ersten Profivertrag ohnehin beim
+    // eigenen Verein, nicht zwangsläufig von außen.
+    excludeCurrent = true;
   } else if (reason === "opportunity") {
     // Klare, nachvollziehbare Kurve: je besser die letzte Saison bewertet wurde,
     // desto deutlicher der Sprung in der Vereinsstärke der Angebote.
@@ -1150,7 +1176,19 @@ function buildClubOfferEvent(
     };
   });
 
-  if (reason === "opportunity") {
+  if (reason === "pro-debut") {
+    // Treue-Option zum eigenen Jugendverein - mit echtem, spürbarem Bonus
+    // gegenüber einem Fremdwechsel (bessere Startbeziehung, etwas Moral- und
+    // Mentalitätsschub durch die vertraute Umgebung), damit "beim Verein
+    // bleiben" eine attraktive und keine bloß neutrale Wahl ist.
+    const stayWagePreview = estimateWage(player.reputation, currentStrength, player.club.tier);
+    choices.push({
+      id: "stay-debut",
+      label: `Profivertrag bei ${player.club.name} unterschreiben`,
+      detail: `Bleib deinem Jugendverein treu · Rolle voraussichtlich ${squadRoleForOverall(overall, currentStrength)} · Gehalt ca. ${formatMoney(stayWagePreview)}/Jahr · Vertrauensbonus durch die vertraute Umgebung`,
+      effects: {},
+    });
+  } else if (reason === "opportunity") {
     choices.push({
       id: "stay",
       label: `Bei ${player.club.name} bleiben`,
@@ -1201,7 +1239,7 @@ function buildClubOfferEvent(
 
   const description =
     reason === "pro-debut"
-      ? `Nach starken Jahren in der Jugend ist es Zeit für den Sprung in den Profifußball. Gleich ${count} Vereine bieten dir einen Profivertrag an.${foreignNote}`
+      ? `Nach starken Jahren in der Jugend ist es Zeit für den Sprung in den Profifußball. ${count} externe Vereine bieten dir einen Profivertrag an${foreignNote} - oder du bleibst deinem Jugendverein ${player.club.name} treu und unterschreibst dort deinen ersten Profivertrag.`
       : relegatedEscape
       ? `Trotz des Abstiegs mit ${player.club.name} bleibt deine starke individuelle Leistung nicht unbemerkt - im Sommertransferfenster wollen dich ${count} Vereine vom sinkenden Schiff holen.${foreignNote}`
       : promotedReward
@@ -1291,6 +1329,39 @@ export function applyClubOfferChoice(
     const text = `${player.name} bleibt ${player.club.name} treu.`;
     player.log.push({ season: 0, age: player.age, text, kind: "positive" });
     return { feedback: { choiceId, text, kind: "positive", deltaLines: ["Vereinsbeziehung +10", "Moral +5"] } };
+  }
+
+  if (choiceId === "stay-debut") {
+    // Der erste Profivertrag beim eigenen Jugendverein - inhaltlich dasselbe
+    // wie ein Wechsel (Ausbildungsspieler -> echte Kaderrolle mit Gehalt),
+    // nur beim vertrauten Verein statt bei einem der Fremdangebote. Mit einem
+    // echten Treue-Bonus: bessere Startbeziehung als bei einem Fremdwechsel
+    // (75 statt 60) und ein kleiner Mentalitäts-/Moralschub durch die
+    // vertraute Umgebung.
+    const overall = overallRating(player);
+    const wage = estimateWage(player.reputation, player.club.strength, player.club.tier);
+    const newRole = squadRoleForOverall(overall, player.club.strength);
+    player.contract = { club: player.club.name, yearsLeft: 3, wagePerYear: wage, squadRole: newRole };
+    player.clubRelation = 75;
+    player.morale = clamp(player.morale + 10, 0, 100);
+    player.attributes.mentalitaet = clamp(player.attributes.mentalitaet + 1, 1, 99);
+    player.traits.arbeitsmoral = clamp(player.traits.arbeitsmoral + 3, 0, 100);
+    player.wantsTransfer = false;
+    const text = `${player.name} unterschreibt treu beim eigenen Jugendverein ${player.club.name} den ersten Profivertrag.`;
+    player.log.push({ season: 0, age: player.age, text, kind: "milestone" });
+    return {
+      feedback: {
+        choiceId,
+        text,
+        kind: "positive",
+        deltaLines: [
+          `Neue Rolle im Kader: ${newRole}`,
+          `Gehalt: ${formatMoney(wage)} / Jahr`,
+          "Vereinsbeziehung 75 (Vertrauensbonus)",
+          "Moral +10, Mentalität +1 durch die vertraute Umgebung",
+        ],
+      },
+    };
   }
 
   if (choiceId === "fight") {
