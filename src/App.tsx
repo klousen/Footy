@@ -178,13 +178,20 @@ export default function App() {
     // gefunden) setzt den Vertrag frisch auf 3 Jahre - eine in dieser Saison bereits
     // gezogene, aber noch nicht angezeigte Vertragsverlängerung wäre danach hinfällig
     // (siehe `STALE_AFTER_TRANSFER_TEMPLATE_IDS`) und muss aus der Warteschlange raus.
+    // Ebenso können bereits fällig eingeplante Fortsetzungen vereinsgebundener
+    // Storylines (Rivalität/Trainerzoff/Vereinsikone) noch in der Warteschlange
+    // stehen, obwohl der Wechsel sie gerade beendet hat (siehe
+    // `endedStorylineTemplateIds`) - sonst würde z.B. "Zoff mit dem Trainer" beim
+    // ALTEN Verein nach dem Wechsel fälschlich beim NEUEN Verein weitererzählt.
     let didTransfer = false;
+    let endedStorylineTemplateIds: string[] = [];
     const feedback = isClubOfferEvent(game.currentEvent.templateId)
       ? (() => {
           const oldClubId = player.club.clubId;
           const result = applyClubOfferChoice(player, league, game.currentEvent!, choice.id, foreignLeagues);
           if (result.newActiveLeague) newActiveLeague = result.newActiveLeague;
           didTransfer = player.club.clubId !== oldClubId;
+          endedStorylineTemplateIds = result.endedStorylineTemplateIds ?? [];
           return result.feedback;
         })()
       : (() => {
@@ -211,7 +218,7 @@ export default function App() {
       leagueState: newActiveLeague ?? { ...league },
       foreignLeagues: { ...foreignLeagues },
       pendingEventIds: didTransfer
-        ? game.pendingEventIds.filter((id) => !STALE_AFTER_TRANSFER_TEMPLATE_IDS.has(id))
+        ? game.pendingEventIds.filter((id) => !STALE_AFTER_TRANSFER_TEMPLATE_IDS.has(id) && !endedStorylineTemplateIds.includes(id))
         : game.pendingEventIds,
       feedback,
     });

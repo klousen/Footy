@@ -4409,43 +4409,48 @@ export const EVENT_TEMPLATES: EventTemplate[] = [
     condition: (p) => p.reputation > 40 && !p.wantsTransfer,
     build: () => ({
       category: "transfer",
-      title: "Lukratives Angebot aus dem Ausland",
-      description: "Dein Berater bringt ein lukratives Wechselangebot aus dem Ausland ins Gespräch - noch ist nichts entschieden.",
+      title: "Der Berater regt einen Wechsel ins Ausland an",
+      // Bewusst noch OHNE konkreten Verein - eine Wechselbereitschaft signalisieren
+      // ist etwas anderes als ein reales Angebot (das kommt, wenn überhaupt, über
+      // das echte Transferangebot-Event mit einem konkret benannten Verein, siehe
+      // `buildClubOfferEvent`/"wishDriven" - garantiert im nächsten Transferfenster,
+      // sobald `wantsTransfer` gesetzt ist).
+      description: "Dein Berater hält dich für reif für einen Wechsel ins Ausland und regt an, offiziell Wechselbereitschaft zu signalisieren - noch gibt es keinen konkreten Verein, nur die Idee.",
       choices: [
         {
           id: "ablehnen",
-          label: "Angebot ablehnen, volle Konzentration auf die laufende Saison",
+          label: "Ablehnen, volle Konzentration auf die laufende Saison",
           detail: "Kontinuität - stabile Form, Vereinstreue stärkt das Standing.",
           effects: {
             clubRelation: 6,
             morale: 2,
             traitDeltas: { arbeitsmoral: 1 },
-            logText: "hat ein lukratives Auslandsangebot abgelehnt und sich voll auf die laufende Saison konzentriert.",
+            logText: "hat die Idee eines Auslandswechsels vorerst verworfen und sich voll auf die laufende Saison konzentriert.",
             logKind: "positive",
           },
         },
         {
           id: "sommer_planen",
-          label: "Wechsel im Sommer fest einplanen, bis dahin abliefern",
-          detail: "Zielkonflikt zwischen Motivation und Abschied - Risiko nachlassender Bindung in der Schlussphase.",
+          label: "Wechselbereitschaft für den Sommer signalisieren, bis dahin abliefern",
+          detail: "Zielkonflikt zwischen Motivation und Abschied - garantiert konkrete Angebote im nächsten Transferfenster.",
           effects: {
             wantsTransfer: true,
             reputation: 2,
             clubRelation: -3,
-            logText: "plant den Wechsel für den Sommer fest ein, will bis dahin aber noch abliefern.",
+            logText: "signalisiert über den Berater Wechselbereitschaft für den Sommer, will bis dahin aber noch abliefern.",
             logKind: "info",
           },
         },
         {
           id: "koketieren",
-          label: "Öffentlich mit dem Wechsel kokettieren",
+          label: "Öffentlich mit einem Auslandswechsel kokettieren",
           detail: "Kurzfristiger Verhandlungshebel - Vertrauensbruch mit dem aktuellen Verein, Reservistenrisiko.",
           effects: {
             reputation: 3,
             wantsTransfer: true,
             clubRelation: -10,
             traitDeltas: { medienimage: -2 },
-            logText: "kokettiert öffentlich mit dem Auslandsangebot, um die eigene Verhandlungsposition zu verbessern.",
+            logText: "kokettiert öffentlich mit einem Auslandswechsel, um die eigene Verhandlungsposition zu verbessern.",
             logKind: "negative",
           },
         },

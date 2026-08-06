@@ -554,7 +554,13 @@ export function simulateSeason(player: Player, seasonNumber: number, league: Lea
       ? 0.4
       : 0.2;
 
-  const matches = Math.round(baseMatches * roleFactor * availabilityFactor);
+  // Ob man überhaupt im Kader für ein Spiel steht, hängt neben der Kaderrolle auch
+  // vom aktuellen Vertrauen des Trainers ab - bei tiefem Konflikt wird man häufiger
+  // komplett aus dem Kader gelassen statt nur früher ausgewechselt, bei gutem
+  // Verhältnis öfter berücksichtigt. Deutlich schwächer als der Effekt auf die
+  // Minuten PRO Spiel (siehe `trustFactor` unten), aber ein echter, spürbarer Hebel.
+  const relationMatchFactor = clamp(0.9 + (player.clubRelation - 50) / 300, 0.8, 1.08);
+  const matches = Math.round(baseMatches * roleFactor * availabilityFactor * relationMatchFactor);
 
   // Einsatzminuten: Stammspieler bestreiten fast immer die volle Spielzeit,
   // Rotationsspieler und Ergänzungsspieler werden häufiger früh ausgewechselt
@@ -572,11 +578,14 @@ export function simulateSeason(player: Player, seasonNumber: number, league: Lea
   // (Vereinsbeziehung) und der körperlichen Verfassung (Fitness) ab - ein
   // Stammspieler mit zerrüttetem Verhältnis oder angeschlagener Fitness wird
   // früher ausgewechselt als der unangefochtene Publikumsliebling in
-  // Topform, auch wenn beide formal dieselbe Kaderrolle tragen.
+  // Topform, auch wenn beide formal dieselbe Kaderrolle tragen. Bewusst ein
+  // deutlich spürbarer Hebel (nicht nur Nuance) - echter Konflikt mit dem Verein
+  // MUSS sich in klar weniger Einsatzminuten niederschlagen, ein gutes Verhältnis
+  // in klar mehr.
   const trustFactor = clamp(
-    0.85 + (player.clubRelation - 50) / 250 + (player.fitness - 70) / 300,
-    0.65,
-    1.15
+    0.8 + (player.clubRelation - 50) / 160 + (player.fitness - 70) / 300,
+    0.55,
+    1.2
   );
   // Selbst bei unveränderter Kaderrolle (z.B. durch eine Stammplatzgarantie) sind die
   // Einsatzminuten von Saison zu Saison nie exakt identisch - Pokal-Rotation,
@@ -590,6 +599,12 @@ export function simulateSeason(player: Player, seasonNumber: number, league: Lea
   const effectiveMinutesPerMatch = Math.min(90, minutesPerMatchByRole * trustFactor * seasonMinutesVariance);
   const possibleMinutes = baseMatches * 90;
   const minutesPlayed = Math.min(possibleMinutes, Math.round(matches * effectiveMinutesPerMatch));
+
+  const attackWeight = { TW: 0.02, IV: 0.15, AV: 0.35, ZM: 0.55, FS: 0.85, ST: 1.0 }[player.position];
+  const goalChancePerMatch = (overall / 100) * attackWeight * 0.45;
+  const assistChancePerMatch = (overall / 100) * attackWeight * 0.35;
+  const goals = Math.max(0, Math.round(matches * goalChancePerMatch * (0.7 + rng() * 0.6)));
+  const assists = Math.max(0, Math.round(matches * assistChancePerMatch * (0.7 + rng() * 0.6)));
 
   const form = (player.morale - 50) / 100; // -0.5 .. 0.5
   // Disziplin wirkt sich leicht auf die Konstanz der Leistungen aus (professionelle
@@ -605,14 +620,15 @@ export function simulateSeason(player: Player, seasonNumber: number, league: Lea
       : player.relationshipStatus === "in_beziehung"
       ? 0.05
       : 0;
-  const ratingBase = 6.0 + (overall - clubStrength) / 45 + form * 0.6 + disziplinFactor + relationshipFactor;
+  // Tore und Vorlagen fließen direkt in die Durchschnittsnote ein - wer pro Spiel
+  // spürbar zum Torerfolg beiträgt, bekommt das auch in der Bewertung honoriert,
+  // nicht nur in der separaten Tore/Vorlagen-Statistik. Vorlagen zählen etwas
+  // weniger als Tore (0.7x), reine Nullen (v.a. Verteidiger/Torhüter) bekommen
+  // dadurch keinen Abzug - nur echte Scorer werden zusätzlich belohnt.
+  const productionPerMatch = matches > 0 ? (goals + assists * 0.7) / matches : 0;
+  const productionFactor = clamp(productionPerMatch * 1.3, 0, 1.1);
+  const ratingBase = 6.0 + (overall - clubStrength) / 45 + form * 0.6 + disziplinFactor + relationshipFactor + productionFactor;
   const avgRating = clamp(ratingBase + (rng() - 0.5) * 0.6, 3.5, 9.5);
-
-  const attackWeight = { TW: 0.02, IV: 0.15, AV: 0.35, ZM: 0.55, FS: 0.85, ST: 1.0 }[player.position];
-  const goalChancePerMatch = (overall / 100) * attackWeight * 0.45;
-  const assistChancePerMatch = (overall / 100) * attackWeight * 0.35;
-  const goals = Math.max(0, Math.round(matches * goalChancePerMatch * (0.7 + rng() * 0.6)));
-  const assists = Math.max(0, Math.round(matches * assistChancePerMatch * (0.7 + rng() * 0.6)));
 
   // Niedrige Disziplin erhöht die Kartenwahrscheinlichkeit spürbar, hohe senkt sie
   const cardFactor = clamp(1.5 - player.traits.disziplin / 50, 0.5, 1.5);
@@ -1271,12 +1287,16 @@ export function shouldTriggerTransferOpportunity(player: Player): boolean {
   const notableSeasonEvent = !!last && (last.relegated || last.promoted) && goodForm;
   const urgent = player.wantsTransfer || notableSeasonEvent;
   // Aktiv geäußertes Wechselinteresse (oder ein bemerkenswerter Auf-/Abstieg) hat
-  // spürbaren, schnellen Impact: keine Wartezeit mehr und eine fast sichere
-  // Trefferchance - statt erst 1-2 Saisons auf ein Angebot zu warten.
+  // spürbaren, schnellen Impact: keine Wartezeit mehr - statt erst 1-2 Saisons auf
+  // ein Angebot zu warten.
   const cooldown = urgent ? 0 : 2;
   if (player.seasonsSinceTransferEvent < cooldown) return false;
-  const chance = urgent ? 0.92 : last?.scoreTier === "Überragende Saison" ? 0.75 : 0.55;
-  return (goodForm || urgent) && rng() < chance;
+  // Ein aktiv geäußerter Wechselwunsch bekommt garantiert ein Angebot im nächsten
+  // Transferfenster - kein Losglück mehr: wer öffentlich sagt, dass er wechseln
+  // will, muss sich auch darauf verlassen können.
+  if (player.wantsTransfer) return true;
+  const chance = notableSeasonEvent ? 0.92 : last?.scoreTier === "Überragende Saison" ? 0.75 : 0.55;
+  return (goodForm || notableSeasonEvent) && rng() < chance;
 }
 
 /** Baut die Liga-Pyramide eines fremden Landes lazy und cached sie danach dauerhaft -
@@ -1544,6 +1564,11 @@ function buildClubOfferEvent(
 
   const relegatedEscape = reason === "opportunity" && lastStats?.relegated;
   const promotedReward = reason === "opportunity" && lastStats?.promoted;
+  // Ein aktiv geäußerter Wechselwunsch ist eine andere Geschichte als organisches
+  // Scouting-Interesse - der Text soll den TATSÄCHLICHEN Auslöser nennen, nicht
+  // immer pauschal "Scouts sind aufmerksam geworden" behaupten, wenn der Spieler
+  // selbst den Wechsel eingefordert hat (siehe `shouldTriggerTransferOpportunity`).
+  const wishDriven = reason === "opportunity" && player.wantsTransfer && !relegatedEscape && !promotedReward;
 
   const title =
     reason === "pro-debut"
@@ -1552,6 +1577,8 @@ function buildClubOfferEvent(
       ? "Rettungsanker im Sommertransferfenster"
       : promotedReward
       ? "Der Aufstieg zahlt sich im Sommer aus"
+      : wishDriven
+      ? "Dein Wechselwunsch trägt Früchte"
       : reason === "opportunity"
       ? "Interesse von anderen Vereinen im Sommertransferfenster"
       : "Wechselgerüchte im Winterfenster";
@@ -1582,6 +1609,8 @@ function buildClubOfferEvent(
       ? `Trotz des Abstiegs mit ${player.club.name} bleibt deine starke individuelle Leistung nicht unbemerkt - im Sommertransferfenster wollen dich ${count} Vereine vom sinkenden Schiff holen.${foreignNote}`
       : promotedReward
       ? `Dein starker Anteil am Aufstieg mit ${player.club.name} beweist deine Extraklasse - im Sommertransferfenster werden auch größere Vereine auf dich aufmerksam. ${count} Vereine erkundigen sich.${foreignNote}`
+      : wishDriven
+      ? `Dein öffentlich geäußerter Wechselwunsch bleibt nicht ungehört - im Sommertransferfenster melden sich prompt ${count} Vereine, die genau darauf gewartet haben.${foreignNote}`
       : reason === "opportunity"
       ? `${lastSeasonRef}sind Scouts auf ${player.name} bei ${player.club.name} aufmerksam geworden. Im Sommertransferfenster erkundigen sich ${count} Vereine nach dir.${foreignNote}`
       : `${pressureReason}. Im Winterfenster wäre der Verein offen für einen Wechsel - ${count} Vereine haben bereits angefragt.${foreignNote}`;
@@ -1648,6 +1677,14 @@ export function insertAt<T>(arr: T[], item: T, index: number): T[] {
 export interface ClubOfferResult {
   feedback: ChoiceFeedback;
   newActiveLeague?: LeagueState;
+  /** IDs bereits fällig eingeplanter Fortsetzungs-Stufen vereinsgebundener Storylines
+   * (Rivalität/Trainerzoff/Vereinsikone), die mit diesem Wechsel enden (siehe
+   * `CLUB_BOUND_STORYLINES` unten). Eine Fortsetzung kann für DIESELBE Saison schon
+   * in der Warteschlange stehen, bevor der Wechsel passiert (Saison-Events werden
+   * vorab ausgewählt) - App.tsx muss diese IDs nach einem echten Wechsel noch aus
+   * der Warteschlange entfernen, sonst würde z.B. "Zoff mit dem Trainer" beim ALTEN
+   * Verein nach dem Wechsel fälschlich beim NEUEN Verein weitererzählt. */
+  endedStorylineTemplateIds?: string[];
 }
 
 /** Löst eine Entscheidung innerhalb eines `club_offer`-Events auf (kein generisches EffectDelta). */
@@ -1911,7 +1948,11 @@ export function applyClubOfferChoice(
     }
   }
 
-  return { feedback: { choiceId, text, kind, deltaLines }, newActiveLeague };
+  return {
+    feedback: { choiceId, text, kind, deltaLines },
+    newActiveLeague,
+    endedStorylineTemplateIds: endedThreads.map((t) => t.nextTemplateId),
+  };
 }
 
 // ---------------------------------------------------------------------------

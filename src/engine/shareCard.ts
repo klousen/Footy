@@ -37,7 +37,10 @@ export function buildShareCardData(
   legacyTier: string | undefined,
   achievements: Achievement[] | undefined
 ): ShareCardData {
-  const country = COUNTRIES.find((c) => c.id === player.country);
+  // Heimatland statt aktuellem/letztem Verein-Land: die Nationalität eines Spielers
+  // ändert sich nicht durch Vereinswechsel - im Sharepic soll immer die Flagge des
+  // Landes stehen, in dem der Spieler geboren wurde.
+  const country = COUNTRIES.find((c) => c.id === player.homeCountryId);
   // Karriere-Bestwert statt aktuellem Wert: nach Alterung/Abbau am Karriereende wäre die
   // aktuelle Gesamtstärke oft niedriger als der tatsächliche Karriere-Höhepunkt - das
   // Sharepic soll aber genau diesen Höhepunkt feiern.
