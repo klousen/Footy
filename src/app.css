@@ -9,10 +9,15 @@
   --accent: #38d67a;
   --accent-strong: #21b866;
   --accent-soft: rgba(56, 214, 122, 0.15);
+  --pitch: #0f2b1c;
+  --pitch-line: rgba(120, 220, 170, 0.08);
   --warning: #f0b429;
   --danger: #f0554f;
   --info: #4f9dff;
   --radius: 14px;
+  /* Einheitliche, "fluide" Easing-Kurve für Hover/Press-Feedback - ein leichter
+     Überschwung statt starrem linear/ease, sorgt für das gewünschte "runde" Gefühl. */
+  --ease: cubic-bezier(0.22, 1, 0.36, 1);
   font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
 }
 
@@ -26,11 +31,39 @@ body,
   height: 100%;
 }
 
+html {
+  scroll-behavior: smooth;
+}
+
 body {
   margin: 0;
   background: radial-gradient(circle at top, #16202e 0%, var(--bg) 55%);
   color: var(--text);
   min-height: 100vh;
+  position: relative;
+}
+
+/* Sehr dezentes Spielfeld-Wasserzeichen im Hintergrund - Mittelkreis + Anstoßlinie,
+   rein aus CSS-Gradienten, keine Grafik. Bewusst kaum wahrnehmbar (siehe --pitch-line
+   Alpha-Wert) statt eines plakativen Rasen-Musters - Fußball-Bezug, ohne aufdringlich
+   zu wirken. */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background-image:
+    radial-gradient(circle at 50% 0%, transparent 0, transparent 128px, var(--pitch-line) 129px, var(--pitch-line) 131px, transparent 132px),
+    linear-gradient(to bottom, transparent 199px, var(--pitch-line) 200px, var(--pitch-line) 201px, transparent 202px);
+  background-repeat: no-repeat;
+  background-position: top center;
+  opacity: 0.7;
+}
+
+#root {
+  position: relative;
+  z-index: 1;
 }
 
 .app-shell {
@@ -44,17 +77,41 @@ body {
   display: flex;
   flex-direction: column;
   gap: 16px;
-  animation: fade-in 0.25s ease;
+  animation: fade-in 0.32s var(--ease);
 }
 
 @keyframes fade-in {
   from {
     opacity: 0;
-    transform: translateY(6px);
+    transform: translateY(10px);
   }
   to {
     opacity: 1;
     transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+  * {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+}
+
+@media (min-width: 760px) {
+  .app-shell {
+    max-width: 760px;
+    padding-top: 40px;
+  }
+}
+
+@media (min-width: 1080px) {
+  .app-shell {
+    max-width: 860px;
   }
 }
 
@@ -102,10 +159,21 @@ p {
   border-radius: 50%;
   background: var(--accent-soft);
   border: 1px solid var(--panel-border);
+  animation: hero-float 4.5s ease-in-out infinite;
+}
+
+@keyframes hero-float {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-6px);
+  }
 }
 
 .hero h1 {
-  font-size: 2rem;
+  font-size: clamp(1.7rem, 5vw, 2.3rem);
 }
 
 .hero-sub {
@@ -130,11 +198,11 @@ p {
   font-size: 1rem;
   font-weight: 600;
   cursor: pointer;
-  transition: transform 0.1s ease, filter 0.15s ease, opacity 0.15s ease;
+  transition: transform 0.22s var(--ease), filter 0.2s ease, opacity 0.15s ease, box-shadow 0.22s var(--ease), background-color 0.2s ease;
 }
 
 .btn:active {
-  transform: scale(0.98);
+  transform: scale(0.97);
 }
 
 .btn:disabled {
@@ -142,13 +210,21 @@ p {
   cursor: not-allowed;
 }
 
+.btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
 .btn-primary {
   background: linear-gradient(135deg, var(--accent) 0%, var(--accent-strong) 100%);
   color: #06210f;
+  box-shadow: 0 2px 10px rgba(33, 184, 102, 0.18);
 }
 
 .btn-primary:hover:not(:disabled) {
   filter: brightness(1.08);
+  transform: translateY(-1px);
+  box-shadow: 0 6px 18px rgba(33, 184, 102, 0.32);
 }
 
 .btn-secondary {
@@ -157,10 +233,20 @@ p {
   border: 1px solid var(--panel-border);
 }
 
+.btn-secondary:hover:not(:disabled) {
+  border-color: var(--accent);
+  transform: translateY(-1px);
+}
+
 .btn-ghost {
   background: transparent;
   color: var(--accent);
   border: 1px solid var(--panel-border);
+}
+
+.btn-ghost:hover:not(:disabled) {
+  border-color: var(--accent);
+  background: var(--accent-soft);
 }
 
 .btn-small {
@@ -187,10 +273,13 @@ input {
   padding: 12px 14px;
   color: var(--text);
   font-size: 1rem;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
 }
 
 input:focus {
-  outline: 2px solid var(--accent);
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
 }
 
 .option-grid {
@@ -210,6 +299,17 @@ input:focus {
   padding: 12px 14px;
   color: var(--text);
   cursor: pointer;
+  transition: transform 0.22s var(--ease), border-color 0.2s ease, background-color 0.2s ease, box-shadow 0.22s var(--ease);
+}
+
+.option-card:hover {
+  border-color: var(--accent);
+  transform: translateY(-2px);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.28);
+}
+
+.option-card:active {
+  transform: translateY(0) scale(0.99);
 }
 
 .option-card span {
@@ -224,6 +324,15 @@ input:focus {
 
 .country-grid {
   grid-template-columns: repeat(2, 1fr);
+}
+
+@media (min-width: 760px) {
+  .option-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+  .country-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
 }
 
 .flag {
@@ -323,7 +432,17 @@ input:focus {
 .overall-badge.tier-icon {
   background: linear-gradient(160deg, #3d321a, #2a1c33);
   border-color: #f2c94c;
-  box-shadow: 0 0 14px rgba(242, 201, 76, 0.35);
+  animation: icon-glow 2.6s ease-in-out infinite;
+}
+
+@keyframes icon-glow {
+  0%,
+  100% {
+    box-shadow: 0 0 14px rgba(242, 201, 76, 0.35);
+  }
+  50% {
+    box-shadow: 0 0 22px rgba(242, 201, 76, 0.55);
+  }
 }
 .overall-badge.tier-icon .overall-number {
   background: linear-gradient(90deg, #f2c94c, #f0a4e0);
@@ -369,6 +488,7 @@ input:focus {
   display: flex;
   flex-direction: column;
   gap: 10px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.16);
 }
 
 .panel h3 {
@@ -416,9 +536,19 @@ input:focus {
 
 .attr-fill {
   height: 100%;
-  background: linear-gradient(90deg, var(--info), var(--accent));
+  /* Grundfarbe plus ein sehr dezentes Rasenstreifen-Muster obendrüber (wie
+     frisch gemähter Rasen) - ein leiser Fußball-Bezug direkt in der
+     Kernkomponente, ohne dass es wie ein Aufkleber wirkt. */
+  background-image: repeating-linear-gradient(
+      115deg,
+      rgba(255, 255, 255, 0.09) 0px,
+      rgba(255, 255, 255, 0.09) 5px,
+      transparent 5px,
+      transparent 10px
+    ),
+    linear-gradient(90deg, var(--info), var(--accent));
   border-radius: 999px;
-  transition: width 0.4s ease;
+  transition: width 0.5s var(--ease);
 }
 
 .trait-fill {
@@ -521,15 +651,17 @@ input:focus {
 .event-card {
   background: var(--panel);
   border: 1px solid var(--panel-border);
+  border-left: 3px solid var(--accent);
   border-radius: var(--radius);
   padding: 22px;
   display: flex;
   flex-direction: column;
   gap: 14px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.16);
 }
 
 .event-card h2 {
-  font-size: 1.3rem;
+  font-size: clamp(1.2rem, 4vw, 1.5rem);
 }
 
 .event-card p {
@@ -554,10 +686,18 @@ input:focus {
   display: flex;
   flex-direction: column;
   gap: 4px;
+  transition: transform 0.22s var(--ease), border-color 0.2s ease, background-color 0.2s ease, box-shadow 0.22s var(--ease);
 }
 
 .choice-btn:hover {
   border-color: var(--accent);
+  background: var(--accent-soft);
+  transform: translateX(3px);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.22);
+}
+
+.choice-btn:active {
+  transform: translateX(3px) scale(0.99);
 }
 
 .choice-label {
@@ -638,10 +778,17 @@ input:focus {
   display: flex;
   flex-direction: column;
   gap: 4px;
+  transition: transform 0.22s var(--ease), border-color 0.2s ease, box-shadow 0.22s var(--ease);
 }
 
 .club-offer-card:hover {
   border-color: var(--accent);
+  transform: translateY(-2px);
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.3);
+}
+
+.club-offer-card:active {
+  transform: translateY(0) scale(0.99);
 }
 
 .club-offer-head {
@@ -844,10 +991,12 @@ input:focus {
   position: fixed;
   inset: 0;
   background: rgba(4, 8, 14, 0.7);
+  backdrop-filter: blur(2px);
   display: flex;
   align-items: flex-end;
   justify-content: center;
   z-index: 50;
+  animation: fade-in 0.2s ease;
 }
 
 .modal {
@@ -861,6 +1010,41 @@ input:focus {
   display: flex;
   flex-direction: column;
   gap: 12px;
+  animation: modal-slide-up 0.28s var(--ease);
+  box-shadow: 0 -12px 40px rgba(0, 0, 0, 0.4);
+}
+
+@keyframes modal-slide-up {
+  from {
+    transform: translateY(24px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+@media (min-width: 760px) {
+  .modal-overlay {
+    align-items: center;
+  }
+  .modal {
+    border-radius: 18px;
+    max-width: 560px;
+    animation-name: modal-pop-in;
+  }
+}
+
+@keyframes modal-pop-in {
+  from {
+    transform: translateY(12px) scale(0.98);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0) scale(1);
+    opacity: 1;
+  }
 }
 
 .modal-header {
