@@ -1111,11 +1111,24 @@ function transferEffectiveOverall(player: Player, overall: number, oldClubStreng
   return Math.max(overall, provenStarterFloor(player, oldClubStrength));
 }
 
+/**
+ * Schwellen bewusst gelockert (früher: +5 / -5 / -15): Angebote landen laut
+ * `targetStrength`-Formeln (siehe `buildClubOfferEvent`) ohnehin oft schon
+ * SPÜRBAR über der eigenen Gesamtstärke - wer zusätzlich noch 5 Punkte BESSER
+ * als der neue Verein sein musste, um dort Stammspieler zu werden, geriet bei
+ * jedem ambitionierten (aber nachvollziehbaren) Wechsel fast automatisch in
+ * Rotation und verlor durch die Kopplung an `squadRoleGrowthMultiplier` dort
+ * auch noch an Entwicklungstempo - ein sich selbst verstärkender Teufelskreis,
+ * der laut Simulation selbst bei umsichtiger Wechselwahl einen Spieler nahe
+ * seinem Karriere-Peak (88+) im Schnitt nur auf ~50% Karriere-Einsatzminuten
+ * kommen ließ. Auf ETWA eigenem Niveau (diff >= 0) sollte man realistisch um
+ * einen Stammplatz mitspielen können, nicht zwingend deutlich darüber liegen.
+ */
 function squadRoleForOverall(overall: number, clubStrength: number): SquadRole {
   const diff = overall - clubStrength;
-  if (diff >= 5) return "Stammspieler";
-  if (diff >= -5) return "Rotation";
-  if (diff >= -15) return "Ergänzungsspieler";
+  if (diff >= 0) return "Stammspieler";
+  if (diff >= -10) return "Rotation";
+  if (diff >= -20) return "Ergänzungsspieler";
   return "Ersatzbank";
 }
 
@@ -1144,10 +1157,13 @@ function currentSquadRole(player: Player, clubStrength: number): SquadRole {
   const lastStats = player.seasonHistory[player.seasonHistory.length - 1];
   const relationFactor = (player.clubRelation - 50) / 10; // -5 .. +5
   const formFactor = lastStats ? (lastStats.avgRating - 6.5) * 1.8 : 0; // ca. -10 .. +6
+  // Dieselben gelockerten Schwellen wie `squadRoleForOverall` (siehe dortiger
+  // Kommentar) - Konsistenz zwischen Angebots-Vorschau und tatsächlicher
+  // laufender Kaderrolle.
   const roleScore = overall - clubStrength + relationFactor + formFactor;
-  if (roleScore >= 5) return "Stammspieler";
-  if (roleScore >= -5) return "Rotation";
-  if (roleScore >= -15) return "Ergänzungsspieler";
+  if (roleScore >= 0) return "Stammspieler";
+  if (roleScore >= -10) return "Rotation";
+  if (roleScore >= -20) return "Ergänzungsspieler";
   return "Ersatzbank";
 }
 

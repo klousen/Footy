@@ -23,14 +23,22 @@ export const POSITION_LABEL: Record<Position, string> = {
   ST: "Stürmer",
 };
 
-// Gewichtung der Attribute für die Gesamtstärke je Position (summiert zu 1)
+// Gewichtung der Attribute für die Gesamtstärke je Position (summiert zu 1).
+// Bewusst klar entlang der Rolle differenziert: Abwehrspieler (TW/IV, etwas
+// abgeschwächt auch AV) leben von Physis + Mentalität ("Stabilität"/Nervenstärke
+// - die Attribute, die auch defensiv am meisten zählen), Offensivspieler (FS/ST)
+// von Technik + Tempo. Das spiegelt sich zusätzlich im `attackWeight` in
+// `simulateSeason` wider, der die Tor-/Assistwahrscheinlichkeit stark nach
+// Position staffelt (TW 0.02 bis ST 1.0) - Angreifer sind dort schon die
+// klare Torgefahr, Verteidiger tragen ihren Wert stattdessen fast komplett
+// über diese OVR-Gewichtung statt über Scorerpunkte bei.
 export const POSITION_WEIGHTS: Record<Position, Attributes> = {
-  TW: { technik: 0.2, tempo: 0.1, physis: 0.25, mentalitaet: 0.3, intelligenz: 0.1, charisma: 0.05 },
-  IV: { technik: 0.15, tempo: 0.15, physis: 0.3, mentalitaet: 0.2, intelligenz: 0.15, charisma: 0.05 },
-  AV: { technik: 0.2, tempo: 0.25, physis: 0.2, mentalitaet: 0.15, intelligenz: 0.15, charisma: 0.05 },
-  ZM: { technik: 0.25, tempo: 0.15, physis: 0.15, mentalitaet: 0.2, intelligenz: 0.2, charisma: 0.05 },
-  FS: { technik: 0.3, tempo: 0.3, physis: 0.1, mentalitaet: 0.1, intelligenz: 0.15, charisma: 0.05 },
-  ST: { technik: 0.3, tempo: 0.25, physis: 0.2, mentalitaet: 0.15, intelligenz: 0.05, charisma: 0.05 },
+  TW: { technik: 0.15, tempo: 0.05, physis: 0.25, mentalitaet: 0.35, intelligenz: 0.15, charisma: 0.05 },
+  IV: { technik: 0.12, tempo: 0.13, physis: 0.33, mentalitaet: 0.25, intelligenz: 0.12, charisma: 0.05 },
+  AV: { technik: 0.18, tempo: 0.22, physis: 0.23, mentalitaet: 0.19, intelligenz: 0.13, charisma: 0.05 },
+  ZM: { technik: 0.24, tempo: 0.14, physis: 0.16, mentalitaet: 0.21, intelligenz: 0.2, charisma: 0.05 },
+  FS: { technik: 0.32, tempo: 0.32, physis: 0.08, mentalitaet: 0.08, intelligenz: 0.15, charisma: 0.05 },
+  ST: { technik: 0.32, tempo: 0.27, physis: 0.17, mentalitaet: 0.12, intelligenz: 0.07, charisma: 0.05 },
 };
 
 export type LeagueTier = 1 | 2;
