@@ -117,6 +117,9 @@ export interface ClubTenure {
   toAge: number;
   seasons: number;
   avgScore: number;
+  /** Ob der Verein während dieser Zugehörigkeit mindestens einmal auf-/abgestiegen ist. */
+  promoted: boolean;
+  relegated: boolean;
 }
 
 export interface SeasonStats {

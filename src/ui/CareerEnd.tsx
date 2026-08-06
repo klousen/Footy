@@ -90,7 +90,19 @@ export function CareerEnd({
                 <span className="club-tenure-age">
                   {ct.fromAge === ct.toAge ? `${ct.fromAge}` : `${ct.fromAge}-${ct.toAge}`}
                 </span>
-                <span className="club-tenure-club">{ct.club}</span>
+                <span className="club-tenure-club">
+                  {ct.club}
+                  {ct.promoted && (
+                    <span className="tenure-arrow tenure-arrow-up" title="Aufstieg" aria-label="Aufstieg">
+                      ↑
+                    </span>
+                  )}
+                  {ct.relegated && (
+                    <span className="tenure-arrow tenure-arrow-down" title="Abstieg" aria-label="Abstieg">
+                      ↓
+                    </span>
+                  )}
+                </span>
                 <span className="club-tenure-score">Ø {ct.avgScore} Pkt.</span>
               </li>
             ))}

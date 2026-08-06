@@ -3707,7 +3707,7 @@ export const EVENT_TEMPLATES: EventTemplate[] = [
     condition: (p) => p.contract.yearsLeft <= 1 && p.reputation > 30,
     build: (p) => ({
       category: "vertrag",
-      title: "Vertrag läuft aus - Bosman-Poker",
+      title: "Vertrag läuft aus - Poker um die Ablösefreiheit",
       description: `Dein Vertrag bei ${club(p)} läuft in einem Jahr aus. Ablösefrei wärst du für Top-Vereine hochinteressant - der Verein drängt aber auf eine schnelle Verlängerung.`,
       choices: [
         {

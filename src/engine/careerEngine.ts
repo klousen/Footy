@@ -863,12 +863,16 @@ function targetStrengthForReputation(reputation: number, overall: number): numbe
   return clamp(15 + reputation * 0.2 + overall * 0.65, 30, 96);
 }
 
-/** Rang eines Landes nach UEFA-Länderkoeffizient (Reihenfolge der `COUNTRIES`-Liste) -
- * 0 = höchstes Liga-Ansehen (England), 9 = niedrigstes (Polen). Dient als Proxy für
- * "Aufstieg/Abstieg im Liga-Ranking" bei internationalen Wechseln. */
+/** Rang eines Landes nach echter UEFA-5-Jahreswertung (siehe `CountryDef.uefaRank` in
+ * leagues.ts) - 0 = höchstes Liga-Ansehen (England), 9 = niedrigstes (Polen) innerhalb
+ * dieser Zehnerauswahl. Bewusst UNABHÄNGIG von der Deklarationsreihenfolge der
+ * `COUNTRIES`-Liste (die weiterhin die Anzeige-Reihenfolge auf dem
+ * Länder-Auswahlbildschirm bestimmt) - Liga-Ansehen und Anzeige-Sortierung sind zwei
+ * verschiedene Dinge. Dient als Proxy für "Aufstieg/Abstieg im Liga-Ranking" bei
+ * internationalen Wechseln sowie als Basis fürs Gehalt (siehe `leaguePrestigeMultiplier`). */
 function leaguePrestigeRank(countryId: CountryId): number {
-  const idx = COUNTRIES.findIndex((c) => c.id === countryId);
-  return idx === -1 ? COUNTRIES.length : idx;
+  const def = COUNTRIES.find((c) => c.id === countryId);
+  return def ? def.uefaRank - 1 : COUNTRIES.length;
 }
 
 /** Ligaansehen als Multiplikator: die bestplatzierte Liga der Auswahl zahlt spürbar
@@ -880,14 +884,36 @@ function leaguePrestigeMultiplier(countryId: CountryId): number {
 }
 
 /**
+ * "Internationaler Flair"-Bonus: ein wirklich absoluter Topklub (Champions-League-
+ * Format-Niveau) IN einer der großen Ligen bringt kommerziell mehr mit, als die reine
+ * Stärkezahl hergibt - globale Sponsoren, TV-Vermarktung, CL-Prämien. Bewusst als
+ * Überschneidung aus BEIDEM modelliert (hohe Vereinsstärke UND hohes Liga-Ansehen),
+ * nicht als Summe: ein starker Verein in einer kleinen Liga (z.B. Legia Warschau) hat
+ * dieses globale Scheinwerferlicht nicht in demselben Maß, und selbst ein mittelmäßiger
+ * Verein in einer Topliga bekommt keinen Flair-Aufschlag nur fürs Liga-Ansehen (das
+ * deckt bereits `leaguePrestigeMultiplier` ab). Wirkt daher nur ganz oben - ab Stärke
+ * 80 aufwärts und nur in den (grob) fünf angesehensten Ligen dieser Auswahl.
+ */
+function internationalFlairBonus(clubStrength: number, countryId: CountryId): number {
+  const strengthFactor = clamp((clubStrength - 80) / 19, 0, 1); // 0 unter 80, 1 ab Stärke 99
+  const prestigeFactor = clamp((leaguePrestigeMultiplier(countryId) - 1) / 0.3, 0, 1); // 0 ab Rang 5, 1 bei Rang 0
+  return strengthFactor * prestigeFactor;
+}
+
+/**
  * ELO-artiger Vereins-Koeffizient: kombiniert die sportliche Stärke des Klubs
  * (0-99, innerhalb der eigenen Liga-Pyramide) mit dem Ansehen der Liga selbst
- * zu einem einzigen Wert. Ein "92" in einer Topliga ist damit spürbar mehr wert
- * als ein "92" in einer schwächeren - dient als einheitliche Basis fürs Gehalt
- * (und ließe sich künftig für weitere vereinsbezogene Berechnungen wiederverwenden).
+ * zu einem einzigen Wert - und obendrauf einen Flair-Aufschlag für echte
+ * Topklubs in Topligen (siehe `internationalFlairBonus`). Ein "92" in einer
+ * Topliga ist damit spürbar mehr wert als ein "92" in einer schwächeren, und
+ * ein "92" beim internationalen Aushängeschild nochmal mehr als ein "92" beim
+ * soliden Mittelständler derselben Liga - dient als einheitliche Basis fürs
+ * Gehalt (und ließe sich künftig für weitere vereinsbezogene Berechnungen
+ * wiederverwenden).
  */
 function clubCoefficient(club: { strength: number }, countryId: CountryId): number {
-  return club.strength * leaguePrestigeMultiplier(countryId);
+  const flair = internationalFlairBonus(club.strength, countryId);
+  return club.strength * leaguePrestigeMultiplier(countryId) * (1 + flair * 0.5);
 }
 
 /** Geschätztes Jahresgehalt bei einem Verein - richtet sich nach der eigenen
@@ -903,8 +929,12 @@ function estimateWage(overall: number, reputation: number, club: { strength: num
   const coeff = clubCoefficient(club, countryId);
   // 55 als grober Referenzwert für einen "durchschnittlichen" Erstliga-Verein -
   // Vereine deutlich darüber/darunter skalieren das Gehalt spürbar über- bzw.
-  // unterproportional (Potenz statt linearer Faktor).
-  const clubMultiplier = clamp(Math.pow(coeff / 55, 1.8), 0.25, 6);
+  // unterproportional (Potenz statt linearer Faktor). Obergrenze bewusst höher als
+  // der ohne Flair-Bonus erreichbare Höchstkoeffizient (siehe `clubCoefficient`),
+  // damit selbst die absoluten Top-Vereine der großen Ligen (mit Flair-Aufschlag)
+  // nicht alle an derselben Kappungsgrenze landen und sich weiter voneinander
+  // abheben.
+  const clubMultiplier = clamp(Math.pow(coeff / 55, 1.8), 0.25, 8);
   return Math.round((baseline * clubMultiplier) / 100) * 100;
 }
 
@@ -1126,6 +1156,18 @@ export type ClubOfferReason = "pro-debut" | "opportunity" | "pressure";
 
 const CLUB_OFFER_PREFIX = "club_offer:";
 
+/** Vertrags-Events, deren Prämisse ("dein Vertrag läuft bald aus") durch einen
+ * frisch vollzogenen Wechsel (neuer 3-Jahres-Vertrag, siehe `applyClubOfferChoice`)
+ * sofort hinfällig wird. Wurden sie bereits VOR dem Wechsel für dieselbe Saison in
+ * die Event-Queue gezogen (siehe `pickSeasonTemplateIds`), würden sie sonst direkt
+ * im Anschluss an den gerade vollzogenen Wechsel auftauchen, obwohl man gerade erst
+ * einen neuen Vertrag unterschrieben hat - siehe App.tsx `handleChoice`, das diese
+ * IDs nach einem echten Wechsel noch in derselben Saison aus der Queue entfernt. */
+export const STALE_AFTER_TRANSFER_TEMPLATE_IDS: ReadonlySet<string> = new Set([
+  "vertrag_verlaengerung",
+  "vertrag_bosman_poker",
+]);
+
 export function isClubOfferEvent(templateId: string): boolean {
   return templateId.startsWith(CLUB_OFFER_PREFIX);
 }
@@ -1191,13 +1233,23 @@ function pickForeignCountryIds(excludeId: CountryId, count: number): CountryId[]
 
 /** Wahrscheinlichkeit, dass unter den Angeboten mindestens ein Auslandsverein ist -
  * steigt mit Bekanntheit/Gesamtstärke, und stark, wenn aktiv ein Wechsel gewünscht wird
- * (der Berater erweitert dann bewusst den Suchradius über die Landesgrenze hinaus). */
+ * (der Berater erweitert dann bewusst den Suchradius über die Landesgrenze hinaus). Am
+ * Karriereende zieht es die meisten Spieler, die noch in der Heimat spielen, eher
+ * seltener in ein komplett neues Land - wer bereits im Ausland spielt, bekommt
+ * weiterhin regelmäßig "Auslands"-Angebote, die dann aber gezielt Richtung Heimat
+ * zeigen (siehe `buildClubOfferEvent`), statt in ein drittes, neues Land. */
 function internationalOfferChance(reason: ClubOfferReason, player: Player, overall: number): number {
   const fameFactor = player.reputation / 250 + overall / 300; // ~0 .. 0.65
   if (player.wantsTransfer) return clamp(0.55 + fameFactor, 0.45, 0.9);
-  if (reason === "pro-debut") return clamp(0.15 + fameFactor, 0.1, 0.5);
-  if (reason === "opportunity") return clamp(0.3 + fameFactor, 0.25, 0.75);
-  return clamp(0.15 + fameFactor, 0.1, 0.4);
+  const base =
+    reason === "pro-debut"
+      ? clamp(0.15 + fameFactor, 0.1, 0.5)
+      : reason === "opportunity"
+      ? clamp(0.3 + fameFactor, 0.25, 0.75)
+      : clamp(0.15 + fameFactor, 0.1, 0.4);
+  const isLateCareerAtHome =
+    (player.stage === "veteran" || player.stage === "spaetphase") && player.country === player.homeCountryId;
+  return isLateCareerAtHome ? base * 0.5 : base;
 }
 
 interface OfferCandidate {
@@ -1207,6 +1259,42 @@ interface OfferCandidate {
   flag: string;
   leagueLabel: string;
   isForeign: boolean;
+}
+
+/**
+ * Sucht unter den früheren Vereinen mit einer echten, mehrjährigen Vergangenheit
+ * (siehe `buildClubTenures`, mind. 2 Saisons) einen konkreten Kandidaten für eine
+ * "Rückkehr zu einem alten Verein"-Angebotsoption im Karriereherbst - nur dort, wo der
+ * Verein noch in einer bekannten Liga (aktuelle oder gecachte Auslandsliga)
+ * auffindbar ist. Vereinsnamen sind innerhalb eines Landes eindeutig (siehe
+ * `disambiguateCities` in leagues.ts), ein reiner Namensabgleich genügt daher.
+ */
+function pastClubCandidate(
+  player: Player,
+  activeLeague: LeagueState,
+  foreignLeagues: Partial<Record<CountryId, LeagueState>>
+): OfferCandidate | null {
+  const tenures = buildClubTenures(player).filter((t) => t.seasons >= 2 && t.club !== player.club.name);
+  if (tenures.length === 0) return null;
+  const pick = tenures[Math.floor(rng() * tenures.length)];
+  const knownLeagues: [CountryId, LeagueState][] = [
+    [activeLeague.countryId, activeLeague],
+    ...(Object.entries(foreignLeagues) as [CountryId, LeagueState][]),
+  ];
+  for (const [countryId, lg] of knownLeagues) {
+    const club = [...lg.tier1, ...lg.tier2].find((c) => c.city === pick.club);
+    if (club && club.id !== player.club.clubId) {
+      return {
+        club,
+        countryId,
+        countryName: lg.countryName,
+        flag: lg.flag,
+        leagueLabel: leagueNameForTier(lg, club.tier),
+        isForeign: countryId !== player.country,
+      };
+    }
+  }
+  return null;
 }
 
 function buildClubOfferEvent(
@@ -1280,7 +1368,18 @@ function buildClubOfferEvent(
   }));
 
   if (foreignCount > 0) {
-    for (const countryId of pickForeignCountryIds(player.country, foreignCount)) {
+    const isLateCareer = player.stage === "veteran" || player.stage === "spaetphase";
+    const isAbroad = player.country !== player.homeCountryId;
+    // Im Karriereherbst zieht es einen Spieler, der gerade im Ausland spielt, eher
+    // zurück in die Heimat als in ein komplett neues drittes Land - einer der
+    // "Auslands"-Plätze wird dann gezielt mit dem Heimatland belegt statt zufällig
+    // gewählt (siehe `internationalOfferChance` für die Kehrseite: wer schon zuhause
+    // spielt, bekommt seltener ein brandneues Auslandsangebot).
+    const foreignCountryIds =
+      isLateCareer && isAbroad && rng() < 0.7
+        ? [player.homeCountryId, ...pickForeignCountryIds(player.country, foreignCount - 1)].slice(0, foreignCount)
+        : pickForeignCountryIds(player.country, foreignCount);
+    for (const countryId of foreignCountryIds) {
       const foreignLeague = getOrBuildForeignLeague(foreignLeagues, countryId);
       const foreignPool = [...foreignLeague.tier1, ...foreignLeague.tier2];
       const club = pickClubNearStrength(foreignPool, targetStrength, null, rng);
@@ -1292,6 +1391,17 @@ function buildClubOfferEvent(
         leagueLabel: leagueNameForTier(foreignLeague, club.tier),
         isForeign: true,
       });
+    }
+  }
+
+  // Im Karriereherbst kommt ein Angebot oft von einem Verein, bei dem man schon
+  // einmal länger war ("Rückkehr zu alten Wirkungsstätten") statt nur von völlig
+  // neuen Vereinen - ersetzt dazu mit einer gewissen Wahrscheinlichkeit einen der
+  // sonst zufällig gewählten Kandidaten (siehe `pastClubCandidate`).
+  if ((player.stage === "veteran" || player.stage === "spaetphase") && reason !== "pro-debut" && rng() < 0.45) {
+    const past = pastClubCandidate(player, league, foreignLeagues);
+    if (past && candidates.length > 0 && !candidates.some((c) => c.club.id === past.club.id)) {
+      candidates[Math.floor(rng() * candidates.length)] = past;
     }
   }
 
@@ -1730,8 +1840,18 @@ export function buildClubTenures(player: Player): ClubTenure[] {
       last.toAge = s.age;
       last.seasons += 1;
       last.avgScore += s.score;
+      if (s.promoted) last.promoted = true;
+      if (s.relegated) last.relegated = true;
     } else {
-      tenures.push({ club: s.club, fromAge: s.age, toAge: s.age, seasons: 1, avgScore: s.score });
+      tenures.push({
+        club: s.club,
+        fromAge: s.age,
+        toAge: s.age,
+        seasons: 1,
+        avgScore: s.score,
+        promoted: s.promoted,
+        relegated: s.relegated,
+      });
     }
   }
   for (const t of tenures) {

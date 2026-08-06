@@ -25,6 +25,7 @@ import {
   resolveClubSituation,
   shouldOfferRetirement,
   simulateSeason,
+  STALE_AFTER_TRANSFER_TEMPLATE_IDS,
   summarizeEffects,
 } from "./engine/careerEngine";
 import { StartScreen } from "./ui/StartScreen";
@@ -173,10 +174,17 @@ export default function App() {
     const foreignLeagues = game.foreignLeagues;
 
     let newActiveLeague: GameState["leagueState"] = null;
+    // Ein echter Vereinswechsel (nicht "bleiben"/"kämpfen"/kein passender Verein
+    // gefunden) setzt den Vertrag frisch auf 3 Jahre - eine in dieser Saison bereits
+    // gezogene, aber noch nicht angezeigte Vertragsverlängerung wäre danach hinfällig
+    // (siehe `STALE_AFTER_TRANSFER_TEMPLATE_IDS`) und muss aus der Warteschlange raus.
+    let didTransfer = false;
     const feedback = isClubOfferEvent(game.currentEvent.templateId)
       ? (() => {
+          const oldClubId = player.club.clubId;
           const result = applyClubOfferChoice(player, league, game.currentEvent!, choice.id, foreignLeagues);
           if (result.newActiveLeague) newActiveLeague = result.newActiveLeague;
+          didTransfer = player.club.clubId !== oldClubId;
           return result.feedback;
         })()
       : (() => {
@@ -202,6 +210,9 @@ export default function App() {
       player: { ...player },
       leagueState: newActiveLeague ?? { ...league },
       foreignLeagues: { ...foreignLeagues },
+      pendingEventIds: didTransfer
+        ? game.pendingEventIds.filter((id) => !STALE_AFTER_TRANSFER_TEMPLATE_IDS.has(id))
+        : game.pendingEventIds,
       feedback,
     });
   }

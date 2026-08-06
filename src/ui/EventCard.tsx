@@ -1,5 +1,6 @@
 import type { ChoiceFeedback, EventChoice, GameEvent, Player } from "../engine/types";
-import { CATEGORY_LABEL } from "./labels";
+import { isClubOfferEvent } from "../engine/careerEngine";
+import { CATEGORY_LABEL, formatMoney } from "./labels";
 
 const KIND_ICON: Record<string, string> = {
   info: "ℹ️",
@@ -29,6 +30,11 @@ export function EventCard({
           {player.name}, {player.age} Jahre
         </span>
       </div>
+      {isClubOfferEvent(event.templateId) && player.contract.wagePerYear > 0 && (
+        <div className="event-current-wage">
+          Aktuelles Gehalt zum Vergleich: <strong>{formatMoney(player.contract.wagePerYear)}/Jahr</strong>
+        </div>
+      )}
       <div className="event-card">
         <h2>{event.title}</h2>
         <p>{event.description}</p>

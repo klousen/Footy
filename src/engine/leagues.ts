@@ -39,6 +39,17 @@ export interface CountryDef {
   tier2Name: string;
   /** Anzahl Vereine, die je Saison zwischen Liga 1 und Liga 2 den Platz tauschen. */
   swapCount: number;
+  /** Rang (1 = höchstes Ansehen) nach der echten UEFA-5-Jahreswertung der
+   * Landesverbände (siehe `leaguePrestigeRank` in careerEngine.ts) - bestimmt das
+   * Liga-Ansehen fürs Gehalt/Vereins-Prestige, unabhängig von der Reihenfolge
+   * dieser Liste (die weiter die Anzeige-Reihenfolge auf dem Länder-Auswahlbildschirm
+   * bestimmt). Stand: Einschätzung anhand der zuletzt bekannten Trends der letzten
+   * Saisons (England klar vorn, Italien/Deutschland/Spanien im engen Mittelfeld direkt
+   * dahinter, Frankreich als fünfte Großliga, danach Portugal/Niederlande/Belgien als
+   * nächste Ebene, Türkei/Polen am unteren Ende dieser Zehnerauswahl) - keine
+   * Echtzeit-Kopplung an die tagesaktuelle Tabelle.
+   */
+  uefaRank: number;
   tier1Cities: string[];
   tier2Cities: string[];
 }
@@ -51,6 +62,7 @@ export const COUNTRIES: CountryDef[] = [
     tier1Name: "Premier League",
     tier2Name: "Championship",
     swapCount: 3,
+    uefaRank: 1,
     tier1Cities: [
       "London-Islington", "Manchester-Eastlands", "Liverpool-Anfield", "London-Brentford",
       "Manchester-Old Trafford", "Liverpool-Bramley-Moore", "London-Chelsea", "Newcastle",
@@ -72,6 +84,7 @@ export const COUNTRIES: CountryDef[] = [
     tier1Name: "Serie A",
     tier2Name: "Serie B",
     swapCount: 3,
+    uefaRank: 2,
     tier1Cities: [
       "Neapel", "Mailand I", "Turin-Continassa", "Mailand II", "Bergamo", "Rom-Testaccio",
       "Rom-Flaminio", "Florenz", "Bologna", "Turin-Filadelfia", "Udine", "Genua", "Como",
@@ -91,6 +104,7 @@ export const COUNTRIES: CountryDef[] = [
     tier1Name: "La Liga",
     tier2Name: "Segunda División",
     swapCount: 3,
+    uefaRank: 4,
     tier1Cities: [
       "Madrid-Chamartín", "Barcelona-Les Corts", "Madrid-Metropolitano", "Bilbao",
       "Villarreal", "Sevilla-Heliópolis", "Vigo", "San Sebastián", "Sevilla-Nervión",
@@ -111,6 +125,7 @@ export const COUNTRIES: CountryDef[] = [
     tier1Name: "Bundesliga",
     tier2Name: "2. Bundesliga",
     swapCount: 2,
+    uefaRank: 3,
     tier1Cities: [
       "München", "Leverkusen", "Leipzig", "Dortmund", "Frankfurt", "Stuttgart",
       "Freiburg", "Bremen", "Mönchengladbach", "Berlin", "Mainz", "Hoffenheim",
@@ -129,6 +144,7 @@ export const COUNTRIES: CountryDef[] = [
     tier1Name: "Ligue 1",
     tier2Name: "Ligue 2",
     swapCount: 2,
+    uefaRank: 5,
     tier1Cities: [
       "Paris-Auteuil", "Marseille", "Monaco", "Lyon", "Lille", "Nizza", "Lens",
       "Rennes", "Straßburg", "Toulouse", "Paris-Charléty", "Angers", "Auxerre",
@@ -147,6 +163,7 @@ export const COUNTRIES: CountryDef[] = [
     tier1Name: "Primeira Liga",
     tier2Name: "Liga Portugal 2",
     swapCount: 2,
+    uefaRank: 6,
     tier1Cities: [
       "Porto", "Lissabon-Benfica", "Lissabon-Alvalade", "Braga", "Guimarães",
       "Famalicão", "Lissabon-Casal Vistoso", "Amadora", "Vila do Conde",
@@ -166,6 +183,7 @@ export const COUNTRIES: CountryDef[] = [
     tier1Name: "Pro League",
     tier2Name: "Challenger Pro League",
     swapCount: 2,
+    uefaRank: 8,
     tier1Cities: [
       "Brügge-Sint-Andries", "Brüssel-Anderlecht", "Genk", "Antwerpen", "Gent",
       "Lüttich", "Brüssel-Forest", "Charleroi", "Brügge-Sint-Michiels", "Mechelen",
@@ -184,6 +202,7 @@ export const COUNTRIES: CountryDef[] = [
     tier1Name: "Eredivisie",
     tier2Name: "Eerste Divisie",
     swapCount: 3,
+    uefaRank: 7,
     tier1Cities: [
       "Amsterdam", "Eindhoven", "Rotterdam-Feijenoord", "Alkmaar", "Enschede", "Utrecht",
       "Deventer", "Rotterdam-Spangen", "Nijmegen", "Sittard", "Zwolle", "Heerenveen",
@@ -204,6 +223,7 @@ export const COUNTRIES: CountryDef[] = [
     tier1Name: "Süper Lig",
     tier2Name: "TFF 1. Lig",
     swapCount: 3,
+    uefaRank: 9,
     tier1Cities: [
       "Istanbul-Seyrantepe", "Istanbul-Kadıköy", "Istanbul-Beşiktaş", "Trabzon",
       "Istanbul-Başakşehir", "Konya", "Sivas", "Istanbul-Kasımpaşa", "Alanya",
@@ -223,6 +243,7 @@ export const COUNTRIES: CountryDef[] = [
     tier1Name: "Ekstraklasa",
     tier2Name: "I liga",
     swapCount: 3,
+    uefaRank: 10,
     tier1Cities: [
       "Posen", "Tschenstochau", "Warschau", "Białystok", "Stettin",
       "Breslau", "Gliwice", "Krakau", "Lodz", "Zabrze", "Lubin", "Radom",

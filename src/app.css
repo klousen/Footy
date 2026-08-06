@@ -648,6 +648,19 @@ input:focus {
   letter-spacing: 0.04em;
 }
 
+.event-current-wage {
+  font-size: 0.85rem;
+  color: var(--muted);
+  background: var(--panel);
+  border: 1px solid var(--panel-border);
+  border-radius: var(--radius);
+  padding: 8px 14px;
+}
+
+.event-current-wage strong {
+  color: var(--text);
+}
+
 .event-card {
   background: var(--panel);
   border: 1px solid var(--panel-border);
@@ -899,6 +912,20 @@ input:focus {
 
 .club-tenure-club {
   font-weight: 600;
+}
+
+.tenure-arrow {
+  display: inline-block;
+  margin-left: 6px;
+  font-weight: 700;
+}
+
+.tenure-arrow-up {
+  color: var(--accent);
+}
+
+.tenure-arrow-down {
+  color: var(--danger);
 }
 
 .club-tenure-score {
