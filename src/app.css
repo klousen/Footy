@@ -1,24 +1,56 @@
+/* ====================================================================
+   Design-System "Matchday Dossier"
+   Kantiges Dossier/Datenblatt-Gefühl statt generischem App-Card-UI:
+   Tannengrün + Old-Gold, Barlow Condensed für Display-Text, JetBrains
+   Mono für Zahlen, 4px-Radius, Rahmenlinien statt Schatten.
+   ==================================================================== */
+
 :root {
   color-scheme: dark;
-  --bg: #0d1117;
-  --bg-alt: #131b26;
-  --panel: #161f2c;
-  --panel-border: #24344a;
-  --text: #eef2f7;
-  --muted: #93a4bb;
-  --accent: #38d67a;
-  --accent-strong: #21b866;
-  --accent-soft: rgba(56, 214, 122, 0.15);
-  --pitch: #0f2b1c;
-  --pitch-line: rgba(120, 220, 170, 0.08);
-  --warning: #f0b429;
-  --danger: #f0554f;
-  --info: #4f9dff;
-  --radius: 14px;
+
+  /* ---- Kern-Tokens (siehe design-tokens.md) ---- */
+  --bg-app: #05100b;
+  --bg-deep: #0b1b14;
+  --bg-panel: #132720;
+  --bg-panel-2: #1e3a2f;
+  --line: #2a4a3c;
+
+  --gold: #c9a227;
+  --gold-bright: #e6c158;
+
+  --chalk: #e8e4d8;
+  --chalk-dim: #9fb3a8;
+
+  --red: #8b3a3a;
+  --green: #4e9e6e;
+
+  /* ---- Semantische Aliase - bestehende Komponentenklassen referenzieren
+     diese Namen, damit die neuen Kern-Tokens ohne Änderungen an jeder
+     einzelnen Regel greifen. Gold übernimmt hier zusätzlich die Rolle von
+     "Warnung/Info", damit die Palette auf die im Design-System definierten
+     Farben beschränkt bleibt (keine zusätzliche Amber-/Blauton). ---- */
+  --bg: var(--bg-app);
+  --bg-alt: var(--bg-deep);
+  --panel: var(--bg-panel);
+  --panel-border: var(--line);
+  --text: var(--chalk);
+  --muted: var(--chalk-dim);
+  --accent: var(--green);
+  --accent-strong: #3d8058;
+  --accent-soft: rgba(78, 158, 110, 0.15);
+  --warning: var(--gold);
+  --danger: var(--red);
+  --info: var(--gold-bright);
+  --radius: 4px;
+
+  --font-display: "Barlow Condensed", sans-serif;
+  --font-body: "Inter", sans-serif;
+  --font-mono: "JetBrains Mono", monospace;
+
   /* Einheitliche, "fluide" Easing-Kurve für Hover/Press-Feedback - ein leichter
      Überschwung statt starrem linear/ease, sorgt für das gewünschte "runde" Gefühl. */
   --ease: cubic-bezier(0.22, 1, 0.36, 1);
-  font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+  font-family: var(--font-body);
 }
 
 * {
@@ -37,28 +69,24 @@ html {
 
 body {
   margin: 0;
-  background: radial-gradient(circle at top, #16202e 0%, var(--bg) 55%);
-  color: var(--text);
+  background: var(--bg-app);
+  color: var(--chalk);
   min-height: 100vh;
   position: relative;
 }
 
-/* Sehr dezentes Spielfeld-Wasserzeichen im Hintergrund - Mittelkreis + Anstoßlinie,
-   rein aus CSS-Gradienten, keine Grafik. Bewusst kaum wahrnehmbar (siehe --pitch-line
-   Alpha-Wert) statt eines plakativen Rasen-Musters - Fußball-Bezug, ohne aufdringlich
-   zu wirken. */
+/* Signature-Element: dezente Spielfeld-Linien als Hintergrundtextur auf
+   jedem Screen (siehe design-tokens.md, Abschnitt 3) - angedeutete
+   Rasenstreifen + Anstoßkreis, sehr niedrige Opacity, rein dekorativ. */
 body::before {
   content: "";
   position: fixed;
   inset: 0;
   z-index: 0;
   pointer-events: none;
-  background-image:
-    radial-gradient(circle at 50% 0%, transparent 0, transparent 128px, var(--pitch-line) 129px, var(--pitch-line) 131px, transparent 132px),
-    linear-gradient(to bottom, transparent 199px, var(--pitch-line) 200px, var(--pitch-line) 201px, transparent 202px);
-  background-repeat: no-repeat;
-  background-position: top center;
-  opacity: 0.7;
+  opacity: 0.07;
+  background-image: repeating-linear-gradient(0deg, transparent 0 38px, var(--chalk) 38px 39px, transparent 39px 78px),
+    radial-gradient(circle at 50% 15%, transparent 0 60px, var(--chalk) 60px 61px, transparent 61px);
 }
 
 #root {
@@ -121,7 +149,32 @@ h1,
 h2,
 h3 {
   margin: 0;
-  line-height: 1.2;
+  line-height: 1.15;
+  font-family: var(--font-display);
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.01em;
+}
+
+h3 {
+  font-weight: 700;
+  font-size: 0.95rem;
+  letter-spacing: 0.1em;
+  color: var(--chalk-dim);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* Kurzer Gold-Balken vor jedem Panel-Titel - das eine strukturelle
+   Wiedererkennungsmerkmal des Dossier-Looks (siehe design-tokens.md 4.2). */
+h3::before {
+  content: "";
+  width: 3px;
+  height: 14px;
+  background: var(--gold);
+  display: inline-block;
+  flex-shrink: 0;
 }
 
 p {
@@ -159,8 +212,8 @@ p {
   align-items: center;
   justify-content: center;
   border-radius: 50%;
-  background: var(--accent-soft);
-  border: 1px solid var(--panel-border);
+  background: radial-gradient(circle, rgba(201, 162, 39, 0.14), transparent);
+  border: 1.5px solid var(--gold);
   animation: hero-float 4.5s ease-in-out infinite;
 }
 
@@ -175,12 +228,13 @@ p {
 }
 
 .hero h1 {
-  font-size: clamp(1.7rem, 5vw, 2.3rem);
+  font-size: clamp(2rem, 6vw, 2.7rem);
 }
 
 .hero-sub {
   max-width: 480px;
   color: var(--muted);
+  font-family: var(--font-body);
 }
 
 .start-actions {
@@ -195,12 +249,16 @@ p {
 
 .btn {
   border: none;
-  border-radius: 999px;
-  padding: 14px 22px;
-  font-size: 1rem;
-  font-weight: 600;
+  border-radius: var(--radius);
+  padding: 13px 22px;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 0.95rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
   cursor: pointer;
-  transition: transform 0.22s var(--ease), filter 0.2s ease, opacity 0.15s ease, box-shadow 0.22s var(--ease), background-color 0.2s ease;
+  transition: transform 0.22s var(--ease), filter 0.2s ease, opacity 0.15s ease, box-shadow 0.22s var(--ease),
+    background-color 0.2s ease, border-color 0.2s ease;
 }
 
 .btn:active {
@@ -213,47 +271,45 @@ p {
 }
 
 .btn:focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--gold);
   outline-offset: 2px;
 }
 
 .btn-primary {
-  background: linear-gradient(135deg, var(--accent) 0%, var(--accent-strong) 100%);
-  color: #06210f;
-  box-shadow: 0 2px 10px rgba(33, 184, 102, 0.18);
+  background: linear-gradient(180deg, var(--green), var(--accent-strong));
+  color: var(--bg-deep);
 }
 
 .btn-primary:hover:not(:disabled) {
   filter: brightness(1.08);
   transform: translateY(-1px);
-  box-shadow: 0 6px 18px rgba(33, 184, 102, 0.32);
 }
 
 .btn-secondary {
-  background: var(--panel);
-  color: var(--text);
-  border: 1px solid var(--panel-border);
+  background: var(--bg-panel);
+  color: var(--chalk);
+  border: 1px solid var(--line);
 }
 
 .btn-secondary:hover:not(:disabled) {
-  border-color: var(--accent);
+  border-color: var(--gold);
   transform: translateY(-1px);
 }
 
 .btn-ghost {
   background: transparent;
-  color: var(--accent);
-  border: 1px solid var(--panel-border);
+  color: var(--gold-bright);
+  border: 1px solid var(--line);
 }
 
 .btn-ghost:hover:not(:disabled) {
-  border-color: var(--accent);
-  background: var(--accent-soft);
+  border-color: var(--gold);
+  background: rgba(201, 162, 39, 0.08);
 }
 
 .btn-small {
   padding: 8px 14px;
-  font-size: 0.85rem;
+  font-size: 0.8rem;
 }
 
 .field {
@@ -263,25 +319,29 @@ p {
 }
 
 .field > span {
-  font-weight: 600;
-  font-size: 0.9rem;
-  color: var(--muted);
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 0.85rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--chalk-dim);
 }
 
 input {
-  background: var(--panel);
-  border: 1px solid var(--panel-border);
-  border-radius: 10px;
+  background: var(--bg-panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
   padding: 12px 14px;
-  color: var(--text);
+  color: var(--chalk);
+  font-family: var(--font-body);
   font-size: 1rem;
   transition: border-color 0.2s ease, box-shadow 0.2s ease;
 }
 
 input:focus {
   outline: none;
-  border-color: var(--accent);
-  box-shadow: 0 0 0 3px var(--accent-soft);
+  border-color: var(--gold);
+  box-shadow: 0 0 0 3px rgba(201, 162, 39, 0.15);
 }
 
 .option-grid {
@@ -295,23 +355,41 @@ input:focus {
   flex-direction: column;
   gap: 4px;
   text-align: left;
-  background: var(--panel);
-  border: 1px solid var(--panel-border);
-  border-radius: 12px;
+  background: var(--bg-panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
   padding: 12px 14px;
-  color: var(--text);
+  color: var(--chalk);
   cursor: pointer;
-  transition: transform 0.22s var(--ease), border-color 0.2s ease, background-color 0.2s ease, box-shadow 0.22s var(--ease);
+  position: relative;
+  overflow: hidden;
+  transition: border-color 0.2s ease, background-color 0.2s ease;
+}
+
+/* Gold-Akzentstreifen am linken Rand - erscheint bei Hover/Selected statt
+   Schatten oder Verschiebung (siehe design-tokens.md, .country-card). */
+.option-card::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  width: 3px;
+  background: var(--gold);
+  opacity: 0;
+  transition: opacity 0.2s ease;
 }
 
 .option-card:hover {
-  border-color: var(--accent);
-  transform: translateY(-2px);
-  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.28);
+  border-color: var(--gold);
+}
+
+.option-card:hover::before {
+  opacity: 1;
 }
 
 .option-card:active {
-  transform: translateY(0) scale(0.99);
+  transform: scale(0.99);
 }
 
 .option-card span {
@@ -320,8 +398,12 @@ input:focus {
 }
 
 .option-card.selected {
-  border-color: var(--accent);
-  background: var(--accent-soft);
+  border-color: var(--gold);
+  background: linear-gradient(160deg, rgba(201, 162, 39, 0.1), var(--bg-panel));
+}
+
+.option-card.selected::before {
+  opacity: 1;
 }
 
 .country-grid {
@@ -345,11 +427,12 @@ input:focus {
 
 .season-kicker {
   margin: 0;
-  font-size: 0.78rem;
+  font-family: var(--font-display);
+  font-size: 0.8rem;
   font-weight: 700;
-  color: var(--accent);
+  color: var(--green);
   text-transform: uppercase;
-  letter-spacing: 0.05em;
+  letter-spacing: 0.12em;
 }
 
 .player-header {
@@ -363,100 +446,106 @@ input:focus {
   display: flex;
   flex-direction: column;
   align-items: center;
-  background: var(--panel);
-  border: 1px solid var(--panel-border);
-  border-radius: 12px;
-  padding: 10px 16px;
+  background: var(--bg-panel);
+  border: 1.5px solid var(--line);
+  border-radius: var(--radius);
+  padding: 8px 16px 10px;
   min-width: 86px;
   transition: background 0.3s ease, border-color 0.3s ease;
 }
 
 .overall-number {
+  font-family: var(--font-mono);
   font-size: 1.6rem;
-  font-weight: 700;
-  color: var(--accent);
+  font-weight: 600;
+  color: var(--chalk);
 }
 
 .overall-caption {
-  font-size: 0.65rem;
+  font-family: var(--font-display);
+  font-size: 0.68rem;
   color: var(--muted);
   text-transform: uppercase;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.08em;
   white-space: nowrap;
 }
 
 .overall-trend {
   margin-top: 4px;
+  font-family: var(--font-mono);
   font-size: 0.72rem;
   font-weight: 600;
 }
 
 .overall-trend.up {
-  color: var(--accent);
+  color: var(--green);
 }
 
 .overall-trend.down {
-  color: var(--danger);
+  color: var(--red);
 }
 
-/* FUT-artige Stufen für die Gesamtstärke - je höher, desto edler die Optik. */
+/* FUT-artige Stufen für die Gesamtstärke - je höher, desto stärker der
+   Gold-Auftritt. Amateur/Bronze/Silber bleiben zurückhaltend (Rahmenlinie
+   in --line-Ton), erst ab Star wird der Gold-Rahmen zur Auszeichnung. */
 .overall-badge.tier-amateur {
-  background: linear-gradient(160deg, #2a2f36, var(--panel));
-  border-color: #3a4048;
+  border-color: var(--line);
 }
 .overall-badge.tier-amateur .overall-number {
-  color: #9aa4af;
+  color: var(--chalk-dim);
 }
 
 .overall-badge.tier-bronze {
-  background: linear-gradient(160deg, #3d2a1c, var(--panel));
   border-color: #8a5a34;
+  background: linear-gradient(160deg, rgba(138, 90, 52, 0.16), var(--bg-panel));
 }
 .overall-badge.tier-bronze .overall-number {
   color: #cd7f32;
 }
 
 .overall-badge.tier-silver {
-  background: linear-gradient(160deg, #2c333d, var(--panel));
-  border-color: #9aa7b5;
+  border-color: #7c9084;
+  background: linear-gradient(160deg, rgba(159, 179, 168, 0.14), var(--bg-panel));
 }
 .overall-badge.tier-silver .overall-number {
-  color: #c9d3dd;
+  color: #c9d3cb;
 }
 
 .overall-badge.tier-gold {
-  background: linear-gradient(160deg, #3d3319, var(--panel));
-  border-color: #d4af37;
+  border: 1.5px solid var(--gold);
+  background: linear-gradient(180deg, rgba(201, 162, 39, 0.1), transparent);
 }
 .overall-badge.tier-gold .overall-number {
-  color: #f2c94c;
+  color: var(--gold-bright);
+  text-shadow: 0 0 14px rgba(230, 193, 88, 0.35);
 }
 
 .overall-badge.tier-elite {
-  background: linear-gradient(160deg, #3a1f3d, var(--panel));
-  border-color: #b96ce0;
+  border: 1.5px solid var(--gold-bright);
+  background: linear-gradient(180deg, rgba(230, 193, 88, 0.16), transparent);
 }
 .overall-badge.tier-elite .overall-number {
-  color: #d199f0;
+  color: #f6e3ad;
+  text-shadow: 0 0 18px rgba(230, 193, 88, 0.5);
 }
 
 .overall-badge.tier-icon {
-  background: linear-gradient(160deg, #3d321a, #2a1c33);
-  border-color: #f2c94c;
+  border: 1.5px solid var(--gold-bright);
+  background: linear-gradient(180deg, rgba(230, 193, 88, 0.2), transparent);
   animation: icon-glow 2.6s ease-in-out infinite;
 }
 
 @keyframes icon-glow {
   0%,
   100% {
-    box-shadow: 0 0 14px rgba(242, 201, 76, 0.35);
+    box-shadow: 0 0 14px rgba(230, 193, 88, 0.3);
   }
   50% {
-    box-shadow: 0 0 22px rgba(242, 201, 76, 0.55);
+    box-shadow: 0 0 24px rgba(230, 193, 88, 0.55);
   }
 }
 .overall-badge.tier-icon .overall-number {
-  background: linear-gradient(90deg, #f2c94c, #f0a4e0);
+  background: linear-gradient(90deg, var(--gold-bright), var(--chalk));
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
@@ -469,9 +558,9 @@ input:focus {
 }
 
 .stat-chip {
-  background: var(--panel);
-  border: 1px solid var(--panel-border);
-  border-radius: 12px;
+  background: var(--bg-panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
   padding: 10px;
   display: flex;
   flex-direction: column;
@@ -480,33 +569,27 @@ input:focus {
 }
 
 .stat-value {
-  font-weight: 700;
+  font-family: var(--font-mono);
+  font-weight: 600;
   font-size: 1.05rem;
 }
 
 .stat-label {
-  font-size: 0.7rem;
+  font-size: 0.68rem;
   color: var(--muted);
   text-transform: uppercase;
-  letter-spacing: 0.03em;
+  letter-spacing: 0.05em;
 }
 
 .panel {
-  background: var(--panel);
-  border: 1px solid var(--panel-border);
+  background: var(--bg-panel);
+  border: 1px solid var(--line);
   border-radius: var(--radius);
   padding: 16px;
   display: flex;
   flex-direction: column;
   gap: 10px;
-  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.16);
-}
-
-.panel h3 {
-  font-size: 0.95rem;
-  color: var(--muted);
-  text-transform: uppercase;
-  letter-spacing: 0.03em;
+  position: relative;
 }
 
 .contract-grid {
@@ -520,15 +603,21 @@ input:focus {
   color: var(--muted);
 }
 
+.contract-grid span:nth-child(even) {
+  font-family: var(--font-mono);
+  text-align: right;
+  justify-self: end;
+}
+
 .attr-bars {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 12px;
 }
 
 .attr-row {
   display: grid;
-  grid-template-columns: 92px 1fr 52px;
+  grid-template-columns: 92px 1fr 56px;
   align-items: center;
   gap: 10px;
 }
@@ -540,30 +629,23 @@ input:focus {
 
 .attr-track {
   height: 8px;
-  border-radius: 999px;
-  background: var(--bg-alt);
+  background: #0a1712;
+  border-radius: 1px;
   overflow: hidden;
 }
 
+/* Kantiger Balken statt Standard-Progressbar: rechte Kante schräg
+   abgeschnitten (clip-path) statt abgerundet - wirkt wie ein Tafel-Balken,
+   nicht wie eine App-Loading-Bar (siehe design-tokens.md 4.1). */
 .attr-fill {
   height: 100%;
-  /* Grundfarbe plus ein sehr dezentes Rasenstreifen-Muster obendrüber (wie
-     frisch gemähter Rasen) - ein leiser Fußball-Bezug direkt in der
-     Kernkomponente, ohne dass es wie ein Aufkleber wirkt. */
-  background-image: repeating-linear-gradient(
-      115deg,
-      rgba(255, 255, 255, 0.09) 0px,
-      rgba(255, 255, 255, 0.09) 5px,
-      transparent 5px,
-      transparent 10px
-    ),
-    linear-gradient(90deg, var(--info), var(--accent));
-  border-radius: 999px;
+  background: linear-gradient(90deg, var(--gold) 0%, var(--gold-bright) 100%);
+  clip-path: polygon(0 0, calc(100% - 4px) 0, 100% 100%, 0 100%);
   transition: width 0.5s var(--ease);
 }
 
 .trait-fill {
-  background: linear-gradient(90deg, var(--warning), #e08fd0);
+  background: linear-gradient(90deg, #6b7fb0, #a25c8a);
 }
 
 .trait-hint {
@@ -587,7 +669,8 @@ input:focus {
   align-items: center;
   justify-content: space-between;
   gap: 6px 12px;
-  background: var(--bg-alt);
+  background: var(--bg-deep);
+  border: 1px solid var(--line);
   border-radius: var(--radius);
   padding: 8px 12px;
   font-size: 0.88rem;
@@ -603,24 +686,25 @@ input:focus {
 }
 
 .story-thread-due {
-  color: var(--accent);
+  color: var(--gold-bright);
   font-size: 0.82rem;
   white-space: nowrap;
 }
 
 .attr-value {
   text-align: right;
+  font-family: var(--font-mono);
   font-weight: 600;
   font-size: 0.85rem;
   white-space: nowrap;
 }
 
 .attr-diff.up {
-  color: var(--accent);
+  color: var(--green);
 }
 
 .attr-diff.down {
-  color: var(--danger);
+  color: var(--red);
 }
 
 .dashboard-actions {
@@ -630,22 +714,22 @@ input:focus {
 }
 
 .banner {
-  border-radius: 12px;
+  border-radius: var(--radius);
   padding: 12px 14px;
   font-size: 0.9rem;
-  border: 1px solid var(--panel-border);
+  border: 1px solid var(--line);
 }
 
 .banner-warning {
-  background: rgba(240, 180, 41, 0.12);
-  border-color: rgba(240, 180, 41, 0.4);
-  color: var(--warning);
+  background: rgba(201, 162, 39, 0.1);
+  border-color: rgba(201, 162, 39, 0.4);
+  color: var(--gold-bright);
 }
 
 .banner-success {
-  background: var(--accent-soft);
-  border-color: rgba(56, 214, 122, 0.4);
-  color: var(--accent);
+  background: rgba(78, 158, 110, 0.12);
+  border-color: rgba(78, 158, 110, 0.4);
+  color: var(--green);
 }
 
 /* ---------------- Event card ---------------- */
@@ -653,43 +737,46 @@ input:focus {
 .event-meta {
   display: flex;
   justify-content: space-between;
-  font-size: 0.8rem;
-  color: var(--muted);
+  font-family: var(--font-display);
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--chalk-dim);
   text-transform: uppercase;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.1em;
 }
 
 .event-current-wage {
   font-size: 0.85rem;
   color: var(--muted);
-  background: var(--panel);
-  border: 1px solid var(--panel-border);
+  background: var(--bg-panel);
+  border: 1px solid var(--line);
   border-radius: var(--radius);
   padding: 8px 14px;
 }
 
 .event-current-wage strong {
-  color: var(--text);
+  font-family: var(--font-mono);
+  color: var(--chalk);
 }
 
 .event-card {
-  background: var(--panel);
-  border: 1px solid var(--panel-border);
-  border-left: 3px solid var(--accent);
+  background: linear-gradient(160deg, rgba(201, 162, 39, 0.08), transparent 55%), var(--bg-panel);
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--gold);
   border-radius: var(--radius);
   padding: 22px;
   display: flex;
   flex-direction: column;
   gap: 14px;
-  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.16);
 }
 
 .event-card h2 {
-  font-size: clamp(1.2rem, 4vw, 1.5rem);
+  font-size: clamp(1.3rem, 4vw, 1.7rem);
 }
 
 .event-card p {
   color: var(--muted);
+  font-family: var(--font-body);
 }
 
 .event-choices {
@@ -701,27 +788,25 @@ input:focus {
 
 .choice-btn {
   text-align: left;
-  background: var(--bg-alt);
-  border: 1px solid var(--panel-border);
-  border-radius: 12px;
+  background: var(--bg-deep);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
   padding: 14px 16px;
-  color: var(--text);
+  color: var(--chalk);
   cursor: pointer;
   display: flex;
   flex-direction: column;
   gap: 4px;
-  transition: transform 0.22s var(--ease), border-color 0.2s ease, background-color 0.2s ease, box-shadow 0.22s var(--ease);
+  transition: border-color 0.2s ease, background-color 0.2s ease;
 }
 
 .choice-btn:hover {
-  border-color: var(--accent);
-  background: var(--accent-soft);
-  transform: translateX(3px);
-  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.22);
+  border-color: var(--gold);
+  background: rgba(201, 162, 39, 0.07);
 }
 
 .choice-btn:active {
-  transform: translateX(3px) scale(0.99);
+  transform: scale(0.99);
 }
 
 .choice-label {
@@ -739,23 +824,23 @@ input:focus {
   display: flex;
   flex-direction: column;
   gap: 12px;
-  background: var(--bg-alt);
-  border: 1px solid var(--panel-border);
-  border-radius: 12px;
+  background: var(--bg-deep);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
   padding: 16px;
   animation: fade-in 0.2s ease;
 }
 
 .feedback-panel.kind-positive {
-  border-color: rgba(56, 214, 122, 0.5);
+  border-color: rgba(78, 158, 110, 0.5);
 }
 
 .feedback-panel.kind-negative {
-  border-color: rgba(240, 85, 79, 0.5);
+  border-color: rgba(139, 58, 58, 0.6);
 }
 
 .feedback-panel.kind-milestone {
-  border-color: rgba(240, 180, 41, 0.5);
+  border-color: rgba(201, 162, 39, 0.6);
 }
 
 .feedback-headline {
@@ -775,12 +860,13 @@ input:focus {
 }
 
 .feedback-deltas li {
-  background: var(--panel);
-  border: 1px solid var(--panel-border);
-  border-radius: 999px;
+  background: var(--bg-panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
   padding: 5px 12px;
-  font-size: 0.82rem;
-  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  color: var(--chalk);
 }
 
 /* ---------------- Youth club offer ---------------- */
@@ -793,39 +879,60 @@ input:focus {
 
 .club-offer-card {
   text-align: left;
-  background: var(--panel);
-  border: 1px solid var(--panel-border);
-  border-radius: 14px;
+  background: var(--bg-panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
   padding: 16px;
-  color: var(--text);
+  color: var(--chalk);
   cursor: pointer;
+  position: relative;
+  overflow: hidden;
   display: flex;
   flex-direction: column;
   gap: 4px;
-  transition: transform 0.22s var(--ease), border-color 0.2s ease, box-shadow 0.22s var(--ease);
+  transition: border-color 0.2s ease;
+}
+
+.club-offer-card::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  width: 3px;
+  background: var(--gold);
+  opacity: 0;
+  transition: opacity 0.2s ease;
 }
 
 .club-offer-card:hover {
-  border-color: var(--accent);
-  transform: translateY(-2px);
-  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.3);
+  border-color: var(--gold);
+}
+
+.club-offer-card:hover::before {
+  opacity: 1;
 }
 
 .club-offer-card:active {
-  transform: translateY(0) scale(0.99);
+  transform: scale(0.99);
 }
 
 .club-offer-head {
   display: flex;
   justify-content: space-between;
   align-items: baseline;
-  font-size: 1.05rem;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 1.1rem;
+  text-transform: uppercase;
 }
 
 .club-offer-strength {
+  font-family: var(--font-mono);
   font-size: 0.82rem;
-  color: var(--accent);
+  color: var(--gold-bright);
   font-weight: 600;
+  text-transform: none;
 }
 
 .club-offer-flavor {
@@ -848,12 +955,13 @@ input:focus {
 }
 
 .score-badge {
-  font-size: 0.78rem;
-  font-weight: 700;
-  color: var(--accent);
-  background: var(--accent-soft);
-  border-radius: 999px;
-  padding: 4px 10px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--green);
+  background: rgba(78, 158, 110, 0.15);
+  border: 1px solid rgba(78, 158, 110, 0.4);
+  border-radius: 20px;
+  padding: 4px 12px;
   white-space: nowrap;
 }
 
@@ -870,7 +978,7 @@ input:focus {
   display: flex;
   justify-content: space-between;
   font-size: 0.88rem;
-  border-bottom: 1px solid var(--panel-border);
+  border-bottom: 1px solid var(--line);
   padding-bottom: 6px;
 }
 
@@ -880,13 +988,15 @@ input:focus {
 }
 
 .factor-positive {
-  color: var(--accent);
+  color: var(--green);
+  font-family: var(--font-mono);
   font-weight: 600;
   font-variant-numeric: tabular-nums;
 }
 
 .factor-negative {
-  color: var(--danger);
+  color: var(--red);
+  font-family: var(--font-mono);
   font-weight: 600;
   font-variant-numeric: tabular-nums;
 }
@@ -909,7 +1019,7 @@ input:focus {
   align-items: baseline;
   font-size: 0.88rem;
   padding: 6px 0;
-  border-bottom: 1px solid var(--panel-border);
+  border-bottom: 1px solid var(--line);
 }
 
 .club-tenure-item:last-child {
@@ -918,6 +1028,7 @@ input:focus {
 
 .club-tenure-age {
   color: var(--muted);
+  font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;
 }
 
@@ -932,15 +1043,16 @@ input:focus {
 }
 
 .tenure-arrow-up {
-  color: var(--accent);
+  color: var(--green);
 }
 
 .tenure-arrow-down {
-  color: var(--danger);
+  color: var(--red);
 }
 
 .club-tenure-score {
-  color: var(--accent);
+  color: var(--gold-bright);
+  font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
@@ -962,8 +1074,8 @@ input:focus {
   width: 100%;
   height: auto;
   display: block;
-  border-radius: 16px;
-  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.45);
+  border-radius: 6px;
+  border: 1.5px solid var(--gold);
 }
 
 .share-card-actions {
@@ -990,20 +1102,24 @@ input:focus {
   display: flex;
   flex-direction: column;
   gap: 4px;
-  border-radius: 12px;
+  border-radius: var(--radius);
   padding: 10px 12px;
   font-size: 0.82rem;
-  border: 1px solid var(--panel-border);
+  border: 1px solid var(--line);
 }
 
 .achievement-badge.positive {
-  background: var(--accent-soft);
-  border-color: rgba(56, 214, 122, 0.4);
+  background: rgba(201, 162, 39, 0.06);
+  border-color: rgba(201, 162, 39, 0.4);
+}
+
+.achievement-badge.positive strong {
+  color: var(--gold-bright);
 }
 
 .achievement-badge.negative {
-  background: rgba(240, 85, 79, 0.1);
-  border-color: rgba(240, 85, 79, 0.4);
+  background: rgba(139, 58, 58, 0.12);
+  border-color: rgba(139, 58, 58, 0.45);
 }
 
 .achievement-badge span {
@@ -1023,12 +1139,16 @@ input:focus {
   color: var(--muted);
 }
 
+.mini-log li::marker {
+  color: var(--gold);
+}
+
 /* ---------------- Timeline modal ---------------- */
 
 .modal-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(4, 8, 14, 0.7);
+  background: rgba(2, 6, 4, 0.75);
   backdrop-filter: blur(2px);
   display: flex;
   align-items: flex-end;
@@ -1038,9 +1158,9 @@ input:focus {
 }
 
 .modal {
-  background: var(--bg-alt);
-  border: 1px solid var(--panel-border);
-  border-radius: 18px 18px 0 0;
+  background: var(--bg-deep);
+  border: 1px solid var(--line);
+  border-radius: 4px 4px 0 0;
   width: 100%;
   max-width: 640px;
   max-height: 80vh;
@@ -1049,7 +1169,6 @@ input:focus {
   flex-direction: column;
   gap: 12px;
   animation: modal-slide-up 0.28s var(--ease);
-  box-shadow: 0 -12px 40px rgba(0, 0, 0, 0.4);
 }
 
 @keyframes modal-slide-up {
@@ -1068,7 +1187,7 @@ input:focus {
     align-items: center;
   }
   .modal {
-    border-radius: 18px;
+    border-radius: 4px;
     max-width: 560px;
     animation-name: modal-pop-in;
   }
@@ -1104,7 +1223,7 @@ input:focus {
   gap: 8px;
   font-size: 0.88rem;
   padding: 6px 0;
-  border-bottom: 1px solid var(--panel-border);
+  border-bottom: 1px solid var(--line);
 }
 
 .timeline-icon {
@@ -1113,23 +1232,24 @@ input:focus {
 
 .timeline-age {
   color: var(--muted);
+  font-family: var(--font-mono);
   font-size: 0.78rem;
 }
 
 .kind-positive .timeline-icon {
-  color: var(--accent);
+  color: var(--green);
 }
 
 .kind-negative .timeline-icon {
-  color: var(--danger);
+  color: var(--red);
 }
 
 .kind-milestone .timeline-icon {
-  color: var(--warning);
+  color: var(--gold);
 }
 
 .kind-info .timeline-icon {
-  color: var(--info);
+  color: var(--gold-bright);
 }
 
 /* ---------------- Career end ---------------- */
@@ -1140,14 +1260,18 @@ input:focus {
 }
 
 .legacy-tier {
+  font-family: var(--font-display);
   font-size: 1.3rem;
   font-weight: 700;
-  color: var(--accent);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--gold-bright);
 }
 
 .epilogue {
   color: var(--muted);
   text-align: left;
+  font-family: var(--font-body);
 }
 
 /* ---------------- Gesamtstärke-Verlauf (Liniendiagramm) ---------------- */
@@ -1165,10 +1289,11 @@ input:focus {
   height: auto;
   display: block;
   overflow: visible;
+  font-family: var(--font-mono);
 }
 
 .score-chart-grid {
-  stroke: var(--panel-border);
+  stroke: var(--line);
   stroke-width: 1;
 }
 
@@ -1178,7 +1303,7 @@ input:focus {
 }
 
 .score-chart-point-label {
-  fill: var(--text);
+  fill: var(--chalk);
   font-size: 11px;
   font-weight: 700;
 }
@@ -1194,7 +1319,7 @@ input:focus {
 }
 
 .score-chart-dot {
-  stroke: var(--panel);
+  stroke: var(--bg-panel);
   stroke-width: 2;
   transform-origin: center;
   transform-box: fill-box;
@@ -1215,7 +1340,7 @@ input:focus {
 }
 
 .score-chart-hit:focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--gold);
   outline-offset: -2px;
 }
 
@@ -1229,9 +1354,9 @@ input:focus {
   position: absolute;
   top: 0;
   transform: translate(-50%, -100%);
-  background: var(--bg-alt);
-  border: 1px solid var(--panel-border);
-  border-radius: 10px;
+  background: var(--bg-deep);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
   padding: 6px 10px;
   font-size: 0.78rem;
   white-space: nowrap;
@@ -1239,13 +1364,13 @@ input:focus {
   flex-direction: column;
   gap: 2px;
   pointer-events: none;
-  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35);
   z-index: 5;
 }
 
 .score-chart-tooltip strong {
+  font-family: var(--font-mono);
   font-size: 0.95rem;
-  color: var(--accent);
+  color: var(--gold-bright);
 }
 
 .score-chart-tooltip span {
@@ -1283,22 +1408,21 @@ input:focus {
   width: 40px;
   height: 40px;
   border-radius: 50%;
-  border: 1px solid var(--panel-border);
-  background: var(--panel);
-  color: var(--text);
+  border: 1px solid var(--line);
+  background: var(--bg-panel);
+  color: var(--chalk);
   font-size: 1.15rem;
   line-height: 1;
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.25);
   transition: transform 0.22s var(--ease), border-color 0.2s ease, color 0.2s ease;
 }
 
 .return-btn:hover {
-  border-color: var(--accent);
-  color: var(--accent);
+  border-color: var(--gold);
+  color: var(--gold-bright);
   transform: rotate(-18deg);
 }
 
@@ -1307,7 +1431,7 @@ input:focus {
 }
 
 .return-btn:focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--gold);
   outline-offset: 2px;
 }
 

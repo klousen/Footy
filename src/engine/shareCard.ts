@@ -68,13 +68,21 @@ export function buildShareCardData(
   };
 }
 
+// Farben aus dem "Matchday Dossier"-Design-System (design-tokens.md) - Gold statt
+// bunter Edelmetall-/Fantasie-Töne für die oberen Stufen, damit das Sharepic
+// dieselbe Tannengrün+Gold-Sprache wie der Rest der App spricht. Bronze/Silber
+// behalten ihre naheliegenden Metallfarben als einzige Ausnahme (klar lesbare
+// Stufenmetapher), alles andere bleibt innerhalb der Kern-Palette.
+const CHALK = "#e8e4d8";
+const CHALK_DIM = "#9fb3a8";
+
 const TIER_STYLE: Record<string, { bgFrom: string; bgTo: string; accent: string; accentSoft: string }> = {
-  amateur: { bgFrom: "#2a2f36", bgTo: "#12171f", accent: "#9aa4af", accentSoft: "rgba(154,164,175,0.18)" },
-  bronze: { bgFrom: "#3d2a1c", bgTo: "#12171f", accent: "#cd7f32", accentSoft: "rgba(205,127,50,0.2)" },
-  silver: { bgFrom: "#2c333d", bgTo: "#12171f", accent: "#c9d3dd", accentSoft: "rgba(201,211,221,0.18)" },
-  gold: { bgFrom: "#3d3319", bgTo: "#12171f", accent: "#f2c94c", accentSoft: "rgba(242,201,76,0.2)" },
-  elite: { bgFrom: "#3a1f3d", bgTo: "#12171f", accent: "#d199f0", accentSoft: "rgba(209,153,240,0.2)" },
-  icon: { bgFrom: "#3d321a", bgTo: "#1f1428", accent: "#f2c94c", accentSoft: "rgba(242,201,76,0.28)" },
+  amateur: { bgFrom: "#16241d", bgTo: "#0b1b14", accent: CHALK_DIM, accentSoft: "rgba(159,179,168,0.14)" },
+  bronze: { bgFrom: "#2f2013", bgTo: "#0b1b14", accent: "#cd7f32", accentSoft: "rgba(205,127,50,0.18)" },
+  silver: { bgFrom: "#1c2b23", bgTo: "#0b1b14", accent: "#c9d3cb", accentSoft: "rgba(201,211,203,0.16)" },
+  gold: { bgFrom: "#2a2210", bgTo: "#0b1b14", accent: "#e6c158", accentSoft: "rgba(230,193,88,0.2)" },
+  elite: { bgFrom: "#2e2311", bgTo: "#0b1b14", accent: "#f6e3ad", accentSoft: "rgba(246,227,173,0.22)" },
+  icon: { bgFrom: "#332812", bgTo: "#050f0a", accent: "#f6e3ad", accentSoft: "rgba(246,227,173,0.28)" },
 };
 
 export const SHARE_CARD_WIDTH = 1080;
@@ -113,8 +121,8 @@ export function drawShareCard(canvas: HTMLCanvasElement, data: ShareCardData): v
   // Hintergrund
   const bg = ctx.createLinearGradient(0, 0, 0, H);
   bg.addColorStop(0, style.bgFrom);
-  bg.addColorStop(0.55, "#0d1117");
-  bg.addColorStop(1, "#0a0e14");
+  bg.addColorStop(0.55, "#0b1b14");
+  bg.addColorStop(1, "#05100b");
   ctx.fillStyle = bg;
   ctx.fillRect(0, 0, W, H);
 
@@ -125,15 +133,16 @@ export function drawShareCard(canvas: HTMLCanvasElement, data: ShareCardData): v
   ctx.fillStyle = glow;
   ctx.fillRect(0, 0, W, H);
 
-  // Rahmen
-  ctx.strokeStyle = "rgba(255,255,255,0.08)";
-  ctx.lineWidth = 4;
-  roundRect(ctx, 12, 12, W - 24, H - 24, 28);
+  // Rahmen - Gold statt neutralem Weißton, kantiger (kleinerer Radius) statt
+  // stark abgerundet, passend zum 4px-Radius-Grundsatz des Design-Systems.
+  ctx.strokeStyle = "rgba(201,162,39,0.45)";
+  ctx.lineWidth = 3;
+  roundRect(ctx, 12, 12, W - 24, H - 24, 16);
   ctx.stroke();
 
   // Branding oben
   ctx.textAlign = "center";
-  ctx.fillStyle = "rgba(238,242,247,0.55)";
+  ctx.fillStyle = CHALK_DIM;
   ctx.font = '600 26px "Segoe UI", system-ui, sans-serif';
   ctx.fillText("⚽ FOOTY KARRIERE", W / 2, 74);
 
@@ -144,16 +153,16 @@ export function drawShareCard(canvas: HTMLCanvasElement, data: ShareCardData): v
   const badgeX = (W - badgeW) / 2;
   const badgeGrad = ctx.createLinearGradient(badgeX, badgeY, badgeX, badgeY + badgeH);
   badgeGrad.addColorStop(0, style.accentSoft);
-  badgeGrad.addColorStop(1, "rgba(22,31,44,0.6)");
+  badgeGrad.addColorStop(1, "rgba(11,27,20,0.6)");
   ctx.fillStyle = badgeGrad;
-  roundRect(ctx, badgeX, badgeY, badgeW, badgeH, 24);
+  roundRect(ctx, badgeX, badgeY, badgeW, badgeH, 8);
   ctx.fill();
   ctx.strokeStyle = style.accent;
   ctx.lineWidth = 3;
-  roundRect(ctx, badgeX, badgeY, badgeW, badgeH, 24);
+  roundRect(ctx, badgeX, badgeY, badgeW, badgeH, 8);
   ctx.stroke();
 
-  ctx.fillStyle = "rgba(238,242,247,0.55)";
+  ctx.fillStyle = CHALK_DIM;
   ctx.font = '600 20px "Segoe UI", system-ui, sans-serif';
   ctx.textBaseline = "alphabetic";
   ctx.fillText("KARRIERE-BESTWERT", W / 2, badgeY + 34);
@@ -161,12 +170,12 @@ export function drawShareCard(canvas: HTMLCanvasElement, data: ShareCardData): v
   ctx.font = '800 108px "Segoe UI", system-ui, sans-serif';
   ctx.fillText(String(data.overall), W / 2, badgeY + 140);
   ctx.font = '700 32px "Segoe UI", system-ui, sans-serif';
-  ctx.fillStyle = "rgba(238,242,247,0.85)";
+  ctx.fillStyle = CHALK;
   ctx.fillText(data.tierLabel.toUpperCase(), W / 2, badgeY + 180);
 
   // Name
   let cursorY = badgeY + badgeH + 90;
-  ctx.fillStyle = "#eef2f7";
+  ctx.fillStyle = CHALK;
   const nameSize = fitText(ctx, data.name, W - 120, 68, 38, "800");
   ctx.font = `800 ${nameSize}px "Segoe UI", system-ui, sans-serif`;
   ctx.fillText(data.name, W / 2, cursorY);
@@ -174,7 +183,7 @@ export function drawShareCard(canvas: HTMLCanvasElement, data: ShareCardData): v
   // Position / Land / Verein
   cursorY += 48;
   ctx.font = '500 30px "Segoe UI", system-ui, sans-serif';
-  ctx.fillStyle = "rgba(238,242,247,0.75)";
+  ctx.fillStyle = CHALK_DIM;
   ctx.fillText(
     `${data.positionLabel} · ${data.flag} ${data.countryName} · ${data.ageRange} Jahre`,
     W / 2,
@@ -182,7 +191,7 @@ export function drawShareCard(canvas: HTMLCanvasElement, data: ShareCardData): v
   );
   cursorY += 42;
   ctx.font = '500 26px "Segoe UI", system-ui, sans-serif';
-  ctx.fillStyle = "rgba(238,242,247,0.55)";
+  ctx.fillStyle = CHALK_DIM;
   ctx.fillText(`Letzter Verein: ${data.finalClub}`, W / 2, cursorY);
 
   // Legacy-Tier-Banner
@@ -190,11 +199,11 @@ export function drawShareCard(canvas: HTMLCanvasElement, data: ShareCardData): v
   const bannerH = 74;
   const bannerY = cursorY;
   ctx.fillStyle = style.accentSoft;
-  roundRect(ctx, 80, bannerY, W - 160, bannerH, 16);
+  roundRect(ctx, 80, bannerY, W - 160, bannerH, 6);
   ctx.fill();
   ctx.strokeStyle = style.accent;
   ctx.lineWidth = 2;
-  roundRect(ctx, 80, bannerY, W - 160, bannerH, 16);
+  roundRect(ctx, 80, bannerY, W - 160, bannerH, 6);
   ctx.stroke();
   ctx.fillStyle = style.accent;
   const tierSize = fitText(ctx, data.legacyTier.toUpperCase(), W - 220, 36, 22, "800");
@@ -222,17 +231,17 @@ export function drawShareCard(canvas: HTMLCanvasElement, data: ShareCardData): v
     const row = Math.floor(i / cols);
     const cx = gridX + cellW * col + cellW / 2;
     const cy = cursorY + row * cellH;
-    ctx.fillStyle = "#eef2f7";
+    ctx.fillStyle = CHALK;
     ctx.font = '800 54px "Segoe UI", system-ui, sans-serif';
     ctx.fillText(stats[i][0], cx, cy + 50);
-    ctx.fillStyle = "rgba(238,242,247,0.55)";
+    ctx.fillStyle = CHALK_DIM;
     ctx.font = '500 24px "Segoe UI", system-ui, sans-serif';
     ctx.fillText(stats[i][1], cx, cy + 84);
   }
 
   // Trennlinie
   cursorY += rows * cellH + 20;
-  ctx.strokeStyle = "rgba(255,255,255,0.1)";
+  ctx.strokeStyle = "rgba(42,74,60,0.8)";
   ctx.lineWidth = 2;
   ctx.beginPath();
   ctx.moveTo(80, cursorY);
@@ -241,7 +250,7 @@ export function drawShareCard(canvas: HTMLCanvasElement, data: ShareCardData): v
 
   // Erfolge
   cursorY += 50;
-  ctx.fillStyle = "rgba(238,242,247,0.55)";
+  ctx.fillStyle = CHALK_DIM;
   ctx.font = '600 24px "Segoe UI", system-ui, sans-serif';
   ctx.fillText("ERFOLGE", W / 2, cursorY);
   cursorY += 20;
@@ -285,7 +294,7 @@ export function drawShareCard(canvas: HTMLCanvasElement, data: ShareCardData): v
         ctx.lineWidth = 1.5;
         roundRect(ctx, x, rowY, w, chipH, chipH / 2);
         ctx.stroke();
-        ctx.fillStyle = "#eef2f7";
+        ctx.fillStyle = CHALK;
         ctx.font = '600 26px "Segoe UI", system-ui, sans-serif';
         ctx.fillText(line.labels[i], x + w / 2, rowY + chipH / 2 + 9);
         x += w + chipGap;
@@ -296,7 +305,7 @@ export function drawShareCard(canvas: HTMLCanvasElement, data: ShareCardData): v
 
   // Footer / Pitch-Motiv
   const footerY = H - 70;
-  ctx.strokeStyle = "rgba(255,255,255,0.25)";
+  ctx.strokeStyle = "rgba(201,162,39,0.4)";
   ctx.lineWidth = 2;
   ctx.beginPath();
   ctx.arc(W / 2, footerY, 26, 0, Math.PI * 2);
@@ -305,7 +314,7 @@ export function drawShareCard(canvas: HTMLCanvasElement, data: ShareCardData): v
   ctx.moveTo(80, footerY);
   ctx.lineTo(W - 80, footerY);
   ctx.stroke();
-  ctx.fillStyle = "rgba(238,242,247,0.4)";
+  ctx.fillStyle = "rgba(159,179,168,0.7)";
   ctx.font = '500 22px "Segoe UI", system-ui, sans-serif';
   ctx.fillText("Erstellt mit Footy Karriere", W / 2, H - 26);
 }
