@@ -36,6 +36,7 @@ import { Dashboard } from "./ui/Dashboard";
 import { EventCard } from "./ui/EventCard";
 import { SeasonSummary } from "./ui/SeasonSummary";
 import { CareerEnd } from "./ui/CareerEnd";
+import { EndCareerMenu } from "./ui/EndCareerMenu";
 import "./app.css";
 
 function initState(): GameState {
@@ -46,6 +47,7 @@ export default function App() {
   const [game, setGame] = useState<GameState>(initState);
   const [pendingCountry, setPendingCountry] = useState<CountryId | null>(null);
   const [youthOffers, setYouthOffers] = useState<ClubState[]>([]);
+  const [showEndCareerMenu, setShowEndCareerMenu] = useState(false);
 
   useEffect(() => {
     saveGame(game);
@@ -233,22 +235,7 @@ export default function App() {
 
     if (isRetirementDecision) {
       if (choiceId === "beenden") {
-        player.retired = true;
-        player.postCareerPath = pickPostCareerPath(player);
-        const { score, tier, factors } = computeLegacy(player);
-        const achievements = computeAchievements(player);
-        setGame({
-          ...game,
-          player: { ...player },
-          currentEvent: null,
-          feedback: null,
-          screen: "careerEnd",
-          legacyScore: score,
-          legacyTier: tier,
-          legacyFactors: factors,
-          achievements,
-          epilogue: buildEpilogueSafe(player, tier),
-        });
+        setGame({ ...game, ...buildCareerEndUpdate(player) });
       } else {
         setGame({ ...game, player: { ...player }, currentEvent: null, feedback: null, screen: "dashboard" });
       }
@@ -280,8 +267,49 @@ export default function App() {
     setGame({ ...emptyState(), screen: "country" });
   }
 
+  // Der "Return"-Button oben rechts fragt erst nach, statt die Karriere sofort zu
+  // beenden - drei mögliche Wege aus dem Menü heraus:
+  function handleEndCareerViewSummary() {
+    if (!game.player) return;
+    setShowEndCareerMenu(false);
+    setGame({ ...game, ...buildCareerEndUpdate(game.player) });
+  }
+
+  function handleEndCareerStartNew() {
+    clearSave();
+    setPendingCountry(null);
+    setYouthOffers([]);
+    setShowEndCareerMenu(false);
+    setGame({ ...emptyState(), screen: "start" });
+  }
+
+  function handleCancelEndCareer() {
+    setShowEndCareerMenu(false);
+  }
+
+  // Sichtbar, sobald ein Spieler existiert und noch nicht auf der Karriereende-
+  // Übersicht steht (dort gibt es bereits einen eigenen "Neue Karriere"-Weg).
+  const showReturnButton = game.player !== null && game.screen !== "careerEnd";
+
   return (
     <div className="app-shell">
+      {showReturnButton && (
+        <button
+          className="return-btn"
+          onClick={() => setShowEndCareerMenu(true)}
+          aria-label="Karriere beenden"
+          title="Karriere beenden"
+        >
+          ↩
+        </button>
+      )}
+      {showEndCareerMenu && (
+        <EndCareerMenu
+          onViewSummary={handleEndCareerViewSummary}
+          onNewCareer={handleEndCareerStartNew}
+          onCancel={handleCancelEndCareer}
+        />
+      )}
       {game.screen === "start" && (
         <StartScreen hasSave={hasSaveOnDisk()} onNewGame={handleNewGame} onContinue={handleContinue} />
       )}
@@ -328,6 +356,28 @@ export default function App() {
       )}
     </div>
   );
+}
+
+/** Bündelt die Karriereende-Auswertung (Legacy-Score, Achievements, Epilog) -
+ * genutzt sowohl vom regulären Rücktritts-Event als auch vom manuellen
+ * "Return"-Button, der die Karriere jederzeit vorzeitig beenden kann. */
+function buildCareerEndUpdate(player: NonNullable<GameState["player"]>): Partial<GameState> {
+  player.retired = true;
+  player.postCareerPath = pickPostCareerPath(player);
+  const { score, tier, factors } = computeLegacy(player);
+  const achievements = computeAchievements(player);
+  return {
+    player: { ...player },
+    currentEvent: null,
+    pendingEventIds: [],
+    feedback: null,
+    screen: "careerEnd",
+    legacyScore: score,
+    legacyTier: tier,
+    legacyFactors: factors,
+    achievements,
+    epilogue: buildEpilogueSafe(player, tier),
+  };
 }
 
 function buildEpilogueSafe(player: NonNullable<GameState["player"]>, tier: string): string {
