@@ -556,6 +556,81 @@ export const EVENT_TEMPLATES: EventTemplate[] = [
       ],
     }),
   },
+  {
+    id: "verletzung_reha_klinik",
+    category: "verletzung",
+    minAge: 16,
+    maxAge: 40,
+    weight: 1.8,
+    condition: (p) => p.injury !== null,
+    build: (p, ctx) => ({
+      category: "verletzung",
+      title: "Reha in der Spezialklinik",
+      description: `${club(p)} bietet dir für die Genesung von deiner Verletzung (${p.injury?.label ?? "Verletzung"}) einen mehrwöchigen Aufenthalt in einer spezialisierten Reha-Klinik an.`,
+      choices: [
+        {
+          id: "klinik",
+          label: "Sich voll auf die Klinik einlassen",
+          effects: { injuryWeeksOut: -rInt(ctx, 2, 4), fitness: 4, traitDeltas: { arbeitsmoral: 2 }, logText: "hat sich voll auf die Reha in der Spezialklinik eingelassen und Fortschritte gemacht.", logKind: "positive" },
+        },
+        {
+          id: "zuhause",
+          label: "Reha lieber in Vereinsnähe fortsetzen",
+          effects: { fitness: 2, clubRelation: 2, logText: "hat die Reha bewusst in Vereinsnähe statt in der Spezialklinik fortgesetzt.", logKind: "info" },
+        },
+      ],
+    }),
+  },
+  {
+    id: "verletzung_mentale_belastung",
+    category: "verletzung",
+    minAge: 17,
+    maxAge: 40,
+    weight: 1.5,
+    condition: (p) => p.injury !== null && p.injury.weeksOut >= 8,
+    build: () => ({
+      category: "verletzung",
+      title: "Die mentale Last der langen Pause",
+      description: "Die lange Zwangspause nagt zunehmend an dir - Zweifel und Ungeduld machen sich breit, während die Mannschaft ohne dich weiterspielt.",
+      choices: [
+        {
+          id: "psychologe",
+          label: "Sportpsychologische Begleitung annehmen",
+          effects: { morale: 6, attributes: { mentalitaet: 1 }, traitDeltas: { arbeitsmoral: 1 }, logText: "hat sich während der langen Pause sportpsychologisch begleiten lassen.", logKind: "positive" },
+        },
+        {
+          id: "alleine",
+          label: "Allein durchbeißen",
+          effects: { morale: -4, traitDeltas: { arbeitsmoral: 2, disziplin: 1 }, logText: "beißt sich während der langen Pause allein durch, ohne fremde Hilfe.", logKind: "info" },
+        },
+      ],
+    }),
+  },
+  {
+    id: "verletzung_ersatzmann",
+    category: "verletzung",
+    minAge: 17,
+    maxAge: 40,
+    weight: 1.3,
+    condition: (p) => p.injury !== null,
+    build: (p) => ({
+      category: "verletzung",
+      title: "Der Ersatzmann liefert",
+      description: `Während du bei ${club(p)} auf der Ausfallliste stehst, überzeugt dein Vertreter auf deiner Position mit starken Leistungen.`,
+      choices: [
+        {
+          id: "freuen",
+          label: "Sich ehrlich für den Vertreter freuen",
+          effects: { clubRelation: 4, traitDeltas: { fuehrung: 2 }, logText: "hat sich trotz eigener Verletzung ehrlich über die starken Leistungen des Vertreters gefreut.", logKind: "positive" },
+        },
+        {
+          id: "eifersucht",
+          label: "Insgeheim um den Stammplatz bangen",
+          effects: { morale: -5, traitDeltas: { disziplin: -1 }, logText: "bangt insgeheim um den eigenen Stammplatz nach der Verletzung.", logKind: "negative" },
+        },
+      ],
+    }),
+  },
 
   // ---------------------------------------------------------------------
   // TAKTIK / SPIELMOMENTE
@@ -2606,7 +2681,12 @@ export const EVENT_TEMPLATES: EventTemplate[] = [
     category: "verletzung",
     minAge: 19,
     maxAge: 34,
-    weight: 1,
+    // Ein Kreuzbandriss ist ein einschneidendes, aber im echten Profifußball
+    // seltenes Karriereereignis (grob 10-20% Lebenszeitrisiko über eine ganze
+    // Karriere, nicht "praktisch jedem irgendwann"). Bei Gewicht 1 wurde das
+    // Event über die ~15 eligible Saisons hinweg in über 95% aller Karrieren
+    // mindestens einmal gezogen - deutlich zu häufig.
+    weight: 0.06,
     condition: (p) =>
       !p.completedStorylines.includes("comeback") && !p.activeStorylines.some((t) => t.storylineId === "comeback"),
     build: (p, ctx) => ({
@@ -3451,16 +3531,47 @@ export function getTemplateById(id: string): EventTemplate | undefined {
   return EVENT_TEMPLATES.find((t) => t.id === id);
 }
 
+/** Kategorien, die aktive Spielteilnahme/körperliches Training voraussetzen -
+ * während einer laufenden Verletzung inhaltlich unmöglich (siehe `eligibleTemplates`). */
+const REQUIRES_FITNESS_CATEGORIES = new Set(["taktik", "training", "nationalmannschaft"]);
+
+/** Einzelne Templates außerhalb der oben genannten Kategorien, die trotzdem
+ * aktives Spielgeschehen oder frisch absolvierte Spiele voraussetzen (z.B.
+ * "Kritik an den letzten Leistungen" oder "Spieler des Monats") - während
+ * einer Verletzungspause ebenso unpassend wie ein Matchmoment. */
+const REQUIRES_FITNESS_TEMPLATE_IDS = new Set([
+  "lifestyle_legendenspiel",
+  "vorbereitungstour",
+  "lifestyle_dopingkontrolle",
+  "auswaertsreise_chaos",
+  "medien_kritik",
+  "spieler_des_monats",
+  "torwart_patzer",
+  "verletzung_risiko",
+  "unglueckliches_zusammenprall",
+  "comeback_1",
+  "verletzung_doppelbelastung",
+  "verletzung_reserve_restart",
+]);
+
 export function eligibleTemplates(
   player: Player,
   usedTemplateIds: Set<string>
 ): EventTemplate[] {
+  const injured = !!player.injury && player.injury.weeksOut > 0;
   return EVENT_TEMPLATES.filter((t) => {
     // Fortsetzungs-Stufen einer Storyline werden nie zufällig gezogen, sondern
     // ausschließlich fällig eingespielt (siehe `dueStorylineTemplateIds`).
     if (t.storylineOnly) return false;
     if (player.age < t.minAge || player.age > t.maxAge) return false;
     if (t.unique && usedTemplateIds.has(t.id)) return false;
+    // Wer verletzt ist, kann keine Matchszenen erleben, kein Zusatztraining
+    // absolvieren, wird nicht für die Nationalmannschaft berufen und kann sich
+    // auch keine NEUE Verletzung zuziehen - die Ereignis-Auswahl soll das
+    // während der Ausfallzeit widerspiegeln (Reha statt Spielgeschehen),
+    // nicht so tun, als sei nichts gewesen.
+    if (injured && REQUIRES_FITNESS_CATEGORIES.has(t.category)) return false;
+    if (injured && REQUIRES_FITNESS_TEMPLATE_IDS.has(t.id)) return false;
     if (t.condition && !t.condition(player)) return false;
     return true;
   });

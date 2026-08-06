@@ -259,6 +259,11 @@ export function pickSeasonTemplateIds(
     if (prev === undefined || last > prev) lastCategorySeason.set(t.category, last);
   }
 
+  // Während einer laufenden Verletzung sollen Reha-Ereignisse den Ereignis-Pool
+  // spürbar dominieren, statt nur gleichberechtigt neben Medien/Lifestyle/etc.
+  // zu stehen - die Ausfallzeit dreht sich in erster Linie um die Genesung.
+  const injured = !!player.injury && player.injury.weeksOut > 0;
+
   for (let i = 0; i < targetCount && localPool.length > 0; i++) {
     const weights = localPool.map((t) => {
       // Kategorie-Wiederholungen innerhalb derselben Saison abschwächen
@@ -273,7 +278,8 @@ export function pickSeasonTemplateIds(
       const catLastSeason = lastCategorySeason.get(t.category);
       const categoryRecencyFactor =
         catLastSeason === undefined ? 1 : clamp((seasonNumber - catLastSeason) / 2, 0.4, 1);
-      return t.weight * categoryFactor * recencyFactor * categoryRecencyFactor;
+      const injuryFocusFactor = injured && t.category === "verletzung" ? 4 : 1;
+      return t.weight * categoryFactor * recencyFactor * categoryRecencyFactor * injuryFocusFactor;
     });
     const totalWeight = weights.reduce((a, b) => a + b, 0);
     let r = rng() * totalWeight;
@@ -1154,7 +1160,7 @@ function buildClubOfferEvent(
   } else if (reason === "pressure") {
     choices.push({
       id: "fight",
-      label: "Kämpfen und den Stammplatz zurückerobern",
+      label: player.consecutiveBenchSeasons >= 1 ? "Kämpfen und den Stammplatz zurückerobern" : "Das Verhältnis kitten und bleiben",
       detail: "Riskant, aber du bleibst bei deinem aktuellen Verein.",
       effects: {},
     });
@@ -1183,6 +1189,16 @@ function buildClubOfferEvent(
 
   const foreignNote = foreignCount > 0 ? ` Darunter auch ${foreignCount === 1 ? "ein Angebot" : "Angebote"} aus dem Ausland.` : "";
 
+  // Der Bankdruck-Grund kann zwei ganz unterschiedliche Ursachen haben - fehlende
+  // Einsätze ODER ein zerrüttetes Verhältnis trotz eigentlich normaler Einsatzzeit
+  // (z.B. nach einem eskalierten Trainerkonflikt). Die Beschreibung soll die
+  // TATSÄCHLICHE Ursache nennen, statt immer pauschal "Bankdrücker" zu unterstellen,
+  // wenn der Spieler in Wahrheit an einem anderen Konflikt gescheitert ist.
+  const pressureReason =
+    player.consecutiveBenchSeasons >= 1
+      ? `Bei ${player.club.name} kommst du kaum noch zum Einsatz (${player.consecutiveBenchSeasons} Saison(en) auf der Bank)`
+      : `Das Verhältnis zwischen dir und ${player.club.name} ist tief zerrüttet`;
+
   const description =
     reason === "pro-debut"
       ? `Nach starken Jahren in der Jugend ist es Zeit für den Sprung in den Profifußball. Gleich ${count} Vereine bieten dir einen Profivertrag an.${foreignNote}`
@@ -1192,7 +1208,7 @@ function buildClubOfferEvent(
       ? `Dein starker Anteil am Aufstieg mit ${player.club.name} beweist deine Extraklasse - im Sommertransferfenster werden auch größere Vereine auf dich aufmerksam. ${count} Vereine erkundigen sich.${foreignNote}`
       : reason === "opportunity"
       ? `${lastSeasonRef}sind Scouts auf ${player.name} bei ${player.club.name} aufmerksam geworden. Im Sommertransferfenster erkundigen sich ${count} Vereine nach dir.${foreignNote}`
-      : `Bei ${player.club.name} kommst du kaum noch zum Einsatz (${player.consecutiveBenchSeasons} Saison(en) auf der Bank). Im Winterfenster wäre der Verein offen für einen Wechsel - ${count} Vereine haben bereits angefragt.${foreignNote}`;
+      : `${pressureReason}. Im Winterfenster wäre der Verein offen für einen Wechsel - ${count} Vereine haben bereits angefragt.${foreignNote}`;
 
   return {
     id: `cluboffer-${player.age}-${reason}-${Math.round(rng() * 1e6)}`,
@@ -1212,9 +1228,19 @@ function buildClubOfferEvent(
  */
 export function decideClubOfferInjection(player: Player): ClubOfferReason | null {
   if (shouldOfferProDebut(player)) {
+    // Das Profidebüt bleibt unconditional (auch bei Verletzung) - der Übergang
+    // hängt exakt am 18. Geburtstag (siehe `shouldOfferProDebut`), ein
+    // übersprungenes Jahr würde den Spieler dauerhaft als "Ausbildungsspieler"
+    // zurücklassen.
     player.seasonsSinceTransferEvent = 0;
     return "pro-debut";
   }
+  // Wer aktuell verletzt ausfällt, steht keinem Verein für ein Medizin-Check
+  // oder eine echte Kaderplanung zur Verfügung - Scouting-Interesse und
+  // Bankdruck-Angebote pausieren, statt so zu tun, als würde mitten in der
+  // Reha ein Wechsel eingefädelt. Holt die Prüfung einfach in der ersten
+  // wieder fitten Saison nach.
+  if (player.injury && player.injury.weeksOut > 0) return null;
   // Aktiv geäußertes Wechselinteresse hat Vorrang vor der Bankdruck-Prüfung: wer
   // klar signalisiert hat, wechseln zu wollen, soll gezielte Scouting-Angebote
   // bekommen (bessere/passende Vereine) statt ggf. von der allgemeinen
