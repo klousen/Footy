@@ -290,6 +290,11 @@ export interface EventTemplate {
 export interface Player {
   name: string;
   country: CountryId;
+  /** Ursprüngliches Heimatland - bleibt über die gesamte Karriere unverändert, auch
+   * wenn `country` durch Auslandswechsel wechselt (siehe `applyClubOfferChoice`).
+   * Grundlage dafür, eine Rückkehr ins Heimatland als "Heimkehr" statt als
+   * normalen Auslandswechsel zu erkennen. */
+  homeCountryId: CountryId;
   position: Position;
   birthAge: number; // Startalter 14
   age: number;

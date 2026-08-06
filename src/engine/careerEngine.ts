@@ -128,6 +128,7 @@ export function createPlayer(
     player: {
       name,
       country: countryId,
+      homeCountryId: countryId,
       position,
       birthAge: 14,
       age: 14,
@@ -576,10 +577,16 @@ export function simulateSeason(player: Player, seasonNumber: number, league: Lea
     0.65,
     1.15
   );
+  // Selbst bei unveränderter Kaderrolle (z.B. durch eine Stammplatzgarantie) sind die
+  // Einsatzminuten von Saison zu Saison nie exakt identisch - Pokal-Rotation,
+  // taktische Ruhephasen und kleinere Blessuren sorgen für echte Schwankung, auch
+  // wenn weder Kaderrolle noch Vereinsbeziehung/Fitness sich groß verändern. Eine
+  // Stammplatzgarantie heißt also NICHT automatisch immer ~100% der Minuten.
+  const seasonMinutesVariance = 0.82 + rng() * 0.36; // ~0.82 - 1.18
   // Pro Match sind maximal 90 Minuten möglich (siehe `possibleMinutes` unten) -
   // der Vertrauensfaktor kann die Einwechselzeit verlängern, aber niemals über
   // die volle Spielzeit hinaus.
-  const effectiveMinutesPerMatch = Math.min(90, minutesPerMatchByRole * trustFactor);
+  const effectiveMinutesPerMatch = Math.min(90, minutesPerMatchByRole * trustFactor * seasonMinutesVariance);
   const possibleMinutes = baseMatches * 90;
   const minutesPlayed = Math.min(possibleMinutes, Math.round(matches * effectiveMinutesPerMatch));
 
@@ -909,6 +916,32 @@ function estimateWage(overall: number, reputation: number, club: { strength: num
 function rolePromiseChance(overall: number, clubStrength: number): number {
   const gap = overall - clubStrength;
   return clamp(0.55 + gap / 40, 0.35, 0.93);
+}
+
+/**
+ * Bewiesenes Niveau eines aktuellen Stammspielers: wer sich den Stammplatz beim
+ * BISHERIGEN Verein bereits erarbeitet hat, hat damit sein Leistungsniveau
+ * schon auf Höhe von dessen Vereinsstärke bewiesen - unabhängig davon, wie
+ * knapp die reine Attributs-Gesamtstärke das hergibt. Ohne diesen Bodensatz
+ * würde `squadRoleForOverall` einen unangefochtenen Stammspieler eines
+ * Topklubs bei einem Wechsel zu einem ähnlich starken (oder schwächeren)
+ * Verein regelmäßig nur als Rotationsspieler einstufen, obwohl die eigentliche
+ * Kaderrolle das Gegenteil zeigt. Gilt NUR für tatsächliche Stammspieler, kein
+ * Freifahrtschein für Rotations-/Ergänzungsspieler.
+ */
+function provenStarterFloor(player: Player, oldClubStrength: number): number {
+  if (player.contract.squadRole !== "Stammspieler") return 0;
+  const lastStats = player.seasonHistory[player.seasonHistory.length - 1];
+  const formBonus = lastStats ? clamp((lastStats.avgRating - 6.5) * 2, -2, 4) : 0;
+  return oldClubStrength + 3 + formBonus;
+}
+
+/** Für Transfer-Rollenberechnungen (Angebots-Vorschau + tatsächliche Zusage) angepasste
+ * Gesamtstärke, die den bewiesenen Stammspieler-Bodensatz mit einbezieht - siehe
+ * `provenStarterFloor`. Wird NICHT für Gehalt oder generelle Attributwerte verwendet,
+ * ausschließlich für die Kaderrollen-/Versprechen-Logik beim Vereinswechsel. */
+function transferEffectiveOverall(player: Player, overall: number, oldClubStrength: number): number {
+  return Math.max(overall, provenStarterFloor(player, oldClubStrength));
 }
 
 function squadRoleForOverall(overall: number, clubStrength: number): SquadRole {
@@ -1262,13 +1295,14 @@ function buildClubOfferEvent(
     // Dieselbe Formel wie bei der tatsächlichen Zusage (siehe `applyClubOfferChoice`),
     // damit das hier gezeigte Gehalt exakt dem entspricht, was man am Ende bekommt.
     const wagePreview = estimateWage(overall, player.reputation, cand.club, cand.countryId);
-    const promisedRole = squadRoleForOverall(overall, cand.club.strength);
+    const transferOverall = transferEffectiveOverall(player, overall, currentStrength);
+    const promisedRole = squadRoleForOverall(transferOverall, cand.club.strength);
     // Das Einsatzminuten-Versprechen eines NEUEN Vereins ist nie hundertprozentig
     // sicher - je größer der Sprung zwischen eigener Stärke und Vereinsniveau,
     // desto eher bleibt die versprochene Rolle nur ein Lippenbekenntnis (siehe
     // `applyClubOfferChoice`, wo tatsächlich ausgewürfelt wird, ob der Verein das
     // Versprechen einhält).
-    const promiseChance = rolePromiseChance(overall, cand.club.strength);
+    const promiseChance = rolePromiseChance(transferOverall, cand.club.strength);
     return {
       id: `club-${cand.club.id}`,
       label: cand.isForeign
@@ -1508,12 +1542,16 @@ export function applyClubOfferChoice(
   const wageCountryId = movingCountryId ?? player.country;
   player.club = { clubId: chosen.id, name: chosen.city, country: targetLeague.countryName, tier: chosen.tier, strength: chosen.strength };
   const wage = estimateWage(overall, player.reputation, chosen, wageCountryId);
-  const promisedRole = squadRoleForOverall(overall, chosen.strength);
+  // Derselbe bewiesene Stammspieler-Bodensatz wie in der Angebots-Vorschau (siehe
+  // `transferEffectiveOverall`), damit das dort gezeigte Versprechen exakt dem
+  // entspricht, was hier tatsächlich ausgewürfelt wird.
+  const transferOverall = transferEffectiveOverall(player, overall, oldStrength);
+  const promisedRole = squadRoleForOverall(transferOverall, chosen.strength);
   // Das in der Angebots-Vorschau gezeigte Einsatzminuten-Versprechen (siehe
   // `buildClubOfferEvent`) wird hier tatsächlich ausgewürfelt: je größer der
   // Sprung zwischen eigener Stärke und Vereinsniveau, desto eher bleibt es ein
   // Lippenbekenntnis und die tatsächliche Rolle fällt eine Stufe niedriger aus.
-  const promiseChance = rolePromiseChance(overall, chosen.strength);
+  const promiseChance = rolePromiseChance(transferOverall, chosen.strength);
   const promiseKept = rng() < promiseChance;
   const newRole = promiseKept ? promisedRole : roleOneStepDown(promisedRole);
   player.contract = { club: chosen.city, yearsLeft: 3, wagePerYear: wage, squadRole: newRole };
@@ -1621,29 +1659,44 @@ export function applyClubOfferChoice(
   // Auslandswechsel-Risiko: Sprache, Kultur und ein neues Spielsystem sind nicht immer
   // sofort ein Selbstläufer - mentalitätsstarke, intelligente und arbeitsame Spieler
   // kommen im Schnitt schneller an, aber auch sie sind nicht komplett davor gefeit.
+  // Eine Rückkehr ins eigene Heimatland ist davon ausgenommen: vertraute Sprache,
+  // Kultur und Umfeld machen "Heimkehr" zu etwas durchweg Positivem statt eines
+  // Eingewöhnungs-Risikos wie bei jedem anderen Auslandswechsel.
   if (movingCountryId) {
-    const adaptability = (player.attributes.mentalitaet + player.attributes.intelligenz) / 2 + player.traits.arbeitsmoral * 0.2;
-    const thriveChance = clamp(0.2 + adaptability / 300, 0.15, 0.5);
-    const struggleChance = clamp(0.35 - adaptability / 400, 0.15, 0.4);
-    const roll = rng();
-    if (roll < thriveChance) {
+    const isHomecoming = movingCountryId === player.homeCountryId;
+    if (isHomecoming) {
       player.morale = clamp(player.morale + 10, 0, 100);
-      player.reputation = clamp(player.reputation + 4, 0, 100);
-      deltaLines.push("🌍 Sofort angekommen: Der Start im neuen Land gelingt beeindruckend schnell");
-      player.log.push({ season: 0, age: player.age, text: `${player.name} kommt im neuen Land sofort blendend zurecht.`, kind: "positive" });
-    } else if (roll < thriveChance + struggleChance) {
-      player.morale = clamp(player.morale - 8, 0, 100);
-      player.fitness = clamp(player.fitness - 3, 0, 100);
-      player.clubRelation = clamp(player.clubRelation - 5, 0, 100);
-      deltaLines.push("🌍 Eingewöhnungsschwierigkeiten: Sprache, Kultur und Spielsystem sind erstmal ungewohnt");
-      player.log.push({ season: 0, age: player.age, text: `${player.name} kämpft im neuen Land zunächst mit der Eingewöhnung.`, kind: "negative" });
+      player.clubRelation = clamp(player.clubRelation + 5, 0, 100);
+      deltaLines.push("🏡 Heimkehr: vertraute Sprache, Kultur und Umfeld sorgen für einen runden Start");
+      player.log.push({ season: 0, age: player.age, text: `${player.name} kehrt in die Heimat zurück und kommt sofort gut an.`, kind: "positive" });
+    } else {
+      const adaptability = (player.attributes.mentalitaet + player.attributes.intelligenz) / 2 + player.traits.arbeitsmoral * 0.2;
+      const thriveChance = clamp(0.2 + adaptability / 300, 0.15, 0.5);
+      const struggleChance = clamp(0.35 - adaptability / 400, 0.15, 0.4);
+      const roll = rng();
+      if (roll < thriveChance) {
+        player.morale = clamp(player.morale + 10, 0, 100);
+        player.reputation = clamp(player.reputation + 4, 0, 100);
+        deltaLines.push("🌍 Sofort angekommen: Der Start im neuen Land gelingt beeindruckend schnell");
+        player.log.push({ season: 0, age: player.age, text: `${player.name} kommt im neuen Land sofort blendend zurecht.`, kind: "positive" });
+      } else if (roll < thriveChance + struggleChance) {
+        player.morale = clamp(player.morale - 8, 0, 100);
+        player.fitness = clamp(player.fitness - 3, 0, 100);
+        player.clubRelation = clamp(player.clubRelation - 5, 0, 100);
+        deltaLines.push("🌍 Eingewöhnungsschwierigkeiten: Sprache, Kultur und Spielsystem sind erstmal ungewohnt");
+        player.log.push({ season: 0, age: player.age, text: `${player.name} kämpft im neuen Land zunächst mit der Eingewöhnung.`, kind: "negative" });
+      }
     }
 
     if (player.relationshipStatus !== "single") {
       const partnerLabel = player.partnerName ?? "Der Partner";
-      if (rng() < 0.6) {
+      // Bei einer Heimkehr zieht der Partner deutlich lieber und leichter mit.
+      const partnerThriveChance = isHomecoming ? 0.85 : 0.6;
+      if (rng() < partnerThriveChance) {
         player.morale = clamp(player.morale + 3, 0, 100);
-        deltaLines.push(`${partnerLabel} zieht mit und gibt Rückhalt beim Neustart`);
+        deltaLines.push(
+          isHomecoming ? `${partnerLabel} freut sich sichtlich über die Rückkehr in die Heimat` : `${partnerLabel} zieht mit und gibt Rückhalt beim Neustart`
+        );
       } else {
         player.morale = clamp(player.morale - 3, 0, 100);
         deltaLines.push(`${partnerLabel} tut sich mit dem Umzug zunächst schwer`);
