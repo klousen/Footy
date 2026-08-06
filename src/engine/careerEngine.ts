@@ -544,8 +544,23 @@ export function simulateSeason(player: Player, seasonNumber: number, league: Lea
       : player.contract.squadRole === "Ergänzungsspieler"
       ? 32
       : 22;
-  const minutesPlayed = Math.round(matches * minutesPerMatchByRole);
+  // Die reine Kaderrolle ist nur die halbe Wahrheit: wie lange man tatsächlich
+  // auf dem Platz steht, hängt zusätzlich vom aktuellen Vertrauen des Trainers
+  // (Vereinsbeziehung) und der körperlichen Verfassung (Fitness) ab - ein
+  // Stammspieler mit zerrüttetem Verhältnis oder angeschlagener Fitness wird
+  // früher ausgewechselt als der unangefochtene Publikumsliebling in
+  // Topform, auch wenn beide formal dieselbe Kaderrolle tragen.
+  const trustFactor = clamp(
+    0.85 + (player.clubRelation - 50) / 250 + (player.fitness - 70) / 300,
+    0.65,
+    1.15
+  );
+  // Pro Match sind maximal 90 Minuten möglich (siehe `possibleMinutes` unten) -
+  // der Vertrauensfaktor kann die Einwechselzeit verlängern, aber niemals über
+  // die volle Spielzeit hinaus.
+  const effectiveMinutesPerMatch = Math.min(90, minutesPerMatchByRole * trustFactor);
   const possibleMinutes = baseMatches * 90;
+  const minutesPlayed = Math.min(possibleMinutes, Math.round(matches * effectiveMinutesPerMatch));
 
   const form = (player.morale - 50) / 100; // -0.5 .. 0.5
   // Disziplin wirkt sich leicht auf die Konstanz der Leistungen aus (professionelle
