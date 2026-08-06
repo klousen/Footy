@@ -39,15 +39,19 @@ export interface CountryDef {
   tier2Name: string;
   /** Anzahl Vereine, die je Saison zwischen Liga 1 und Liga 2 den Platz tauschen. */
   swapCount: number;
-  /** Rang (1 = höchstes Ansehen) nach der echten UEFA-5-Jahreswertung der
-   * Landesverbände (siehe `leaguePrestigeRank` in careerEngine.ts) - bestimmt das
-   * Liga-Ansehen fürs Gehalt/Vereins-Prestige, unabhängig von der Reihenfolge
-   * dieser Liste (die weiter die Anzeige-Reihenfolge auf dem Länder-Auswahlbildschirm
-   * bestimmt). Stand: Einschätzung anhand der zuletzt bekannten Trends der letzten
-   * Saisons (England klar vorn, Italien/Deutschland/Spanien im engen Mittelfeld direkt
-   * dahinter, Frankreich als fünfte Großliga, danach Portugal/Niederlande/Belgien als
-   * nächste Ebene, Türkei/Polen am unteren Ende dieser Zehnerauswahl) - keine
-   * Echtzeit-Kopplung an die tagesaktuelle Tabelle.
+  /** Rang (1 = höchstes Ansehen) nach der echten UEFA-Team-Koeffizienten-Rangliste der
+   * Saison 2026/27 (siehe `leaguePrestigeRank` in careerEngine.ts) - bestimmt das
+   * Liga-Ansehen fürs Gehalt/Vereins-Prestige, unabhängig von der Reihenfolge dieser
+   * Liste (die weiter die Anzeige-Reihenfolge auf dem Länder-Auswahlbildschirm
+   * bestimmt). Hergeleitet aus der Summe der TK-Max-Werte aller Vereine einer Nation
+   * in den Top 200 der UEFA-Team-Koeffizienten (Stand 04.08.2026, vom Nutzer bereitgestellt)
+   * - der reale Näherungswert dafür, wie stark eine Nation über die gesamte
+   * Vereinsbreite (nicht nur den Spitzenverein) im europäischen Vergleich dasteht:
+   * England (Summe ca. 821) klar vorn, dann Spanien (ca. 629), Italien (ca. 610),
+   * Deutschland (ca. 594) im engen Mittelfeld, Frankreich (ca. 425) als fünfte
+   * Großliga, Portugal (ca. 338) klar dahinter, Belgien/Niederlande (ca. 251, nahezu
+   * gleichauf) als nächste Ebene, Türkei (ca. 179) und Polen (ca. 149) am unteren
+   * Ende dieser Zehnerauswahl.
    */
   uefaRank: number;
   tier1Cities: string[];
@@ -84,7 +88,7 @@ export const COUNTRIES: CountryDef[] = [
     tier1Name: "Serie A",
     tier2Name: "Serie B",
     swapCount: 3,
-    uefaRank: 2,
+    uefaRank: 3,
     tier1Cities: [
       "Neapel", "Mailand I", "Turin-Continassa", "Mailand II", "Bergamo", "Rom-Testaccio",
       "Rom-Flaminio", "Florenz", "Bologna", "Turin-Filadelfia", "Udine", "Genua", "Como",
@@ -104,7 +108,7 @@ export const COUNTRIES: CountryDef[] = [
     tier1Name: "La Liga",
     tier2Name: "Segunda División",
     swapCount: 3,
-    uefaRank: 4,
+    uefaRank: 2,
     tier1Cities: [
       "Madrid-Chamartín", "Barcelona-Les Corts", "Madrid-Metropolitano", "Bilbao",
       "Villarreal", "Sevilla-Heliópolis", "Vigo", "San Sebastián", "Sevilla-Nervión",
@@ -125,7 +129,7 @@ export const COUNTRIES: CountryDef[] = [
     tier1Name: "Bundesliga",
     tier2Name: "2. Bundesliga",
     swapCount: 2,
-    uefaRank: 3,
+    uefaRank: 4,
     tier1Cities: [
       "München", "Leverkusen", "Leipzig", "Dortmund", "Frankfurt", "Stuttgart",
       "Freiburg", "Bremen", "Mönchengladbach", "Berlin", "Mainz", "Hoffenheim",
@@ -183,7 +187,7 @@ export const COUNTRIES: CountryDef[] = [
     tier1Name: "Pro League",
     tier2Name: "Challenger Pro League",
     swapCount: 2,
-    uefaRank: 8,
+    uefaRank: 7,
     tier1Cities: [
       "Brügge-Sint-Andries", "Brüssel-Anderlecht", "Genk", "Antwerpen", "Gent",
       "Lüttich", "Brüssel-Forest", "Charleroi", "Brügge-Sint-Michiels", "Mechelen",
@@ -202,7 +206,7 @@ export const COUNTRIES: CountryDef[] = [
     tier1Name: "Eredivisie",
     tier2Name: "Eerste Divisie",
     swapCount: 3,
-    uefaRank: 7,
+    uefaRank: 8,
     tier1Cities: [
       "Amsterdam", "Eindhoven", "Rotterdam-Feijenoord", "Alkmaar", "Enschede", "Utrecht",
       "Deventer", "Rotterdam-Spangen", "Nijmegen", "Sittard", "Zwolle", "Heerenveen",
