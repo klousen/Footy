@@ -152,7 +152,17 @@ export function createPlayer(
       },
       injury: null,
       stage: "jugend",
-      careerTotals: { matches: 0, goals: 0, assists: 0, trophies: [], yellowCards: 0, redCards: 0, caps: 0 },
+      careerTotals: {
+        matches: 0,
+        goals: 0,
+        assists: 0,
+        trophies: [],
+        yellowCards: 0,
+        redCards: 0,
+        caps: 0,
+        cleanSheets: 0,
+        penaltiesSaved: 0,
+      },
       nationalTeamCaps: 0,
       nationalTeamGoals: 0,
       capsAtSeasonStart: 0,
@@ -474,7 +484,17 @@ function applyEffects(player: Player, effects: EventChoice["effects"], season: n
     player.startingRoleGuaranteeSeasons = Math.max(player.startingRoleGuaranteeSeasons, effects.startingRoleGuaranteeSeasons);
   }
   if (effects.nationalTeamCaptain) player.nationalTeamCaptain = true;
-  if (effects.squadRoleOverride) player.contract.squadRole = effects.squadRoleOverride;
+  if (effects.squadRoleOverride) {
+    // Zentraler Schutz statt Position-Check in jedem einzelnen Event: Torhüter
+    // kennen keine "Rotation"/"Ergänzungsspieler"-Zwischenstufe (siehe
+    // `squadRoleForOverall`) - ein generisches Event (z.B. "Stammplatz verloren"),
+    // das diese Stufe setzen will, landet für einen Torwart stattdessen direkt
+    // bei "Ersatzbank". "Stammspieler"/"Ausbildungsspieler"/"Ersatzbank" bleiben
+    // für alle Positionen unverändert gültig.
+    const override = effects.squadRoleOverride;
+    player.contract.squadRole =
+      player.position === "TW" && (override === "Rotation" || override === "Ergänzungsspieler") ? "Ersatzbank" : override;
+  }
   // Direkter Sprung vom Jugend- in den Profikader (siehe "jugend_amateurentdeckung_1") -
   // ohne den überhaupt nie passierten Weg über das reguläre Profidebüt-Event, deshalb
   // hier die Vertrags-/Gehaltslogik direkt nachgebildet statt auf `applyClubOfferChoice`
@@ -489,7 +509,7 @@ function applyEffects(player: Player, effects: EventChoice["effects"], season: n
       club: player.club.name,
       yearsLeft: 2,
       wagePerYear: Math.max(6000, Math.round(wage * 0.6)),
-      squadRole: squadRoleForOverall(overall, player.club.strength),
+      squadRole: squadRoleForOverall(overall, player.club.strength, player.position),
     };
   }
   if (effects.definingMoment) player.definingMoment = effects.definingMoment;
@@ -540,8 +560,13 @@ function applyEffects(player: Player, effects: EventChoice["effects"], season: n
   }
 }
 
-/** Übersetzt die angewendeten Effekte einer Entscheidung in lesbare Feedback-Zeilen. */
-export function summarizeEffects(effects: EventChoice["effects"]): string[] {
+/** Übersetzt die angewendeten Effekte einer Entscheidung in lesbare Feedback-Zeilen.
+ * `player` optional (nur für die positionsabhängige Kaderrollen-Anzeige nötig, siehe
+ * `squadRoleLabel`) - muss NACH `applyEffects` übergeben werden, damit
+ * `player.contract.squadRole` bereits den tatsächlich angewendeten (ggf. für
+ * Torhüter auf "Ersatzbank" abgebildeten) Wert zeigt statt des rohen, ggf. gar
+ * nicht so übernommenen `effects.squadRoleOverride`. */
+export function summarizeEffects(effects: EventChoice["effects"], player?: Player): string[] {
   const lines: string[] = [];
   if (effects.attributes) {
     for (const key of ATTRIBUTE_ORDER) {
@@ -565,7 +590,9 @@ export function summarizeEffects(effects: EventChoice["effects"]): string[] {
   if (effects.goalsDelta) lines.push(`Länderspieltore ${signed(effects.goalsDelta)}`);
   if (effects.roleProtectionSeasons) lines.push(`Kaderrolle für ${effects.roleProtectionSeasons} Saison(en) abgesichert`);
   if (effects.startingRoleGuaranteeSeasons) lines.push(`Stammplatz für ${effects.startingRoleGuaranteeSeasons} Saison(en) garantiert`);
-  if (effects.squadRoleOverride) lines.push(`Neue Kaderrolle: ${effects.squadRoleOverride}`);
+  if (effects.squadRoleOverride) {
+    lines.push(`Neue Kaderrolle: ${player ? squadRoleLabel(player.contract.squadRole, player.position) : effects.squadRoleOverride}`);
+  }
   if (effects.traitDeltas) {
     for (const key of TRAIT_ORDER) {
       const delta = effects.traitDeltas[key];
@@ -674,6 +701,7 @@ export function simulateSeason(player: Player, seasonNumber: number, league: Lea
   const possibleMinutes = baseMatches * 90;
   const minutesPlayed = Math.min(possibleMinutes, Math.round(matches * effectiveMinutesPerMatch));
 
+  const isGoalkeeper = player.position === "TW";
   const attackWeight = { TW: 0.02, IV: 0.15, AV: 0.35, ZM: 0.55, FS: 0.85, ST: 1.0 }[player.position];
   const goalChancePerMatch = (overall / 100) * attackWeight * 0.45;
   const assistChancePerMatch = (overall / 100) * attackWeight * 0.35;
@@ -681,6 +709,37 @@ export function simulateSeason(player: Player, seasonNumber: number, league: Lea
   const assists = Math.max(0, Math.round(matches * assistChancePerMatch * (0.7 + rng() * 0.6)));
 
   const form = (player.morale - 50) / 100; // -0.5 .. 0.5
+
+  // Torwart-Statistiken: "weiße Weste" (Zahl) und Paradenquote (%) sind das
+  // torwartspezifische Gegenstück zu Toren/Vorlagen bei Feldspielern (die für
+  // Torhüter dank `attackWeight.TW` ohnehin praktisch immer bei 0 bleiben) -
+  // fließen unten in `productionFactor`/`computeSeasonScore` genauso in
+  // Bewertung, Bekanntheit und Gehaltsbonus ein wie Torbeteiligungen bei
+  // Feldspielern.
+  let cleanSheets = 0;
+  let savePercentage = 0;
+  let penaltiesSaved = 0;
+  if (isGoalkeeper && matches > 0) {
+    // Paradenquote: realistischer Profi-Bereich (grob 55-80%), gestaffelt nach
+    // eigener Stärke relativ zur Vereinsstärke (bessere Torhüter UND eine
+    // bessere Abwehr vor ihnen erhöhen die Quote) plus Form und Streuung.
+    const baseSavePct = 63 + (overall - clubStrength) * 0.4 + form * 10;
+    savePercentage = clamp(Math.round(baseSavePct + (rng() - 0.5) * 10), 40, 92);
+    // Weiße Weste pro Spiel: hängt stark von der Vereinsstärke (Abwehrqualität
+    // vor einem) und der eigenen Paradenquote ab, nicht nur vom Zufall.
+    const cleanSheetChancePerMatch = clamp(0.15 + (clubStrength - 50) / 180 + (savePercentage - 63) / 180, 0.05, 0.55);
+    cleanSheets = Math.min(matches, Math.max(0, Math.round(matches * cleanSheetChancePerMatch * (0.75 + rng() * 0.5))));
+    // Gehaltene Elfmeter im laufenden Ligaspiel (separat vom Elfmeterschießen-
+    // Event "torwart_elfmeterheld") - grob ein Elfmeter gegen den eigenen Kasten
+    // pro 9 Spiele, davon ein Teil gehalten je nach Paradenquote. Seltener
+    // Bonusmoment, der Bewertung/Bekanntheit/Gehalt zusätzlich anhebt ("Elfmeter
+    // gehalten als Boost").
+    const penaltiesFacedEstimate = Math.round(matches / 9);
+    const penaltySaveChance = clamp(0.18 + (savePercentage - 63) / 200, 0.08, 0.4);
+    for (let i = 0; i < penaltiesFacedEstimate; i++) {
+      if (rng() < penaltySaveChance) penaltiesSaved++;
+    }
+  }
   // Disziplin wirkt sich leicht auf die Konstanz der Leistungen aus (professionelle
   // Lebensführung vs. Party-Image) - ein spürbarer, aber kein dominanter Faktor.
   const disziplinFactor = (player.traits.disziplin - 50) / 250; // -0.2 .. +0.2
@@ -697,10 +756,13 @@ export function simulateSeason(player: Player, seasonNumber: number, league: Lea
   // Tore und Vorlagen fließen direkt in die Durchschnittsnote ein - wer pro Spiel
   // spürbar zum Torerfolg beiträgt, bekommt das auch in der Bewertung honoriert,
   // nicht nur in der separaten Tore/Vorlagen-Statistik. Vorlagen zählen etwas
-  // weniger als Tore (0.7x), reine Nullen (v.a. Verteidiger/Torhüter) bekommen
-  // dadurch keinen Abzug - nur echte Scorer werden zusätzlich belohnt.
+  // weniger als Tore (0.7x), reine Nullen (v.a. Verteidiger) bekommen dadurch
+  // keinen Abzug - nur echte Scorer werden zusätzlich belohnt. Torhüter haben
+  // ihr eigenes Pendant: weiße Weste pro Spiel + Paradenquote statt Torbeteiligung.
   const productionPerMatch = matches > 0 ? (goals + assists * 0.7) / matches : 0;
-  const productionFactor = clamp(productionPerMatch * 1.3, 0, 1.1);
+  const productionFactor = isGoalkeeper
+    ? clamp((matches > 0 ? cleanSheets / matches : 0) * 1.6 + (savePercentage - 63) / 90 + penaltiesSaved * 0.05, 0, 1.1)
+    : clamp(productionPerMatch * 1.3, 0, 1.1);
   // "Sommermärchen-Delle" (siehe "sommermaerchen_delle_1"): ein spürbarer, aber
   // vorübergehender Leistungsdämpfer nach einem großen Erfolgshöhepunkt - klingt
   // über die Saisons ab (siehe `ageUpPlayer`), statt die Karriere dauerhaft zu prägen.
@@ -801,6 +863,8 @@ export function simulateSeason(player: Player, seasonNumber: number, league: Lea
   player.careerTotals.assists += assists;
   player.careerTotals.yellowCards += yellowCards;
   player.careerTotals.redCards += redCards;
+  player.careerTotals.cleanSheets += cleanSheets;
+  player.careerTotals.penaltiesSaved += penaltiesSaved;
   player.careerTotals.trophies.push(...trophies);
 
   for (const trophy of trophies) {
@@ -817,16 +881,26 @@ export function simulateSeason(player: Player, seasonNumber: number, league: Lea
   }
 
   // Gehaltssystem: Grundgehalt wird garantiert ausgezahlt, dazu leistungsabhängige
-  // Prämien für Tore/Vorlagen, starke Bewertungen und Titel.
+  // Prämien für Tore/Vorlagen (bzw. bei Torhütern weiße Westen/gehaltene Elfmeter),
+  // starke Bewertungen und Titel.
   const performanceBonus = Math.round(
-    goals * 400 + assists * 250 + (avgRating >= 7.2 ? 6000 : 0) + trophies.length * 15000
+    goals * 400 +
+      assists * 250 +
+      cleanSheets * 350 +
+      penaltiesSaved * 900 +
+      (avgRating >= 7.2 ? 6000 : 0) +
+      trophies.length * 15000
   );
   const income = player.contract.wagePerYear + performanceBonus;
   player.wealth += income;
 
   // Reputation wächst mit guten Leistungen - ein gutes Medienimage verstärkt den Effekt
   const mediaFactor = 1 + (player.traits.medienimage - 50) / 200; // 0.75 .. 1.25
-  const repGain = clamp(Math.round((avgRating - 6) * 3 * mediaFactor + goals * 0.4 + assists * 0.2), -6, 14);
+  const repGain = clamp(
+    Math.round((avgRating - 6) * 3 * mediaFactor + goals * 0.4 + assists * 0.2 + cleanSheets * 0.5 + penaltiesSaved * 1.8),
+    -6,
+    14
+  );
   player.reputation = clamp(player.reputation + repGain, 0, 100);
 
   // Verein-Beziehung leicht Richtung Mitte tendieren lassen
@@ -842,6 +916,10 @@ export function simulateSeason(player: Player, seasonNumber: number, league: Lea
     avgRating,
     goals,
     assists,
+    isGoalkeeper,
+    cleanSheets,
+    savePercentage,
+    penaltiesSaved,
     trophies,
     repGain,
     yellowCards,
@@ -861,6 +939,9 @@ export function simulateSeason(player: Player, seasonNumber: number, league: Lea
     possibleMinutes,
     goals,
     assists,
+    cleanSheets,
+    savePercentage,
+    penaltiesSaved,
     capsThisSeason,
     avgRating: Math.round(avgRating * 10) / 10,
     leaguePosition,
@@ -888,15 +969,28 @@ function computeSeasonScore(input: {
   avgRating: number;
   goals: number;
   assists: number;
+  isGoalkeeper: boolean;
+  cleanSheets: number;
+  savePercentage: number;
+  penaltiesSaved: number;
   trophies: string[];
   repGain: number;
   yellowCards: number;
   redCards: number;
   capsThisSeason: number;
 }): { score: number; tier: string; factors: ScoreFactor[] } {
+  // Torhüter haben ihr eigenes Leistungsmerkmal statt "Torbeteiligungen" (die bei
+  // ihnen dank `attackWeight.TW` ohnehin praktisch immer 0 wären): weiße Westen +
+  // eine über dem Durchschnitt liegende Paradenquote + gehaltene Elfmeter.
+  const productionFactorScore = input.isGoalkeeper
+    ? {
+        label: "Weiße Westen & Paraden",
+        points: Math.round(input.cleanSheets * 8 + Math.max(0, input.savePercentage - 60) * 1.5 + input.penaltiesSaved * 12),
+      }
+    : { label: "Torbeteiligungen", points: Math.round(input.goals * 6 + input.assists * 4) };
   const factors: ScoreFactor[] = [
     { label: "Sportliche Leistung (Ø Bewertung)", points: Math.round(input.avgRating * 12) },
-    { label: "Torbeteiligungen", points: Math.round(input.goals * 6 + input.assists * 4) },
+    productionFactorScore,
     { label: "Titel", points: input.trophies.length * 50 },
     { label: "Entwicklung (Bekanntheit)", points: input.repGain * 3 },
     { label: "Disziplin", points: -Math.round(input.yellowCards * 2 + input.redCards * 15) },
@@ -1247,8 +1341,22 @@ function transferEffectiveOverall(player: Player, overall: number, oldClubStreng
  * kommen ließ. Auf ETWA eigenem Niveau (diff >= 0) sollte man realistisch um
  * einen Stammplatz mitspielen können, nicht zwingend deutlich darüber liegen.
  */
-function squadRoleForOverall(overall: number, clubStrength: number): SquadRole {
+/**
+ * Torhüter kennen KEINE Rotation/Ergänzungsspieler-Zwischenstufe (siehe
+ * `SquadRole`-Doc-Kommentar in types.ts) - anders als bei Feldspielern
+ * springt die Rolle binär zwischen "Stammspieler" (Nummer 1) und
+ * "Ersatzbank" (Nummer 2/3), ohne die abgestufte Leiter der Feldspieler.
+ * Schwelle bewusst leicht großzügiger (diff >= -3 statt >= 0) als bei
+ * Feldspielern: die Torwart-Gesamtstärke hängt stark an Physis/Mentalität
+ * (siehe POSITION_WEIGHTS.TW) und schwankt dadurch weniger granular - eine
+ * zu strikte 0-Schwelle würde sonst realistische Nummer-1-Torhüter knapp
+ * unterhalb der Vereinsstärke fälschlich auf die Bank verbannen.
+ */
+function squadRoleForOverall(overall: number, clubStrength: number, position: Position): SquadRole {
   const diff = overall - clubStrength;
+  if (position === "TW") {
+    return diff >= -3 ? "Stammspieler" : "Ersatzbank";
+  }
   if (diff >= 0) return "Stammspieler";
   if (diff >= -10) return "Rotation";
   if (diff >= -20) return "Ergänzungsspieler";
@@ -1257,12 +1365,34 @@ function squadRoleForOverall(overall: number, clubStrength: number): SquadRole {
 
 /** Eine Stufe unterhalb der übergebenen Kaderrolle (für ein gebrochenes
  * Einsatzminuten-Versprechen, siehe `rolePromiseChance`) - "Ersatzbank" ist die
- * Talsohle. */
+ * Talsohle. Für Torhüter (siehe `squadRoleForOverall`) übersprint dies direkt
+ * die für sie nicht existente Rotation/Ergänzungsspieler-Zwischenstufe. */
 const ROLE_ORDER: SquadRole[] = ["Ersatzbank", "Ergänzungsspieler", "Rotation", "Stammspieler"];
-function roleOneStepDown(role: SquadRole): SquadRole {
+function roleOneStepDown(role: SquadRole, position: Position): SquadRole {
+  if (position === "TW") return "Ersatzbank";
   const idx = ROLE_ORDER.indexOf(role);
   if (idx <= 0) return role;
   return ROLE_ORDER[idx - 1];
+}
+
+/** Anzeige-Label für die Torwart-Kaderrolle ("Nummer 1"/"Nummer 2") statt der
+ * generischen Feldspieler-Begriffe - nur sinnvoll für `position === "TW"`.
+ * "Nummer 3" ist rein narrativ (siehe Event-Texte) und bezeichnet denselben
+ * mechanischen "Ersatzbank"-Zustand wie "Nummer 2": ein dritter Torwart
+ * bekommt in der Praxis genauso selten Einsatzminuten wie ein zweiter, die
+ * Unterscheidung ist reine Hackordnung, kein eigener Spielzeit-Zustand. */
+export function goalkeeperRoleLabel(role: SquadRole): string {
+  if (role === "Stammspieler") return "Nummer 1";
+  if (role === "Ausbildungsspieler") return "Nachwuchstorwart";
+  return "Nummer 2";
+}
+
+/** Anzeige-Text für eine Kaderrolle, positionsabhängig - Torhüter zeigen
+ * "Nummer 1"/"Nummer 2" (siehe `goalkeeperRoleLabel`), alle anderen Positionen
+ * den regulären `SquadRole`-Text unverändert. Zentrale Stelle für alle
+ * UI-/Event-Textstellen, die eine Kaderrolle anzeigen. */
+export function squadRoleLabel(role: SquadRole, position: Position): string {
+  return position === "TW" ? goalkeeperRoleLabel(role) : role;
 }
 
 /**
@@ -1284,6 +1414,9 @@ function currentSquadRole(player: Player, clubStrength: number): SquadRole {
   // Kommentar) - Konsistenz zwischen Angebots-Vorschau und tatsächlicher
   // laufender Kaderrolle.
   const roleScore = overall - clubStrength + relationFactor + formFactor;
+  if (player.position === "TW") {
+    return roleScore >= -3 ? "Stammspieler" : "Ersatzbank";
+  }
   if (roleScore >= 0) return "Stammspieler";
   if (roleScore >= -10) return "Rotation";
   if (roleScore >= -20) return "Ergänzungsspieler";
@@ -1318,10 +1451,17 @@ export function resolveClubSituation(player: Player, league: LeagueState): LogEn
 
   const oldRole = player.contract.squadRole;
   let newRole = currentSquadRole(player, player.club.strength);
+  const isGoalkeeper = player.position === "TW";
   // Eine erfolgreich genutzte Bewährungschance schützt die Kaderrolle noch einige
   // Saisons vor dem Abrutschen unter "Rotation" - der Durchbruch bleibt spürbar.
-  if (player.roleProtectionSeasons > 0 && SQUAD_ROLE_RANK[newRole] < SQUAD_ROLE_RANK["Rotation"]) {
-    newRole = "Rotation";
+  // Torhüter kennen keine "Rotation"-Zwischenstufe (siehe `squadRoleForOverall`) -
+  // die Bewährungschance schützt bei ihnen direkt die Nummer-1-Rolle.
+  if (player.roleProtectionSeasons > 0) {
+    if (isGoalkeeper) {
+      newRole = "Stammspieler";
+    } else if (SQUAD_ROLE_RANK[newRole] < SQUAD_ROLE_RANK["Rotation"]) {
+      newRole = "Rotation";
+    }
   }
   // Vertragliche Stammplatzgarantie: stärkere Absicherung als die Bewährungschance,
   // garantiert für die vereinbarte Dauer mindestens "Stammspieler" - wirkt sich über
@@ -1334,8 +1474,15 @@ export function resolveClubSituation(player: Player, league: LeagueState): LogEn
   // gezielt von der Bank statt als gesetzten Stammspieler - deckelt die Kaderrolle
   // bei "Rotation", selbst wenn die reine Gesamtstärke eigentlich mehr hergäbe. Eine
   // vertragliche Stammplatzgarantie (siehe oben) bleibt davon unberührt - ein klares
-  // Vertragsversprechen sticht die informelle Trainer-Präferenz.
-  if (player.edeljokerLocked && player.startingRoleGuaranteeSeasons <= 0 && SQUAD_ROLE_RANK[newRole] > SQUAD_ROLE_RANK["Rotation"]) {
+  // Vertragsversprechen sticht die informelle Trainer-Präferenz. Gilt nicht für
+  // Torhüter - "edeljoker_1" schließt die Position aus (Einwechselspieler-Rolle
+  // passt konzeptionell nicht zum Torwart).
+  if (
+    !isGoalkeeper &&
+    player.edeljokerLocked &&
+    player.startingRoleGuaranteeSeasons <= 0 &&
+    SQUAD_ROLE_RANK[newRole] > SQUAD_ROLE_RANK["Rotation"]
+  ) {
     newRole = "Rotation";
   }
   player.contract.squadRole = newRole;
@@ -1356,12 +1503,13 @@ export function resolveClubSituation(player: Player, league: LeagueState): LogEn
   let entry: LogEntry | null = null;
   if (newRole !== oldRole) {
     const improved = SQUAD_ROLE_RANK[newRole] > SQUAD_ROLE_RANK[oldRole];
+    const newRoleLabel = squadRoleLabel(newRole, player.position);
     entry = {
       season: 0,
       age: player.age,
       text: improved
-        ? `${player.name} arbeitet sich bei ${player.club.name} zu einer besseren Rolle im Kader hoch (${newRole}).`
-        : `${player.name} verliert bei ${player.club.name} an Bedeutung im Kader (${newRole}).`,
+        ? `${player.name} arbeitet sich bei ${player.club.name} zu einer besseren Rolle im Kader hoch (${newRoleLabel}).`
+        : `${player.name} verliert bei ${player.club.name} an Bedeutung im Kader (${newRoleLabel}).`,
       kind: improved ? "positive" : "negative",
     };
     player.log.push(entry);
@@ -1857,7 +2005,7 @@ function buildClubOfferEvent(
     // damit das hier gezeigte Gehalt exakt dem entspricht, was man am Ende bekommt.
     const wagePreview = estimateWage(overall, player.reputation, cand.club, cand.countryId, cand.leagueRank);
     const transferOverall = transferEffectiveOverall(player, overall, currentStrength);
-    const promisedRole = squadRoleForOverall(transferOverall, cand.club.strength);
+    const promisedRole = squadRoleForOverall(transferOverall, cand.club.strength, player.position);
     // Das Einsatzminuten-Versprechen eines NEUEN Vereins ist nie hundertprozentig
     // sicher - je größer der Sprung zwischen eigener Stärke und Vereinsniveau,
     // desto eher bleibt die versprochene Rolle nur ein Lippenbekenntnis (siehe
@@ -1878,7 +2026,7 @@ function buildClubOfferEvent(
       detail:
         reason === "loan"
           ? `${cand.leagueLabel} · Vereinsstärke ${cand.club.strength} · Ein Jahr Leihe, danach automatische Rückkehr zu ${player.club.name} · Gehalt ca. ${formatMoney(wagePreview)}/Jahr`
-          : `${cand.leagueLabel} · Vereinsstärke ${cand.club.strength} (aktuell: ${currentStrength}) · Einsatzminuten-Versprechen: ${promisedRole} (${Math.round(promiseChance * 100)}% Erfolgschance) · Gehalt ca. ${formatMoney(wagePreview)}/Jahr${cand.isForeign ? " · Auslandswechsel" : ""}`,
+          : `${cand.leagueLabel} · Vereinsstärke ${cand.club.strength} (aktuell: ${currentStrength}) · Einsatzminuten-Versprechen: ${squadRoleLabel(promisedRole, player.position)} (${Math.round(promiseChance * 100)}% Erfolgschance) · Gehalt ca. ${formatMoney(wagePreview)}/Jahr${cand.isForeign ? " · Auslandswechsel" : ""}`,
       effects: {},
     };
   });
@@ -1898,7 +2046,7 @@ function buildClubOfferEvent(
     choices.push({
       id: "stay-debut",
       label: `Profivertrag bei ${player.club.name} unterschreiben`,
-      detail: `Bleib deinem Jugendverein treu · Rolle voraussichtlich ${squadRoleForOverall(overall, currentStrength)} · Gehalt ca. ${formatMoney(stayWagePreview)}/Jahr · Vertrauensbonus durch die vertraute Umgebung`,
+      detail: `Bleib deinem Jugendverein treu · Rolle voraussichtlich ${squadRoleLabel(squadRoleForOverall(overall, currentStrength, player.position), player.position)} · Gehalt ca. ${formatMoney(stayWagePreview)}/Jahr · Vertrauensbonus durch die vertraute Umgebung`,
       effects: {},
     });
   } else if (reason === "opportunity" || reason === "lockruf") {
@@ -2124,7 +2272,7 @@ export function applyClubOfferChoice(
       player.country,
       clubLeagueRank(player.club.clubId, player.club.tier, league)
     );
-    const newRole = squadRoleForOverall(overall, player.club.strength);
+    const newRole = squadRoleForOverall(overall, player.club.strength, player.position);
     player.contract = { club: player.club.name, yearsLeft: 3, wagePerYear: wage, squadRole: newRole };
     player.clubRelation = 75;
     player.morale = clamp(player.morale + 10, 0, 100);
@@ -2139,7 +2287,7 @@ export function applyClubOfferChoice(
         text,
         kind: "positive",
         deltaLines: [
-          `Neue Rolle im Kader: ${newRole}`,
+          `Neue Rolle im Kader: ${squadRoleLabel(newRole, player.position)}`,
           `Gehalt: ${formatMoney(wage)} / Jahr`,
           "Vereinsbeziehung 75 (Vertrauensbonus)",
           "Moral +10, Mentalität +1 durch die vertraute Umgebung",
@@ -2195,14 +2343,14 @@ export function applyClubOfferChoice(
   // `transferEffectiveOverall`), damit das dort gezeigte Versprechen exakt dem
   // entspricht, was hier tatsächlich ausgewürfelt wird.
   const transferOverall = transferEffectiveOverall(player, overall, oldStrength);
-  const promisedRole = squadRoleForOverall(transferOverall, chosen.strength);
+  const promisedRole = squadRoleForOverall(transferOverall, chosen.strength, player.position);
   // Das in der Angebots-Vorschau gezeigte Einsatzminuten-Versprechen (siehe
   // `buildClubOfferEvent`) wird hier tatsächlich ausgewürfelt: je größer der
   // Sprung zwischen eigener Stärke und Vereinsniveau, desto eher bleibt es ein
   // Lippenbekenntnis und die tatsächliche Rolle fällt eine Stufe niedriger aus.
   const promiseChance = rolePromiseChance(transferOverall, chosen.strength);
   const promiseKept = rng() < promiseChance;
-  const newRole = promiseKept ? promisedRole : roleOneStepDown(promisedRole);
+  const newRole = promiseKept ? promisedRole : roleOneStepDown(promisedRole, player.position);
   player.contract = { club: chosen.city, yearsLeft: 3, wagePerYear: wage, squadRole: newRole };
   player.clubRelation = promiseKept ? 60 : 45;
   if (!promiseKept) player.morale = clamp(player.morale - 8, 0, 100);
@@ -2255,8 +2403,8 @@ export function applyClubOfferChoice(
       season: 0,
       age: player.age,
       text: promiseKept
-        ? `${chosen.city} hält das Einsatzminuten-Versprechen ein - ${player.name} startet als ${newRole}.`
-        : `${chosen.city} hält das Einsatzminuten-Versprechen nicht ein - ${player.name} landet zunächst nur als ${newRole} im Kader.`,
+        ? `${chosen.city} hält das Einsatzminuten-Versprechen ein - ${player.name} startet als ${squadRoleLabel(newRole, player.position)}.`
+        : `${chosen.city} hält das Einsatzminuten-Versprechen nicht ein - ${player.name} landet zunächst nur als ${squadRoleLabel(newRole, player.position)} im Kader.`,
       kind: promiseKept ? "positive" : "negative",
     });
   }

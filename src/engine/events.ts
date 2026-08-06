@@ -981,6 +981,9 @@ export const EVENT_TEMPLATES: EventTemplate[] = [
     minAge: 16,
     maxAge: 40,
     weight: 2,
+    // Reines Feldspieler-Szenario (Ballführung im letzten Drittel) - für Torhüter
+    // gibt es das eigenständige Gegenstück "torwart_glanzparade".
+    condition: (p) => p.position !== "TW",
     build: () => ({
       category: "taktik",
       title: "Entscheidende Spielsituation",
@@ -2330,10 +2333,13 @@ export const EVENT_TEMPLATES: EventTemplate[] = [
     minAge: 17,
     maxAge: 34,
     weight: 1.4,
-    build: (_p, ctx) => ({
+    build: (p, ctx) => ({
       category: "training",
       title: "Standardsituationen üben",
-      description: "Nach dem regulären Training bleibt Zeit für zusätzliches Freistoß- und Eckballtraining.",
+      description:
+        p.position === "TW"
+          ? "Nach dem regulären Training bleibt Zeit für zusätzliches Training gegen Freistöße und Eckbälle - Stellungsspiel, Abklatschen und Herauslaufen."
+          : "Nach dem regulären Training bleibt Zeit für zusätzliches Freistoß- und Eckballtraining.",
       choices: [
         {
           id: "investieren",
@@ -3019,6 +3025,143 @@ export const EVENT_TEMPLATES: EventTemplate[] = [
           id: "rausreden",
           label: "Die Schuld beim Team suchen",
           effects: { morale: 2, clubRelation: -5, traitDeltas: { medienimage: -3 }, logText: "hat nach dem viralen Patzer die Schuld beim Team gesucht - kommt in der Kabine nicht gut an.", logKind: "negative" },
+        },
+      ],
+    }),
+  },
+  {
+    id: "torwart_liga_elfmeter",
+    category: "taktik",
+    minAge: 17,
+    maxAge: 39,
+    weight: 1.1,
+    // Bewusst getrennt von "torwart_elfmeterheld" (Elfmeterschießen nach 120
+    // Minuten, K.o.-Charakter) - hier geht es um einen reinen Strafstoß im
+    // laufenden Ligaspiel, ein deutlich häufigerer, "normalerer" Spielmoment,
+    // der trotzdem als echter Boost zählen soll ("Elfmeter gehalten").
+    condition: (p) => p.position === "TW",
+    build: (p) => {
+      const name = club(p);
+      return {
+        category: "taktik",
+        title: "Elfmeter in der Crunchtime",
+        description: `In einem wichtigen Ligaspiel von ${name} gibt es Strafstoß gegen dich - kurz vor Schluss, bei knappem Spielstand.`,
+        choices: [
+          {
+            id: "winkel_verkuerzen",
+            label: "Früh herauskommen, Winkel verkürzen",
+            detail: "Aggressive Technik - bei Erfolg ein starker Reflex-Save, bei Misserfolg ein unnötig hoher Chip drüber.",
+            effects: {},
+            followUpChance: {
+              chance: 0.5,
+              success: {
+                reputation: 7,
+                morale: 8,
+                attributes: { intelligenz: 1 },
+                logText: "hat den Elfmeter durch beherztes Herauskommen und Winkelverkürzung pariert.",
+                logKind: "positive",
+              },
+              failure: {
+                morale: -5,
+                clubRelation: -2,
+                logText: "wird beim Elfmeter mit einem sehenswerten Lupfer über sich selbst überlistet.",
+                logKind: "negative",
+              },
+            },
+          },
+          {
+            id: "linie_abwarten",
+            label: "Auf der Linie bleiben und reagieren",
+            detail: "Sicherer, reaktiver Ansatz - kleinere Fallhöhe in beide Richtungen.",
+            effects: {},
+            followUpChance: {
+              chance: 0.4,
+              success: {
+                reputation: 4,
+                morale: 5,
+                logText: "hat den Elfmeter mit einem reinen Reflex von der Linie pariert.",
+                logKind: "positive",
+              },
+              failure: {
+                morale: -3,
+                logText: "ist beim Elfmeter chancenlos - der Schuss sitzt zu platziert.",
+                logKind: "negative",
+              },
+            },
+          },
+          {
+            id: "nervenkrieg",
+            label: "Nervenkrieg mit dem Schützen suchen",
+            detail: "Psychospielchen vor dem Anlauf - riskiert Kritik an der Fairness, kann den Schützen aber aus dem Konzept bringen.",
+            effects: {},
+            followUpChance: {
+              chance: 0.3,
+              success: {
+                reputation: 6,
+                morale: 6,
+                traitDeltas: { medienimage: -1 },
+                logText: "bringt den Schützen mit einem Nervenkrieg vor dem Elfmeter aus dem Konzept - der Ball geht daneben.",
+                logKind: "positive",
+              },
+              failure: {
+                morale: -2,
+                traitDeltas: { medienimage: -2 },
+                logText: "wirkt beim Nervenkrieg vor dem Elfmeter unsportlich, ohne den Schützen zu beeindrucken - der Elfmeter sitzt.",
+                logKind: "negative",
+              },
+            },
+          },
+        ],
+      };
+    },
+  },
+  {
+    id: "torwart_glanzparade",
+    category: "taktik",
+    minAge: 16,
+    maxAge: 39,
+    weight: 1.3,
+    // "Random Glanztaten": unabhängig von Elfmetern eine zufällige Weltklasse-
+    // Szene aus dem laufenden Spiel - der torwartspezifische Gegenpart zu einem
+    // spektakulären Distanztor bei Feldspielern.
+    condition: (p) => p.position === "TW",
+    build: (p) => ({
+      category: "taktik",
+      title: "Der Distanzschuss fliegt in den Winkel",
+      description: `Ein platzierter Distanzschuss gegen ${club(p)} fliegt scheinbar unhaltbar in den Winkel - im letzten Moment wirfst du dich hinein.`,
+      choices: [
+        {
+          id: "alles_riskieren",
+          label: "Sich mit vollem Risiko hineinwerfen",
+          detail: "Volle Flugparade - bei Erfolg eine Weltklasse-Szene, bei Misserfolg ein unnötiges Verletzungsrisiko.",
+          effects: {},
+          followUpChance: {
+            chance: 0.45,
+            success: {
+              reputation: 10,
+              morale: 8,
+              attributes: { technik: 1 },
+              logText: "hält mit einer spektakulären Flugparade einen unhaltbar scheinenden Distanzschuss - die Bilder gehen viral.",
+              logKind: "positive",
+            },
+            failure: {
+              injuryWeeksOut: 2,
+              injuryLabel: "Prellung nach Hechtsprung",
+              morale: -4,
+              logText: "verletzt sich bei einem beherzten Hechtsprung nach einem Distanzschuss.",
+              logKind: "negative",
+            },
+          },
+        },
+        {
+          id: "kontrolliert_abwehren",
+          label: "Kontrolliert um den Pfosten lenken",
+          detail: "Weniger spektakulär, dafür risikoarm - kein Verletzungsrisiko.",
+          effects: {
+            attributes: { mentalitaet: 1 },
+            logText: "lenkt den Distanzschuss kontrolliert um den Pfosten, ohne unnötiges Risiko einzugehen.",
+            logKind: "info",
+          },
         },
       ],
     }),
@@ -5300,54 +5443,107 @@ export const EVENT_TEMPLATES: EventTemplate[] = [
     // 1-5%-Bereich bleibt, statt bei ~18 möglichen Saisons fast garantiert
     // mindestens einmal zu feuern.
     condition: (p) => p.contract.squadRole !== "Ausbildungsspieler" && Math.random() < 0.0025,
-    build: (p) => ({
-      category: "meilenstein",
-      title: "Das Spiel, das alles verändern könnte",
-      description: `Relegation, Pokalfinale oder die letzte entscheidende Aktion einer engen Meisterschaft - ${club(p)} steht vor dem größten Spiel der Saison, und in der Schlussphase landet der Ball ausgerechnet bei dir. Übernimmst du die Verantwortung?`,
-      choices: [
-        {
-          id: "verantwortung",
-          label: "Verantwortung übernehmen",
-          effects: {},
-          followUpChance: {
-            chance: 0.5,
-            success: {
-              reputation: 20,
-              morale: 15,
-              clubRelation: 10,
-              traitDeltas: { fuehrung: 6 },
-              attributes: { mentalitaet: 2 },
-              definingMoment: {
-                positive: true,
-                text: "der entscheidende Treffer im größten Spiel der Karriere, der bis heute in jeder Rückschau gezeigt wird.",
+    // Torhüter: statt "landet der Ball bei dir und du triffst" (unrealistisch für
+    // die Position) die torwartgerechte Variante - eine letzte Parade hält das
+    // Spiel offen bzw. wird zum entscheidenden Gegentor.
+    build: (p) =>
+      p.position === "TW"
+        ? {
+            category: "meilenstein",
+            title: "Das Spiel, das alles verändern könnte",
+            description: `Relegation, Pokalfinale oder die letzte entscheidende Aktion einer engen Meisterschaft - ${club(p)} steht vor dem größten Spiel der Saison, und in der Nachspielzeit kommt der Gegner alleine auf dich zu. Übernimmst du die Verantwortung?`,
+            choices: [
+              {
+                id: "verantwortung",
+                label: "Verantwortung übernehmen",
+                effects: {},
+                followUpChance: {
+                  chance: 0.5,
+                  success: {
+                    reputation: 20,
+                    morale: 15,
+                    clubRelation: 10,
+                    traitDeltas: { fuehrung: 6 },
+                    attributes: { mentalitaet: 2 },
+                    definingMoment: {
+                      positive: true,
+                      text: "die entscheidende Parade im größten Spiel der Karriere, die bis heute in jeder Rückschau gezeigt wird.",
+                    },
+                    logText: "hält die entscheidende Parade im größten Spiel der Karriere - ein Moment für immer verknüpft mit seinem/ihrem Namen.",
+                    logKind: "milestone",
+                  },
+                  failure: {
+                    morale: -12,
+                    clubRelation: -6,
+                    reputation: -4,
+                    definingMoment: {
+                      positive: false,
+                      text: "das vergebene entscheidende Gegentor im größten Spiel der Karriere, das Kritiker bis heute nicht vergessen.",
+                    },
+                    logText: "lässt das entscheidende Gegentor im größten Spiel der Karriere zu - ein Fehler, der für immer mit seinem/ihrem Namen verknüpft bleibt.",
+                    logKind: "negative",
+                  },
+                },
               },
-              logText: "erzielt den entscheidenden Treffer im größten Spiel der Karriere - ein Moment für immer verknüpft mit seinem/ihrem Namen.",
-              logKind: "milestone",
-            },
-            failure: {
-              morale: -12,
-              clubRelation: -6,
-              reputation: -4,
-              definingMoment: {
-                positive: false,
-                text: "der vergebene entscheidende Moment im größten Spiel der Karriere, den Kritiker bis heute nicht vergessen.",
+              {
+                id: "zurueckhalten",
+                label: "Auf die Abwehr vor dir vertrauen",
+                effects: {
+                  clubRelation: 2,
+                  logText: "überlässt im entscheidenden Moment lieber der Abwehr die Klärung.",
+                  logKind: "info",
+                },
               },
-              logText: "vergibt den entscheidenden Moment im größten Spiel der Karriere - ein Fehler, der für immer mit seinem/ihrem Namen verknüpft bleibt.",
-              logKind: "negative",
-            },
+            ],
+          }
+        : {
+            category: "meilenstein",
+            title: "Das Spiel, das alles verändern könnte",
+            description: `Relegation, Pokalfinale oder die letzte entscheidende Aktion einer engen Meisterschaft - ${club(p)} steht vor dem größten Spiel der Saison, und in der Schlussphase landet der Ball ausgerechnet bei dir. Übernimmst du die Verantwortung?`,
+            choices: [
+              {
+                id: "verantwortung",
+                label: "Verantwortung übernehmen",
+                effects: {},
+                followUpChance: {
+                  chance: 0.5,
+                  success: {
+                    reputation: 20,
+                    morale: 15,
+                    clubRelation: 10,
+                    traitDeltas: { fuehrung: 6 },
+                    attributes: { mentalitaet: 2 },
+                    definingMoment: {
+                      positive: true,
+                      text: "der entscheidende Treffer im größten Spiel der Karriere, der bis heute in jeder Rückschau gezeigt wird.",
+                    },
+                    logText: "erzielt den entscheidenden Treffer im größten Spiel der Karriere - ein Moment für immer verknüpft mit seinem/ihrem Namen.",
+                    logKind: "milestone",
+                  },
+                  failure: {
+                    morale: -12,
+                    clubRelation: -6,
+                    reputation: -4,
+                    definingMoment: {
+                      positive: false,
+                      text: "der vergebene entscheidende Moment im größten Spiel der Karriere, den Kritiker bis heute nicht vergessen.",
+                    },
+                    logText: "vergibt den entscheidenden Moment im größten Spiel der Karriere - ein Fehler, der für immer mit seinem/ihrem Namen verknüpft bleibt.",
+                    logKind: "negative",
+                  },
+                },
+              },
+              {
+                id: "zurueckhalten",
+                label: "Sich zurückhalten, einem Mitspieler überlassen",
+                effects: {
+                  clubRelation: 2,
+                  logText: "überlässt im entscheidenden Moment lieber einem Mitspieler die Verantwortung.",
+                  logKind: "info",
+                },
+              },
+            ],
           },
-        },
-        {
-          id: "zurueckhalten",
-          label: "Sich zurückhalten, einem Mitspieler überlassen",
-          effects: {
-            clubRelation: 2,
-            logText: "überlässt im entscheidenden Moment lieber einem Mitspieler die Verantwortung.",
-            logKind: "info",
-          },
-        },
-      ],
-    }),
   },
 
   // --- Edeljoker statt Stammspieler: eine dauerhafte Trainer-Präferenz ---
@@ -5361,8 +5557,13 @@ export const EVENT_TEMPLATES: EventTemplate[] = [
     // Kein klassischer Formverlust - der Trainer nutzt den Spieler bewusst als
     // Einwechselspieler, obwohl das Leistungsniveau eigentlich für einen
     // Stammplatz reichen würde (daher die Bedingung an Rotation/Stammspieler-Nähe,
-    // nicht an schwache Werte).
+    // nicht an schwache Werte). Torhüter ausgeschlossen: ein Torwart wird nie als
+    // "Einwechselspieler" gebracht (Torhüterwechsel während des laufenden Spiels
+    // sind praktisch nur bei Verletzung/Roter Karte üblich, keine taktische
+    // Trainer-Präferenz) - passt außerdem nicht zur binären Nummer-1/2-Kaderrolle
+    // von Torhütern ohne "Rotation"-Zwischenstufe (siehe `squadRoleForOverall`).
     condition: (p) =>
+      p.position !== "TW" &&
       !p.edeljokerLocked &&
       (p.contract.squadRole === "Rotation" || p.contract.squadRole === "Stammspieler") &&
       p.consecutiveBenchSeasons === 0 &&

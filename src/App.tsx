@@ -203,7 +203,7 @@ export default function App() {
           const before = overallRating(player);
           const effects = applyChoice(game, choice);
           const after = overallRating(player);
-          const deltaLines = summarizeEffects(effects);
+          const deltaLines = summarizeEffects(effects, player);
           if (after !== before) {
             deltaLines.unshift(`Gesamtstärke ${before} → ${after} (${after > before ? "+" : ""}${after - before})`);
           }

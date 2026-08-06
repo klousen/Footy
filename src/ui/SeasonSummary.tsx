@@ -24,6 +24,7 @@ export function SeasonSummary({
   const currentOverall = overallRating(player);
   const overallDelta = currentOverall - stats.overallRating;
   const tier = overallTier(currentOverall);
+  const isGoalkeeper = player.position === "TW";
 
   return (
     <div className="screen summary-screen">
@@ -38,8 +39,20 @@ export function SeasonSummary({
           value={`${currentOverall}${overallDelta !== 0 ? ` (${overallDelta > 0 ? "+" : ""}${overallDelta})` : ""}`}
         />
         <SummaryStat label="Spiele" value={String(stats.matches)} />
-        <SummaryStat label="Tore" value={String(stats.goals)} />
-        <SummaryStat label="Vorlagen" value={String(stats.assists)} />
+        {isGoalkeeper ? (
+          <>
+            <SummaryStat label="Weiße Westen" value={String(stats.cleanSheets)} />
+            <SummaryStat label="Gehaltene Bälle" value={`${stats.savePercentage}%`} />
+            {stats.penaltiesSaved > 0 && (
+              <SummaryStat label="Elfmeter gehalten" value={String(stats.penaltiesSaved)} />
+            )}
+          </>
+        ) : (
+          <>
+            <SummaryStat label="Tore" value={String(stats.goals)} />
+            <SummaryStat label="Vorlagen" value={String(stats.assists)} />
+          </>
+        )}
         <SummaryStat label="Ø Bewertung" value={String(stats.avgRating)} />
         <SummaryStat label="Tabelle" value={`${stats.leaguePosition}.`} />
         <SummaryStat label="Einkommen" value={formatMoney(stats.income)} />

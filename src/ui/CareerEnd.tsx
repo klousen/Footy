@@ -27,6 +27,15 @@ export function CareerEnd({
   const clubTenures = buildClubTenures(player);
   const totalMinutesPlayed = player.seasonHistory.reduce((s, h) => s + h.minutesPlayed, 0);
   const totalPossibleMinutes = player.seasonHistory.reduce((s, h) => s + h.possibleMinutes, 0);
+  const isGoalkeeper = player.position === "TW";
+  // Karriere-Paradenquote als Spiele-gewichteter Durchschnitt über alle Saisons
+  // mit Einsätzen (siehe `SeasonStats.savePercentage`) - kein eigenes Career-
+  // Totals-Feld nötig, da sich ein Prozentwert nicht sinnvoll aufsummieren lässt.
+  const gkSeasons = player.seasonHistory.filter((h) => h.matches > 0);
+  const careerSavePercentage =
+    gkSeasons.length > 0
+      ? Math.round(gkSeasons.reduce((s, h) => s + h.savePercentage * h.matches, 0) / gkSeasons.reduce((s, h) => s + h.matches, 0))
+      : 0;
 
   return (
     <div className="screen career-end-screen">
@@ -46,10 +55,27 @@ export function CareerEnd({
         <div className="contract-grid">
           <span>Spiele</span>
           <span>{t.matches}</span>
-          <span>Tore</span>
-          <span>{t.goals}</span>
-          <span>Vorlagen</span>
-          <span>{t.assists}</span>
+          {isGoalkeeper ? (
+            <>
+              <span>Weiße Westen</span>
+              <span>{t.cleanSheets}</span>
+              <span>Gehaltene Bälle</span>
+              <span>{careerSavePercentage}%</span>
+              {t.penaltiesSaved > 0 && (
+                <>
+                  <span>Elfmeter gehalten</span>
+                  <span>{t.penaltiesSaved}</span>
+                </>
+              )}
+            </>
+          ) : (
+            <>
+              <span>Tore</span>
+              <span>{t.goals}</span>
+              <span>Vorlagen</span>
+              <span>{t.assists}</span>
+            </>
+          )}
           <span>Titel</span>
           <span>{formatTrophyList(t.trophies)}</span>
           <span>Länderspiele</span>

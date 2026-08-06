@@ -24,8 +24,13 @@ export interface ShareCardData {
   legacyTier: string;
   legacyScore: number;
   matches: number;
+  isGoalkeeper: boolean;
   goals: number;
   assists: number;
+  /** NUR relevant für `isGoalkeeper`, sonst 0. */
+  cleanSheets: number;
+  /** NUR relevant für `isGoalkeeper`, sonst 0 - Spiele-gewichteter Karriere-Durchschnitt. */
+  savePercentage: number;
   trophies: number;
   caps: number;
   achievementLabels: string[];
@@ -47,6 +52,15 @@ export function buildShareCardData(
   const overall = Math.max(overallRating(player), ...player.seasonHistory.map((s) => s.overallRating));
   const tier = overallTier(overall);
   const topAchievements = (achievements ?? []).filter((a) => a.positive).slice(0, 4);
+  const isGoalkeeper = player.position === "TW";
+  // Karriere-Paradenquote als Spiele-gewichteter Durchschnitt (siehe dieselbe
+  // Berechnung in CareerEnd.tsx) - kein eigenes Career-Totals-Feld, da sich ein
+  // Prozentwert nicht sinnvoll über Saisons aufsummieren lässt.
+  const gkSeasons = player.seasonHistory.filter((s) => s.matches > 0);
+  const savePercentage =
+    gkSeasons.length > 0
+      ? Math.round(gkSeasons.reduce((s, h) => s + h.savePercentage * h.matches, 0) / gkSeasons.reduce((s, h) => s + h.matches, 0))
+      : 0;
   return {
     name: player.name,
     positionLabel: POSITION_LABEL[player.position],
@@ -60,8 +74,11 @@ export function buildShareCardData(
     legacyTier: legacyTier ?? "",
     legacyScore: legacyScore ?? 0,
     matches: player.careerTotals.matches,
+    isGoalkeeper,
     goals: player.careerTotals.goals,
     assists: player.careerTotals.assists,
+    cleanSheets: player.careerTotals.cleanSheets,
+    savePercentage,
     trophies: player.careerTotals.trophies.length,
     caps: player.nationalTeamCaps,
     achievementLabels: topAchievements.map((a) => a.label),
@@ -213,14 +230,23 @@ export function drawShareCard(canvas: HTMLCanvasElement, data: ShareCardData): v
 
   // Stat-Grid
   cursorY = bannerY + bannerH + 60;
-  const stats: [string, string][] = [
-    [String(data.matches), "Spiele"],
-    [String(data.goals), "Tore"],
-    [String(data.assists), "Vorlagen"],
-    [String(data.trophies), "Titel"],
-    [String(data.caps), "Länderspiele"],
-    [String(data.legacyScore), "Legacy-Score"],
-  ];
+  const stats: [string, string][] = data.isGoalkeeper
+    ? [
+        [String(data.matches), "Spiele"],
+        [String(data.cleanSheets), "Weiße Westen"],
+        [`${data.savePercentage}%`, "Gehaltene Bälle"],
+        [String(data.trophies), "Titel"],
+        [String(data.caps), "Länderspiele"],
+        [String(data.legacyScore), "Legacy-Score"],
+      ]
+    : [
+        [String(data.matches), "Spiele"],
+        [String(data.goals), "Tore"],
+        [String(data.assists), "Vorlagen"],
+        [String(data.trophies), "Titel"],
+        [String(data.caps), "Länderspiele"],
+        [String(data.legacyScore), "Legacy-Score"],
+      ];
   const cols = 3;
   const rows = 2;
   const gridW = W - 160;
@@ -323,5 +349,8 @@ export function drawShareCard(canvas: HTMLCanvasElement, data: ShareCardData): v
 /** Kurzer Beschreibungstext zum Mitkopieren beim Teilen (Caption für Social Media). */
 export function buildShareCaption(data: ShareCardData): string {
   const achievementsPart = data.achievementLabels.length > 0 ? ` 🏅 ${data.achievementLabels.join(", ")}.` : "";
-  return `⚽ Meine Fußball-Karriere als ${data.name}: ${data.legacyTier} mit ${data.overall} Gesamtstärke (Karriere-Bestwert)! ${data.matches} Spiele, ${data.goals} Tore, ${data.assists} Vorlagen, ${data.trophies} Titel.${achievementsPart} Gespielt mit Footy Karriere.`;
+  const productionPart = data.isGoalkeeper
+    ? `${data.cleanSheets} weiße Westen, ${data.savePercentage}% gehaltene Bälle`
+    : `${data.goals} Tore, ${data.assists} Vorlagen`;
+  return `⚽ Meine Fußball-Karriere als ${data.name}: ${data.legacyTier} mit ${data.overall} Gesamtstärke (Karriere-Bestwert)! ${data.matches} Spiele, ${productionPart}, ${data.trophies} Titel.${achievementsPart} Gespielt mit Footy Karriere.`;
 }

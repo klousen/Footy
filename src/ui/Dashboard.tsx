@@ -1,7 +1,7 @@
 import { useState } from "react";
 import type { LeagueState, Player } from "../engine/types";
 import { POSITION_LABEL } from "../engine/types";
-import { overallRating, seasonLabelForNumber } from "../engine/careerEngine";
+import { overallRating, seasonLabelForNumber, squadRoleLabel } from "../engine/careerEngine";
 import { leagueNameForTier } from "../engine/leagueEngine";
 import { AttributeBars } from "./AttributeBars";
 import { TraitBars } from "./TraitBars";
@@ -99,7 +99,7 @@ export function Dashboard({
           <span>Liga</span>
           <span>{leagueName}</span>
           <span>Rolle</span>
-          <span>{player.contract.squadRole}</span>
+          <span>{squadRoleLabel(player.contract.squadRole, player.position)}</span>
           <span>Laufzeit</span>
           <span>{player.contract.yearsLeft} Jahr(e)</span>
           <span>Gehalt</span>

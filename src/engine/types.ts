@@ -97,6 +97,15 @@ export interface Contract {
 }
 
 
+/**
+ * Torhüter (position === "TW") durchlaufen bewusst NIE "Rotation" oder
+ * "Ergänzungsspieler" - anders als bei Feldspielern gibt es zwischen Vereinen
+ * praktisch keine geteilte Spielzeit auf der Position, ein Torwart ist entweder
+ * die gesetzte Nummer 1 ("Stammspieler") oder sitzt (fast) die ganze Saison als
+ * Nummer 2/3 auf der Bank ("Ersatzbank") - siehe `squadRoleForOverall`/
+ * `currentSquadRole` in careerEngine.ts (dort auf diese zwei Stufen begrenzt für
+ * TW) und `goalkeeperRoleLabel` für die "Nummer 1"/"Nummer 2"-Anzeige.
+ */
 export type SquadRole =
   | "Stammspieler"
   | "Rotation"
@@ -179,6 +188,16 @@ export interface SeasonStats {
   possibleMinutes: number;
   goals: number;
   assists: number;
+  /** NUR für Torhüter (position === "TW") relevant, sonst 0: Anzahl zu-null-gespielter
+   * Spiele diese Saison (siehe `simulateSeason`) - das torwartspezifische Gegenstück
+   * zu Toren/Vorlagen bei Feldspielern. */
+  cleanSheets: number;
+  /** NUR für Torhüter relevant, sonst 0: Paradenquote dieser Saison in Prozent (0-100). */
+  savePercentage: number;
+  /** NUR für Torhüter relevant, sonst 0: im Ligaspiel gehaltene Elfmeter diese Saison
+   * (separat vom Elfmeterschießen-Event "torwart_elfmeterheld") - seltener Bonusmoment,
+   * der die Bewertung/Bekanntheit zusätzlich anhebt. */
+  penaltiesSaved: number;
   /** Länderspiel-Einsätze in dieser Saison (Differenz zu `Player.capsAtSeasonStart`). */
   capsThisSeason: number;
   avgRating: number; // 1-10
@@ -395,6 +414,10 @@ export interface Player {
     yellowCards: number;
     redCards: number;
     caps: number; // Nationalmannschaftseinsätze
+    /** NUR für Torhüter relevant, sonst 0: siehe `SeasonStats.cleanSheets`. */
+    cleanSheets: number;
+    /** NUR für Torhüter relevant, sonst 0: siehe `SeasonStats.penaltiesSaved`. */
+    penaltiesSaved: number;
   };
   nationalTeamCaps: number;
   /** Tore für die Nationalmannschaft - separat von den Vereinstoren getrackt. */
