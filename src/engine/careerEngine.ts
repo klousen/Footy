@@ -1433,6 +1433,28 @@ export function applyClubOfferChoice(
       : `${player.name} wechselt von ${oldName} zu ${chosen.city} (${leagueLabel}).`;
   player.log.push({ season: 0, age: player.age, text, kind });
 
+  // Vereinsgebundene Ereignis-Reihen enden mit dem Wechsel: der Konkurrent aus
+  // dem "Rivalität im Kabinenflur"-Duell, der Trainer aus "Zoff mit dem
+  // Trainer" und der Status als "Vereinsikone" bleiben allesamt beim alten
+  // Verein zurück - sie reisen nicht mit. Ohne diese Bereinigung würde die
+  // nächste Storyline-Stufe inhaltlich keinen Sinn mehr ergeben (Rivale/
+  // Trainer beim neuen Verein, Vereinstreue-Geschichte bei einem Verein, den
+  // man gerade verlassen hat). Wird NICHT als abgeschlossen markiert, damit
+  // z.B. eine neue Rivalität am neuen Verein später wieder entstehen kann.
+  const CLUB_BOUND_STORYLINES = new Set(["rivalitaet", "trainerzoff", "ikone"]);
+  const endedThreads = player.activeStorylines.filter((t) => CLUB_BOUND_STORYLINES.has(t.storylineId));
+  if (endedThreads.length > 0) {
+    player.activeStorylines = player.activeStorylines.filter((t) => !CLUB_BOUND_STORYLINES.has(t.storylineId));
+    for (const thread of endedThreads) {
+      player.log.push({
+        season: 0,
+        age: player.age,
+        text: `Mit dem Wechsel weg von ${oldName} endet auch "${thread.label}" - zurückgelassen beim alten Verein.`,
+        kind: "info",
+      });
+    }
+  }
+
   const deltaLines = [
     `Neuer Verein: ${chosen.city}`,
     `Land: ${targetLeague.flag} ${targetLeague.countryName}`,
