@@ -796,6 +796,29 @@ function declineRate(age: number): number {
   return 0.1;
 }
 
+/** Kaderrolle der GERADE ABGELAUFENEN Saison (siehe `ageUpPlayer` - läuft vor dem
+ * saisonalen Rollen-Update in `resolveClubSituation`, spiegelt also exakt die Rolle
+ * wider, mit der tatsächlich gespielt wurde) wirkt sich direkt auf die
+ * Weiterentwicklung aus: wer wirklich regelmäßig spielt, entwickelt sich in der
+ * Wachstumsphase schneller und hält sich in der Abbauphase länger auf hohem
+ * Niveau - wer nur auf der Bank sitzt, bekommt spürbar weniger aus seinem
+ * Potenzial heraus. Ausbildungsspieler folgen ihrem eigenen Jugendsystem und
+ * bleiben unverändert (neutral). */
+function squadRoleGrowthMultiplier(role: SquadRole): number {
+  if (role === "Stammspieler") return 1.3;
+  if (role === "Rotation") return 1.05;
+  if (role === "Ergänzungsspieler") return 0.7;
+  if (role === "Ersatzbank") return 0.3;
+  return 1;
+}
+function squadRoleDeclineMultiplier(role: SquadRole): number {
+  if (role === "Stammspieler") return 0.75;
+  if (role === "Rotation") return 1;
+  if (role === "Ergänzungsspieler") return 1.25;
+  if (role === "Ersatzbank") return 1.6;
+  return 1;
+}
+
 export function ageUpPlayer(player: Player): void {
   const gRate = growthRate(player.age);
   const dRate = declineRate(player.age);
@@ -807,18 +830,33 @@ export function ageUpPlayer(player: Player): void {
   // bringt ein besseres Trainingsumfeld mit - das beschleunigt das Wachstum für
   // einige Saisons spürbar.
   const trainingEnvironmentMultiplier = player.trainingBoostSeasons > 0 ? 1.35 : 1;
+  // Die Kaderrolle der GERADE ABGELAUFENEN Saison (siehe oben - läuft hier vor dem
+  // Rollen-Update in `resolveClubSituation`) entscheidet mit, wie viel vom
+  // Potenzial tatsächlich ausgeschöpft wird: echte Wettkampfpraxis als Stammspieler
+  // beschleunigt das Wachstum bzw. bremst den Abbau spürbar, ein Dasein auf der
+  // Bank bremst nicht nur, sondern kostet echte Substanz - unabhängig vom Alter.
+  const roleGrowthMultiplier = squadRoleGrowthMultiplier(player.contract.squadRole);
+  const roleDeclineMultiplier = squadRoleDeclineMultiplier(player.contract.squadRole);
+  const isBenchWarmer = player.contract.squadRole === "Ersatzbank";
   for (const key of ATTRIBUTE_KEYS) {
     const current = player.attributes[key];
     const potential = player.potential[key];
     let rawDelta: number;
     if (gRate > 0) {
       const room = potential - current;
-      rawDelta = gRate * room * workEthicMultiplier * trainingEnvironmentMultiplier * (0.7 + rng() * 0.6);
+      rawDelta = gRate * room * workEthicMultiplier * trainingEnvironmentMultiplier * roleGrowthMultiplier * (0.7 + rng() * 0.6);
       rawDelta = Math.max(0, rawDelta);
     } else if (dRate > 0) {
-      rawDelta = -dRate * current * (0.7 + rng() * 0.6);
+      rawDelta = -dRate * current * roleDeclineMultiplier * (0.7 + rng() * 0.6);
     } else {
       rawDelta = 0;
+    }
+    // Reine Bankspieler verlieren zusätzlich leicht an Substanz durch fehlende
+    // Wettkampfpraxis - unabhängig von der altersbedingten Wachstums-/Abbaurate,
+    // damit ein dauerhafter Bankplatz auch bei jungen Spielern zu einem echten
+    // Rückschritt werden kann, nicht nur zu langsamerem Fortschritt.
+    if (isBenchWarmer) {
+      rawDelta -= current * 0.06 * (0.6 + rng() * 0.6);
     }
     // Fraktionaler Rest wird in die nächste Saison mitgenommen, statt bei der
     // Rundung auf ganze Punkte verloren zu gehen (siehe Kommentar oben).

@@ -4233,12 +4233,24 @@ export const EVENT_TEMPLATES: EventTemplate[] = [
           id: "fokus_nt",
           label: "Fokus voll auf die Nationalmannschaft legen",
           detail: "Prestige, aber Belastungssteigerung - das Verletzungsrisiko im Verein steigt.",
-          effects: {
-            reputation: 6,
-            fitness: -6,
-            attributes: { mentalitaet: 1 },
-            logText: "legt den Fokus voll auf die Nationalmannschaft - die zusätzliche Belastung ist spürbar.",
-            logKind: "info",
+          effects: {},
+          followUpChance: {
+            chance: 0.65,
+            success: {
+              reputation: 6,
+              fitness: -6,
+              attributes: { mentalitaet: 1 },
+              logText: "legt den Fokus voll auf die Nationalmannschaft - die zusätzliche Belastung zahlt sich prestigemäßig aus.",
+              logKind: "positive",
+            },
+            failure: {
+              reputation: 3,
+              fitness: -6,
+              injuryWeeksOut: 3,
+              injuryLabel: "Überlastung durch Doppelbelastung",
+              logText: "legt den Fokus voll auf die Nationalmannschaft - die Doppelbelastung fordert ihren Tribut mit einer Verletzung.",
+              logKind: "negative",
+            },
           },
         },
         {
@@ -4581,13 +4593,23 @@ export const EVENT_TEMPLATES: EventTemplate[] = [
         {
           id: "einblicke",
           label: "Teilweise Einblicke gewähren, um das Narrativ zu kontrollieren",
-          detail: "Zeitaufwand - positiveres öffentliches Bild, aber die Grenze privat/öffentlich verschwimmt.",
-          effects: {
-            reputation: 3,
-            morale: -1,
-            traitDeltas: { medienimage: 4 },
-            logText: "gewährt bewusst teilweise Einblicke ins Privatleben, um die Kontrolle über das öffentliche Bild zu behalten.",
-            logKind: "positive",
+          detail: "Zeitaufwand - positiveres öffentliches Bild möglich, aber die Grenze privat/öffentlich verschwimmt.",
+          effects: {},
+          followUpChance: {
+            chance: 0.6,
+            success: {
+              reputation: 3,
+              morale: -1,
+              traitDeltas: { medienimage: 4 },
+              logText: "gewährt bewusst teilweise Einblicke ins Privatleben - das öffentliche Bild wird spürbar positiver.",
+              logKind: "positive",
+            },
+            failure: {
+              morale: -3,
+              traitDeltas: { medienimage: -2 },
+              logText: "gewährt teilweise Einblicke ins Privatleben - die Grenze zwischen privat und öffentlich verschwimmt und sorgt für neue Angriffsfläche.",
+              logKind: "negative",
+            },
           },
         },
         {
@@ -4783,13 +4805,24 @@ export const EVENT_TEMPLATES: EventTemplate[] = [
         {
           id: "verantwortung",
           label: "Aktiv Verantwortung übernehmen (finanziell, mental)",
-          detail: "Zeitaufwand - emotionale Erfüllung, aber zusätzliche Belastung im Alltag.",
-          effects: {
-            wealth: -15000,
-            morale: 6,
-            traitDeltas: { fuehrung: 2 },
-            logText: "übernimmt aktiv Verantwortung für jüngere Verwandte aus der Heimat - emotional erfüllend, aber zeitintensiv.",
-            logKind: "positive",
+          detail: "Zeitaufwand - emotionale Erfüllung möglich, aber die Belastung kann auch größer werden als gedacht.",
+          effects: {},
+          followUpChance: {
+            chance: 0.65,
+            success: {
+              wealth: -15000,
+              morale: 6,
+              traitDeltas: { fuehrung: 2 },
+              logText: "übernimmt aktiv Verantwortung für jüngere Verwandte aus der Heimat - emotional erfüllend, die Balance gelingt.",
+              logKind: "positive",
+            },
+            failure: {
+              wealth: -15000,
+              morale: -3,
+              fitness: -2,
+              logText: "übernimmt aktiv Verantwortung für jüngere Verwandte aus der Heimat - die Belastung im Alltag wird größer als gedacht.",
+              logKind: "negative",
+            },
           },
         },
         {
