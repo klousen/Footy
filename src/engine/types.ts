@@ -215,6 +215,10 @@ export interface EffectDelta {
     delaySeasons?: number;
     data?: Record<string, string>;
   };
+  /** Markiert ein entscheidendes Pokal-Aus in dieser Saison (siehe `pokal_kraftakt`) -
+   * verhindert, dass `simulateSeason` trotzdem einen Pokaltitel für dieselbe Saison
+   * auswürfelt (siehe `Player.cupExitThisSeason`). */
+  cupExit?: boolean;
   logText?: string;
   logKind?: LogEntry["kind"];
 }
@@ -349,6 +353,10 @@ export interface Player {
   clubChangesCount: number;
   /** Aufsummierte Verletzungswochen über die gesamte Karriere. */
   totalInjuryWeeks: number;
+  /** Wird per `EffectDelta.cupExit` gesetzt (siehe `pokal_kraftakt`) und von
+   * `simulateSeason` konsumiert/zurückgesetzt - verhindert einen ausgewürfelten
+   * Pokaltitel in derselben Saison, in der man entscheidend im Pokal ausgeschieden ist. */
+  cupExitThisSeason: boolean;
   relationshipStatus: RelationshipStatus;
   partnerName: string | null;
   children: number;

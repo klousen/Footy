@@ -24,6 +24,17 @@ export function formatMoney(v: number): string {
   return `${Math.round(v)} €`;
 }
 
+/** Fasst eine Titel-Liste (mit Wiederholungen, z.B. dreimal "Landespokal") zu
+ * "Landespokal (3x), Meisterschale" zusammen - erste Nennung bestimmt die
+ * Reihenfolge, damit die Liste bei jedem Aufruf stabil bleibt statt bei jedem
+ * Rendern neu zu sortieren. Einzelne Titel (nur 1x) bekommen kein "(1x)"-Suffix. */
+export function formatTrophyList(trophies: string[]): string {
+  if (trophies.length === 0) return "keine";
+  const counts = new Map<string, number>();
+  for (const t of trophies) counts.set(t, (counts.get(t) ?? 0) + 1);
+  return [...counts.entries()].map(([name, count]) => (count > 1 ? `${name} (${count}x)` : name)).join(", ");
+}
+
 export const CATEGORY_LABEL: Record<string, string> = {
   training: "Training",
   lifestyle: "Alltag",

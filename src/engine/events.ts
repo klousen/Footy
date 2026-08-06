@@ -2043,7 +2043,10 @@ export const EVENT_TEMPLATES: EventTemplate[] = [
           followUpChance: {
             chance: 0.5,
             success: { reputation: 5, morale: 5, clubRelation: 3, logText: "hat mit einem Kraftakt das Weiterkommen im Pokal klargemacht.", logKind: "positive" },
-            failure: { morale: -4, clubRelation: -2, logText: "hat das peinliche Pokal-Aus gegen einen Außenseiter miterlebt.", logKind: "negative" },
+            // cupExit verhindert, dass die Saison trotz dieses Aus' später doch noch
+            // einen Pokaltitel auswürfelt (siehe simulateSeason) - ein gewonnener Pokal
+            // NACH einem miterlebten Aus wäre ein handfester Widerspruch im Rückblick.
+            failure: { morale: -4, clubRelation: -2, cupExit: true, logText: "hat das peinliche Pokal-Aus gegen einen Außenseiter miterlebt.", logKind: "negative" },
           },
         },
         {

@@ -1,6 +1,6 @@
 import type { Achievement, Player, ScoreFactor } from "../engine/types";
 import { buildClubTenures } from "../engine/careerEngine";
-import { formatMoney, RELATIONSHIP_LABEL } from "./labels";
+import { formatMoney, formatTrophyList, RELATIONSHIP_LABEL } from "./labels";
 import { ShareCard } from "./ShareCard";
 import { OverallScoreChart } from "./OverallScoreChart";
 
@@ -51,7 +51,7 @@ export function CareerEnd({
           <span>Vorlagen</span>
           <span>{t.assists}</span>
           <span>Titel</span>
-          <span>{t.trophies.length > 0 ? t.trophies.join(", ") : "keine"}</span>
+          <span>{formatTrophyList(t.trophies)}</span>
           <span>Länderspiele</span>
           <span>
             {player.nationalTeamCaps}

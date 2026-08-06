@@ -166,6 +166,7 @@ export function createPlayer(
       nationalTeamCaptain: false,
       clubChangesCount: 0,
       totalInjuryWeeks: 0,
+      cupExitThisSeason: false,
       relationshipStatus: "single",
       partnerName: null,
       children: 0,
@@ -454,6 +455,7 @@ function applyEffects(player: Player, effects: EventChoice["effects"], season: n
       player.completedStorylines.push(storylineId);
     }
   }
+  if (effects.cupExit) player.cupExitThisSeason = true;
   if (effects.injuryWeeksOut) {
     if (effects.injuryWeeksOut > 0) {
       player.injury = { label: effects.injuryLabel ?? "Verletzung", weeksOut: (player.injury?.weeksOut ?? 0) + effects.injuryWeeksOut };
@@ -642,21 +644,60 @@ export function simulateSeason(player: Player, seasonNumber: number, league: Lea
   const yellowCards = Math.round(matches * 0.12 * (0.5 + rng()) * cardFactor);
   const redCards = rng() < 0.05 * (matches / 30) * cardFactor ? 1 : 0;
 
-  // Tabellenplatz: Vereinsstärke + etwas Zufall, moduliert leicht durch eigene Form
+  // Tabellenplatz: Vereinsstärke + etwas Zufall, moduliert leicht durch eigene Form.
+  // Nenner bewusst auf 93 (statt der rohen Skala bis 100) gesetzt: bei einem Nenner
+  // von 100 bräuchte es praktisch Vereinsstärke 90+ MIT Idealglück, um überhaupt auf
+  // Tabellenplatz 1-2 zu landen - damit wäre der Titelkampf faktisch nur den 2-3
+  // absolut stärksten Vereinen der gesamten Liga vorbehalten. Mit 93 reicht ein
+  // wirklich starker (nicht zwingend DER stärkste) Verein plus etwas Losglück, um
+  // an der Tabellenspitze mitzuspielen - realistischer für die Titelchancen-Formel
+  // unten (`coeffDominance`/`leaguePosition`).
   const strengthNoise = (rng() - 0.5) * 20;
   const effectiveStrength = clubStrength + strengthNoise + (avgRating - 6.5) * 2;
-  const leaguePosition = clamp(Math.round(18 - (effectiveStrength / 100) * 17), 1, 18);
+  const leaguePosition = clamp(Math.round(18 - (effectiveStrength / 93) * 17), 1, 18);
+
+  // ELO-artiger Vereinskoeffizient (Vereinsstärke + Liga-Ansehen + Flair, siehe
+  // `clubCoefficient`) statt nur der rohen Stärkezahl - ein "80" in einer Topliga
+  // ist ein deutlich ernsterer Titelkandidat als ein "80" in einer schwachen Liga.
+  // Auf ~0 (schwacher Klub/schwache Liga) bis ~1 (Top-Klub/Topliga) normalisiert.
+  const trophyClubRank = clubLeagueRank(player.club.clubId, player.club.tier, league);
+  const trophyCoefficient = clubCoefficient(player.club, league.countryId, trophyClubRank);
+  const coeffDominance = clamp((trophyCoefficient - 25) / 140, 0, 1);
+  // Eigener Anteil an einem sportlichen Erfolg - deutlich über der Vereinsstärke zu
+  // spielen zieht Titel wahrscheinlicher nach sich, deutlich darunter drückt sie.
+  const trophyContribution = clamp((overall - clubStrength) / 40, -0.15, 0.35);
 
   const trophies: string[] = [];
-  if (leaguePosition === 1 && rng() < 0.8) {
-    const pool = TROPHY_POOL_BY_TIER[player.club.tier];
-    trophies.push(pool[0]);
+  const trophyPool = TROPHY_POOL_BY_TIER[player.club.tier];
+  // Meisterschaft: die Tabellenführung ist die harte sportliche Voraussetzung (ohne
+  // Platz 1 nie ein Titel), aber OB das dann tatsächlich zum Titel wird, hängt vom
+  // Vereinskoeffizienten und dem eigenen Anteil ab - ein Übermacht-Klub wandelt eine
+  // Tabellenführung viel öfter in echte Meisterschaft um als ein knapper Erstplatzierter.
+  if (leaguePosition === 1) {
+    const titleChance = clamp(0.45 + coeffDominance * 0.45 + trophyContribution, 0.25, 0.95);
+    if (rng() < titleChance) trophies.push(trophyPool[0]);
+  } else if (leaguePosition === 2) {
+    // Knappes Titelrennen: auch als Vizemeister besteht übers Jahr gesehen eine reale,
+    // wenn auch deutlich kleinere Titelchance (Nervenschlacht am letzten Spieltag) -
+    // ohne diese Stufe wäre die Meisterschaft praktisch nur für die 2-3 absolut
+    // stärksten Vereine der Liga überhaupt erreichbar, für alle anderen (auch klar
+    // überdurchschnittliche Top-Vereine knapp darunter) komplett ausgeschlossen.
+    const closeTitleChance = clamp(0.06 + coeffDominance * 0.14 + Math.max(0, trophyContribution) * 0.3, 0.03, 0.25);
+    if (rng() < closeTitleChance) trophies.push(trophyPool[0]);
   }
-  if (rng() < 0.08 + clubStrength / 800) {
-    const pool = TROPHY_POOL_BY_TIER[player.club.tier];
-    const extra = pool[randInt(1, pool.length - 1)];
-    if (extra && !trophies.includes(extra)) trophies.push(extra);
+  // Pokal: ein K.o.-Wettbewerb bleibt grundsätzlich auch für schwächere Vereine
+  // gewinnbar (Überraschungscoup), aber deutlich seltener als eine reine
+  // Münzwurf-Chance pro Saison - UND NIE, wenn dieselbe Saison bereits ein
+  // entscheidendes Pokal-Aus erlebt hat (siehe `cupExitThisSeason`/`pokal_kraftakt`) -
+  // sonst würde der Rückblick sich selbst widersprechen.
+  if (!player.cupExitThisSeason) {
+    const cupChance = clamp(0.05 + coeffDominance * 0.12 + Math.max(0, trophyContribution) * 0.5, 0.03, 0.35);
+    if (rng() < cupChance) {
+      const extra = trophyPool[randInt(1, trophyPool.length - 1)];
+      if (extra && !trophies.includes(extra)) trophies.push(extra);
+    }
   }
+  player.cupExitThisSeason = false;
 
   // Individuelle Auszeichnungen: eine echte Chance, sich unabhängig vom Team
   // sportlich zu beweisen und nach oben zu arbeiten.
@@ -1683,7 +1724,7 @@ function buildClubOfferEvent(
       : reason === "lockruf"
       ? lockrufBeraterFraming
         ? `${lastSeasonRef}hat dein Berater im Hintergrund die Fühler ausgestreckt - ${lockrufClub} (Vereinsstärke ${candidates[0]?.club.strength}) legt jetzt ein einzelnes, konkretes Angebot auf den Tisch. Kein Vorgeplänkel, direkt mit Konditionen: annehmen oder bei ${player.club.name} (Vereinsstärke ${currentStrength}) bleiben.`
-        : `${lastSeasonRef}meldet sich völlig überraschend ${lockrufClub} (Vereinsstärke ${candidates[0]?.club.strength}) mit einem einzelnen, konkreten Angebot. Kein Vorgeplänkel, direkt mit Konditionen: annehmen oder bei ${player.club.name} (Vereinsstärke ${currentStrength}) bleiben.`
+        : `${lastSeasonRef}meldet sich der Verein völlig überraschend (Vereinsstärke ${candidates[0]?.club.strength}) mit einem einzelnen, konkreten Angebot. Kein Vorgeplänkel, direkt mit Konditionen: annehmen oder bei ${player.club.name} (Vereinsstärke ${currentStrength}) bleiben.`
       : reason === "opportunity"
       ? `${lastSeasonRef}sind Scouts auf ${player.name} bei ${player.club.name} aufmerksam geworden. Im Sommertransferfenster erkundigen sich ${count} Vereine nach dir.${foreignNote}`
       : `${pressureReason}. Im Winterfenster wäre der Verein offen für einen Wechsel - ${count} Vereine haben bereits angefragt.${foreignNote}`;

@@ -24,6 +24,7 @@ export function loadGame(): GameState | null {
       state.player.growthCarry ??= {};
       state.player.nationalTeamGoals ??= 0;
       state.player.startingRoleGuaranteeSeasons ??= 0;
+      state.player.cupExitThisSeason ??= false;
       // Ältere Spielstände kennen das Heimatland noch nicht - als bestmögliche
       // Annäherung das aktuelle Land nehmen (nur relevant für künftige Rückkehr-Erkennung).
       state.player.homeCountryId ??= state.player.country;

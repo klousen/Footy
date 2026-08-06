@@ -5,6 +5,7 @@ export {
   ATTRIBUTE_LABEL,
   ATTRIBUTE_ORDER,
   formatMoney,
+  formatTrophyList,
   CATEGORY_LABEL,
   RELATIONSHIP_LABEL,
   TRAIT_LABEL,
