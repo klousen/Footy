@@ -10,7 +10,6 @@ import type {
   GameEvent,
   GameState,
   LeagueState,
-  LeagueTier,
   LogEntry,
   Player,
   Position,
@@ -51,6 +50,14 @@ function randInt(min: number, max: number): number {
   return Math.floor(rng() * (max - min + 1)) + min;
 }
 
+/** Kleiner, ans Potenzial gekoppelter Bonus (0-5 Punkte) für die Start-Attribute
+ * eines 14-Jährigen (siehe `createPlayer`) - ein späteres Wunderkind zeigt im
+ * Schnitt schon etwas bessere Ansätze als ein Standard-Talent, aber bewusst nur
+ * einen Hauch, damit die Klasse nicht schon am Anfang feststeht. */
+function talentHint(potential: number): number {
+  return clamp(Math.round((potential - 60) / 8), 0, 5);
+}
+
 // ---------------------------------------------------------------------------
 // Spieler erstellen
 // ---------------------------------------------------------------------------
@@ -61,16 +68,10 @@ export function createPlayer(
   focusAttr: AttributeKey,
   countryId: CountryId
 ): { player: Player; league: LeagueState; offers: ClubState[] } {
-  const base: Attributes = {
-    technik: randInt(18, 30),
-    tempo: randInt(18, 30),
-    physis: randInt(18, 30),
-    mentalitaet: randInt(18, 30),
-    intelligenz: randInt(18, 30),
-    charisma: randInt(15, 28),
-  };
-  base[focusAttr] += 8;
-
+  // Potenzial zuerst würfeln (inkl. seltenem Wunderkind-Bonus), damit die
+  // Start-Attribute unten leicht daran gekoppelt werden können - ein späteres
+  // Jahrhunderttalent zeigt mit 14 realistisch schon EIN PAAR frühe Anzeichen,
+  // ohne dass es die ganze Karriere vorwegnimmt (siehe `talentHint` unten).
   const potential: Attributes = {
     technik: randInt(60, 97),
     tempo: randInt(60, 97),
@@ -89,6 +90,21 @@ export function createPlayer(
       potential[key] = clamp(potential[key] + randInt(6, 12), 0, 99);
     }
   }
+
+  // Start-Attribute: jeder Jungspieler würfelt unabhängig für jeden Wert (echte
+  // Varianz von Spieler zu Spieler), plus ein bewusst kleiner, ans Potenzial
+  // gekoppelter Talent-Hinweis (0-6 Punkte) - ein künftiges Wunderkind zeigt
+  // also im Schnitt schon leicht bessere Ansätze als ein Standard-Talent, aber
+  // nie so deutlich, dass die spätere Klasse mit 14 schon feststeht.
+  const base: Attributes = {
+    technik: randInt(16, 26) + talentHint(potential.technik),
+    tempo: randInt(16, 26) + talentHint(potential.tempo),
+    physis: randInt(16, 26) + talentHint(potential.physis),
+    mentalitaet: randInt(16, 26) + talentHint(potential.mentalitaet),
+    intelligenz: randInt(16, 26) + talentHint(potential.intelligenz),
+    charisma: randInt(13, 24) + talentHint(potential.charisma),
+  };
+  base[focusAttr] += 8;
 
   const league = buildLeagueState(countryId, rng);
 
@@ -840,14 +856,6 @@ function targetStrengthForReputation(reputation: number, overall: number): numbe
   return clamp(15 + reputation * 0.2 + overall * 0.65, 30, 96);
 }
 
-/** Geschätztes Jahresgehalt bei einem Verein - richtet sich nach Bekanntheit UND
- * Zahlkraft/Stärke des Vereins, mit Aufschlag für die erste Liga. Wird sowohl in der
- * Angebots-Vorschau als auch bei der tatsächlichen Zusage verwendet, damit das
- * versprochene Gehalt exakt dem entspricht, was man am Ende bekommt. */
-function estimateWage(reputation: number, clubStrength: number, tier: LeagueTier): number {
-  return Math.round((6000 + reputation * 900 + clubStrength * 1400) * (1 + (tier === 1 ? 0.35 : 0)));
-}
-
 /** Rang eines Landes nach UEFA-Länderkoeffizient (Reihenfolge der `COUNTRIES`-Liste) -
  * 0 = höchstes Liga-Ansehen (England), 9 = niedrigstes (Polen). Dient als Proxy für
  * "Aufstieg/Abstieg im Liga-Ranking" bei internationalen Wechseln. */
@@ -856,12 +864,69 @@ function leaguePrestigeRank(countryId: CountryId): number {
   return idx === -1 ? COUNTRIES.length : idx;
 }
 
+/** Ligaansehen als Multiplikator: die bestplatzierte Liga der Auswahl zahlt spürbar
+ * mehr, die am niedrigsten platzierte spürbar weniger - dieselbe Vereinsstärke ist in
+ * einer Topliga schlicht mehr wert als in einer schwächeren (reale Transfermarkt-Logik). */
+function leaguePrestigeMultiplier(countryId: CountryId): number {
+  const rank = leaguePrestigeRank(countryId);
+  return clamp(1.3 - rank * 0.06, 0.7, 1.3);
+}
+
+/**
+ * ELO-artiger Vereins-Koeffizient: kombiniert die sportliche Stärke des Klubs
+ * (0-99, innerhalb der eigenen Liga-Pyramide) mit dem Ansehen der Liga selbst
+ * zu einem einzigen Wert. Ein "92" in einer Topliga ist damit spürbar mehr wert
+ * als ein "92" in einer schwächeren - dient als einheitliche Basis fürs Gehalt
+ * (und ließe sich künftig für weitere vereinsbezogene Berechnungen wiederverwenden).
+ */
+function clubCoefficient(club: { strength: number }, countryId: CountryId): number {
+  return club.strength * leaguePrestigeMultiplier(countryId);
+}
+
+/** Geschätztes Jahresgehalt bei einem Verein - richtet sich nach der eigenen
+ * Gesamtstärke UND Bekanntheit (beide multiplikativ, nicht nur addiert - ein
+ * Weltklasse-Spieler verdient überproportional mehr, nicht nur ein bisschen)
+ * sowie dem ELO-artigen Vereins-Koeffizienten (siehe `clubCoefficient`), der
+ * exponentiell statt linear einfließt: ein echter Topklub zahlt ein Vielfaches
+ * eines Kellerkinds, nicht nur spürbar mehr. Wird sowohl in der Angebots-
+ * Vorschau als auch bei der tatsächlichen Zusage verwendet, damit das
+ * versprochene Gehalt exakt dem entspricht, was man am Ende bekommt. */
+function estimateWage(overall: number, reputation: number, club: { strength: number }, countryId: CountryId): number {
+  const baseline = 8000 + reputation * 900 + overall * 1200;
+  const coeff = clubCoefficient(club, countryId);
+  // 55 als grober Referenzwert für einen "durchschnittlichen" Erstliga-Verein -
+  // Vereine deutlich darüber/darunter skalieren das Gehalt spürbar über- bzw.
+  // unterproportional (Potenz statt linearer Faktor).
+  const clubMultiplier = clamp(Math.pow(coeff / 55, 1.8), 0.25, 6);
+  return Math.round((baseline * clubMultiplier) / 100) * 100;
+}
+
+/** Wahrscheinlichkeit, dass ein NEUER Verein sein Einsatzminuten-Versprechen
+ * (die in der Angebots-Vorschau gezeigte Kaderrolle) auch tatsächlich einhält -
+ * ausgewürfelt beim Vollzug des Wechsels (siehe `applyClubOfferChoice`). Je
+ * größer der Sprung zwischen eigener Stärke und Vereinsniveau, desto eher
+ * bleibt das Versprechen ein Lippenbekenntnis, um dich zum Wechsel zu bewegen. */
+function rolePromiseChance(overall: number, clubStrength: number): number {
+  const gap = overall - clubStrength;
+  return clamp(0.55 + gap / 40, 0.35, 0.93);
+}
+
 function squadRoleForOverall(overall: number, clubStrength: number): SquadRole {
   const diff = overall - clubStrength;
   if (diff >= 5) return "Stammspieler";
   if (diff >= -5) return "Rotation";
   if (diff >= -15) return "Ergänzungsspieler";
   return "Ersatzbank";
+}
+
+/** Eine Stufe unterhalb der übergebenen Kaderrolle (für ein gebrochenes
+ * Einsatzminuten-Versprechen, siehe `rolePromiseChance`) - "Ersatzbank" ist die
+ * Talsohle. */
+const ROLE_ORDER: SquadRole[] = ["Ersatzbank", "Ergänzungsspieler", "Rotation", "Stammspieler"];
+function roleOneStepDown(role: SquadRole): SquadRole {
+  const idx = ROLE_ORDER.indexOf(role);
+  if (idx <= 0) return role;
+  return ROLE_ORDER[idx - 1];
 }
 
 /**
@@ -1098,6 +1163,7 @@ function internationalOfferChance(reason: ClubOfferReason, player: Player, overa
 
 interface OfferCandidate {
   club: ClubState;
+  countryId: CountryId;
   countryName: string;
   flag: string;
   leagueLabel: string;
@@ -1167,6 +1233,7 @@ function buildClubOfferEvent(
 
   const candidates: OfferCandidate[] = domesticOffers.map((c) => ({
     club: c,
+    countryId: league.countryId,
     countryName: league.countryName,
     flag: league.flag,
     leagueLabel: leagueNameForTier(league, c.tier),
@@ -1180,6 +1247,7 @@ function buildClubOfferEvent(
       const club = pickClubNearStrength(foreignPool, targetStrength, null, rng);
       candidates.push({
         club,
+        countryId,
         countryName: foreignLeague.countryName,
         flag: foreignLeague.flag,
         leagueLabel: leagueNameForTier(foreignLeague, club.tier),
@@ -1193,13 +1261,20 @@ function buildClubOfferEvent(
   const choices: EventChoice[] = candidates.map((cand) => {
     // Dieselbe Formel wie bei der tatsächlichen Zusage (siehe `applyClubOfferChoice`),
     // damit das hier gezeigte Gehalt exakt dem entspricht, was man am Ende bekommt.
-    const wagePreview = estimateWage(player.reputation, cand.club.strength, cand.club.tier);
+    const wagePreview = estimateWage(overall, player.reputation, cand.club, cand.countryId);
+    const promisedRole = squadRoleForOverall(overall, cand.club.strength);
+    // Das Einsatzminuten-Versprechen eines NEUEN Vereins ist nie hundertprozentig
+    // sicher - je größer der Sprung zwischen eigener Stärke und Vereinsniveau,
+    // desto eher bleibt die versprochene Rolle nur ein Lippenbekenntnis (siehe
+    // `applyClubOfferChoice`, wo tatsächlich ausgewürfelt wird, ob der Verein das
+    // Versprechen einhält).
+    const promiseChance = rolePromiseChance(overall, cand.club.strength);
     return {
       id: `club-${cand.club.id}`,
       label: cand.isForeign
         ? `Auslandswechsel zu ${cand.club.city} (${cand.flag} ${cand.countryName})`
         : `Wechsel zu ${cand.club.city}`,
-      detail: `${cand.leagueLabel} · Vereinsstärke ${cand.club.strength} · Rolle voraussichtlich ${squadRoleForOverall(overall, cand.club.strength)} · Gehalt ca. ${formatMoney(wagePreview)}/Jahr${cand.isForeign ? " · Auslandswechsel" : ""}`,
+      detail: `${cand.leagueLabel} · Vereinsstärke ${cand.club.strength} · Einsatzminuten-Versprechen: ${promisedRole} (${Math.round(promiseChance * 100)}% Erfolgschance) · Gehalt ca. ${formatMoney(wagePreview)}/Jahr${cand.isForeign ? " · Auslandswechsel" : ""}`,
       effects: {},
     };
   });
@@ -1209,7 +1284,7 @@ function buildClubOfferEvent(
     // gegenüber einem Fremdwechsel (bessere Startbeziehung, etwas Moral- und
     // Mentalitätsschub durch die vertraute Umgebung), damit "beim Verein
     // bleiben" eine attraktive und keine bloß neutrale Wahl ist.
-    const stayWagePreview = estimateWage(player.reputation, currentStrength, player.club.tier);
+    const stayWagePreview = estimateWage(overall, player.reputation, player.club, player.country);
     choices.push({
       id: "stay-debut",
       label: `Profivertrag bei ${player.club.name} unterschreiben`,
@@ -1367,7 +1442,7 @@ export function applyClubOfferChoice(
     // (75 statt 60) und ein kleiner Mentalitäts-/Moralschub durch die
     // vertraute Umgebung.
     const overall = overallRating(player);
-    const wage = estimateWage(player.reputation, player.club.strength, player.club.tier);
+    const wage = estimateWage(overall, player.reputation, player.club, player.country);
     const newRole = squadRoleForOverall(overall, player.club.strength);
     player.contract = { club: player.club.name, yearsLeft: 3, wagePerYear: wage, squadRole: newRole };
     player.clubRelation = 75;
@@ -1430,13 +1505,27 @@ export function applyClubOfferChoice(
   const overall = overallRating(player);
   const oldName = player.club.name;
   const oldStrength = player.club.strength;
+  const wageCountryId = movingCountryId ?? player.country;
   player.club = { clubId: chosen.id, name: chosen.city, country: targetLeague.countryName, tier: chosen.tier, strength: chosen.strength };
-  const wage = estimateWage(player.reputation, chosen.strength, chosen.tier);
-  const newRole = squadRoleForOverall(overall, chosen.strength);
+  const wage = estimateWage(overall, player.reputation, chosen, wageCountryId);
+  const promisedRole = squadRoleForOverall(overall, chosen.strength);
+  // Das in der Angebots-Vorschau gezeigte Einsatzminuten-Versprechen (siehe
+  // `buildClubOfferEvent`) wird hier tatsächlich ausgewürfelt: je größer der
+  // Sprung zwischen eigener Stärke und Vereinsniveau, desto eher bleibt es ein
+  // Lippenbekenntnis und die tatsächliche Rolle fällt eine Stufe niedriger aus.
+  const promiseChance = rolePromiseChance(overall, chosen.strength);
+  const promiseKept = rng() < promiseChance;
+  const newRole = promiseKept ? promisedRole : roleOneStepDown(promisedRole);
   player.contract = { club: chosen.city, yearsLeft: 3, wagePerYear: wage, squadRole: newRole };
-  player.clubRelation = 60;
+  player.clubRelation = promiseKept ? 60 : 45;
+  if (!promiseKept) player.morale = clamp(player.morale - 8, 0, 100);
   player.wantsTransfer = false;
   player.consecutiveBenchSeasons = 0;
+  // Eine vertragliche Stammplatzgarantie war an den ALTEN Vertrag gebunden - sie
+  // reist nicht mit zum neuen Verein (siehe `startingRoleGuaranteeSeasons`,
+  // garantiert dort ausschließlich "Stammspieler", was nicht zu jedem hier
+  // versprochenen Rollenniveau passen würde).
+  player.startingRoleGuaranteeSeasons = 0;
   if (reason !== "pro-debut") player.clubChangesCount += 1;
 
   // Auslandswechsel: die bisherige Heimatliga wandert (mit ihrem aktuellen Stand)
@@ -1460,6 +1549,18 @@ export function applyClubOfferChoice(
       ? `${player.name} wagt den Auslandswechsel von ${oldName} zu ${chosen.city} (${targetLeague.flag} ${targetLeague.countryName}, ${leagueLabel}).`
       : `${player.name} wechselt von ${oldName} zu ${chosen.city} (${leagueLabel}).`;
   player.log.push({ season: 0, age: player.age, text, kind });
+
+  // Ergebnis des Einsatzminuten-Versprechens als eigener Log-Eintrag - klar
+  // getrennt von der reinen Wechsel-Meldung, damit sichtbar wird, WARUM die
+  // tatsächliche Rolle ggf. von der versprochenen abweicht.
+  player.log.push({
+    season: 0,
+    age: player.age,
+    text: promiseKept
+      ? `${chosen.city} hält das Einsatzminuten-Versprechen ein - ${player.name} startet als ${newRole}.`
+      : `${chosen.city} hält das Einsatzminuten-Versprechen nicht ein - ${player.name} landet zunächst nur als ${newRole} im Kader.`,
+    kind: promiseKept ? "positive" : "negative",
+  });
 
   // Vereinsgebundene Ereignis-Reihen enden mit dem Wechsel: der Konkurrent aus
   // dem "Rivalität im Kabinenflur"-Duell, der Trainer aus "Zoff mit dem
@@ -1489,6 +1590,9 @@ export function applyClubOfferChoice(
     `Liga: ${leagueLabel}`,
     `Gehalt: ${formatMoney(wage)} / Jahr`,
     `Rolle im Kader: ${newRole}`,
+    promiseKept
+      ? `Einsatzminuten-Versprechen eingehalten (${Math.round(promiseChance * 100)}% Chance)`
+      : `Einsatzminuten-Versprechen NICHT eingehalten (${Math.round(promiseChance * 100)}% Chance verpasst) - Vereinsbeziehung startet niedriger`,
   ];
 
   // Ein Wechsel zu einem spürbar stärkeren Verein UND/ODER einer angeseheneren Liga
