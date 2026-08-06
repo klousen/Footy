@@ -1,6 +1,7 @@
 import type { Player, SeasonStats } from "../engine/types";
 import { overallRating } from "../engine/careerEngine";
 import { formatMoney, overallTier } from "./labels";
+import { LeagueTableSnapshot } from "./LeagueTableSnapshot";
 
 export function SeasonSummary({
   stats,
@@ -70,6 +71,13 @@ export function SeasonSummary({
         <p className="muted">
           Karten: {stats.yellowCards}× Gelb{stats.redCards > 0 ? `, ${stats.redCards}× Rot` : ""}
         </p>
+      )}
+
+      {stats.tableSnapshot.length > 0 && (
+        <div className="panel">
+          <h3>Tabelle</h3>
+          <LeagueTableSnapshot rows={stats.tableSnapshot} />
+        </div>
       )}
 
       {stats.newAchievements.length > 0 && (

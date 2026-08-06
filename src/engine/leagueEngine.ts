@@ -1,4 +1,4 @@
-import type { ClubState, LeagueState, LeagueTier } from "./types";
+import type { ClubState, LeagueState, LeagueTier, TableRow } from "./types";
 import { clamp } from "./data";
 import { COUNTRIES, disambiguateCities, type CountryId } from "./leagues";
 
@@ -188,4 +188,129 @@ export function simulateLeaguePromotionRelegation(
   league.tier2 = newTier2;
 
   return { promoted, relegated, tier1Order, tier2Order };
+}
+
+/**
+ * Erzeugt eine plausible Gesamttabelle (S/U/N/Tore/Diff/Pkt) für eine Liga-Ebene,
+ * mit dem eigenen Verein EXAKT auf `leaguePosition` verankert - dem Wert, der
+ * bereits an anderer Stelle angezeigt wird (Dashboard, Saisonrückblick). Keine
+ * echte Spiel-für-Spiel-Simulation, sondern eine rang-basierte Kurve: der
+ * Tabellenführer holt realistisch ~2.0-2.3 Punkte/Spiel, der Tabellenletzte
+ * ~0.5-0.7 - dazwischen fällt die Punktzahl mit etwas Rauschen monoton, damit
+ * die Tabelle beim Runterlesen nie wieder "ansteigt" (wie in einer echten Liga).
+ * Die Punktzahl ist danach immer exakt 3×Siege+Unentschieden - keine
+ * kosmetische Rundungsdifferenz zwischen den Spalten.
+ */
+function buildLeagueTable(
+  clubs: ClubState[],
+  playerClubId: string,
+  playerClubName: string,
+  leaguePosition: number,
+  matches: number,
+  rngFn: () => number
+): TableRow[] {
+  const total = clubs.length;
+  if (total === 0) return [];
+  const position = clamp(Math.round(leaguePosition), 1, total);
+
+  // Die übrigen Vereine nach Stärke + Rauschen sortieren (EINMAL bewertet, nicht
+  // im Comparator gewürfelt - ein im Comparator aufgerufener Zufallswert würde
+  // bei manchen Sortier-Implementierungen zu inkonsistenten Vergleichen führen).
+  const others = clubs
+    .filter((c) => c.id !== playerClubId)
+    .map((c) => ({ club: c, score: c.strength + (rngFn() - 0.5) * 15 }))
+    .sort((a, b) => b.score - a.score)
+    .map((s) => s.club);
+
+  const slots: { id: string; name: string; isPlayer: boolean }[] = [];
+  let otherIdx = 0;
+  for (let pos = 1; pos <= total; pos++) {
+    if (pos === position) {
+      slots.push({ id: playerClubId, name: playerClubName, isPlayer: true });
+    } else {
+      const c = others[otherIdx++];
+      slots.push({ id: c.id, name: c.city, isPlayer: false });
+    }
+  }
+
+  const G = Math.max(1, matches);
+  const topPts = Math.round(2.15 * G);
+  const bottomPts = Math.round(0.55 * G);
+  const avgStep = total > 1 ? (topPts - bottomPts) / (total - 1) : 0;
+
+  const rows: TableRow[] = [];
+  let prevPoints = topPts + Math.round((rngFn() - 0.5) * 4);
+  for (let i = 0; i < total; i++) {
+    const t = total > 1 ? i / (total - 1) : 0;
+
+    let targetPoints: number;
+    if (i === 0) {
+      targetPoints = prevPoints;
+    } else {
+      const step = avgStep * (0.4 + rngFn() * 1.2);
+      targetPoints = Math.max(0, Math.round(prevPoints - step));
+    }
+
+    const drawsFrac = clamp(0.24 + (rngFn() - 0.5) * 0.08, 0.1, 0.4);
+    let draws = clamp(Math.round(G * drawsFrac), 0, G);
+    const remaining = G - draws;
+    let wins = clamp(Math.round((targetPoints - draws) / 3), 0, remaining);
+    let losses = remaining - wins;
+    let points = wins * 3 + draws;
+    // Monotonie erzwingen: nie mehr Punkte als der Vorgänger auf der Tabelle.
+    // Erst Siege in Niederlagen umwandeln (kostet 3 Punkte), und - falls das
+    // allein nicht reicht (0 Siege, aber noch zu viele Unentschieden) - auch
+    // Unentschieden in Niederlagen (kostet 1 Punkt), bis entweder die Tabelle
+    // wieder passt oder wirklich nichts mehr reduzierbar ist (0 Siege, 0 Remis).
+    while (i > 0 && points > prevPoints && (wins > 0 || draws > 0)) {
+      if (wins > 0) wins--;
+      else draws--;
+      losses++;
+      points = wins * 3 + draws;
+    }
+    prevPoints = points;
+
+    const attackPerGame = Math.max(0.4, 2.0 - t * 1.05 + (rngFn() - 0.5) * 0.3);
+    const goalsFor = Math.max(0, Math.round(G * attackPerGame));
+    const gdCurve = (42 - t * 77) * (G / 34) + (rngFn() - 0.5) * 8;
+    const goalsAgainst = Math.max(0, Math.round(goalsFor - gdCurve));
+
+    const slot = slots[i];
+    rows.push({
+      clubId: slot.id,
+      club: slot.name,
+      position: i + 1,
+      isPlayerClub: slot.isPlayer,
+      played: G,
+      wins,
+      draws,
+      losses,
+      goalsFor,
+      goalsAgainst,
+      goalDiff: goalsFor - goalsAgainst,
+      points,
+    });
+  }
+
+  return rows;
+}
+
+/** Schneidet aus der vollen Tabelle den Ausschnitt um den eigenen Verein herum
+ * (3 Plätze darüber, 3 darunter) - das eigentliche Ergebnis für den Saisonrückblick. */
+export function buildTableSnapshot(
+  league: LeagueState,
+  tier: LeagueTier,
+  playerClubId: string,
+  playerClubName: string,
+  leaguePosition: number,
+  matches: number,
+  rngFn: () => number
+): TableRow[] {
+  const clubs = clubsForTier(league, tier);
+  const fullTable = buildLeagueTable(clubs, playerClubId, playerClubName, leaguePosition, matches, rngFn);
+  const idx = fullTable.findIndex((r) => r.isPlayerClub);
+  if (idx === -1) return fullTable.slice(0, 7);
+  const start = Math.max(0, idx - 3);
+  const end = Math.min(fullTable.length, idx + 4);
+  return fullTable.slice(start, end);
 }

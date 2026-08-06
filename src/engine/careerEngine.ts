@@ -26,6 +26,7 @@ import { eligibleTemplates, getTemplateById, EVENT_TEMPLATES } from "./events";
 import { COUNTRIES, type CountryId } from "./leagues";
 import {
   buildLeagueState,
+  buildTableSnapshot,
   findClub,
   leagueNameForTier,
   pickClubNearStrength,
@@ -685,6 +686,19 @@ export function simulateSeason(player: Player, seasonNumber: number, league: Lea
   const effectiveStrength = clubStrength + strengthNoise + (avgRating - 6.5) * 2;
   const leaguePosition = clamp(Math.round(18 - (effectiveStrength / 93) * 17), 1, 18);
 
+  // Tabellen-Ausschnitt für den Saisonrückblick (3 Vereine über/unter dem eigenen,
+  // siehe `buildTableSnapshot`) - nutzt `baseMatches` (Team-Saisonspiele), NICHT
+  // `matches` (die um Kaderrolle/Verletzung reduzierten PERSÖNLICHEN Einsätze).
+  const tableSnapshot = buildTableSnapshot(
+    league,
+    player.club.tier,
+    player.club.clubId,
+    player.club.name,
+    leaguePosition,
+    baseMatches,
+    rng
+  );
+
   // ELO-artiger Vereinskoeffizient (Vereinsstärke + Liga-Ansehen + Flair, siehe
   // `clubCoefficient`) statt nur der rohen Stärkezahl - ein "80" in einer Topliga
   // ist ein deutlich ernsterer Titelkandidat als ein "80" in einer schwachen Liga.
@@ -820,6 +834,7 @@ export function simulateSeason(player: Player, seasonNumber: number, league: Lea
     scoreTier,
     newAchievements: [],
     scoreFactors,
+    tableSnapshot,
   };
 
   player.seasonHistory.push(stats);

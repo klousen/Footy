@@ -1143,6 +1143,75 @@ input:focus {
   color: var(--gold);
 }
 
+/* ---------------- Tabellen-Ausschnitt (Saisonrückblick) ---------------- */
+
+.table-snapshot {
+  display: flex;
+  flex-direction: column;
+}
+
+.table-snapshot-row {
+  display: grid;
+  grid-template-columns: 20px 1fr 20px 20px 20px 38px 34px;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 4px;
+  border-bottom: 1px solid var(--line);
+}
+
+.table-snapshot-row:last-child {
+  border-bottom: none;
+}
+
+.table-snapshot-row span {
+  text-align: center;
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+}
+
+.table-snapshot-club {
+  text-align: left !important;
+  font-family: var(--font-body) !important;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.table-snapshot-head {
+  border-bottom: 1px solid var(--line);
+}
+
+.table-snapshot-head span {
+  font-family: var(--font-display) !important;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--chalk-dim);
+}
+
+.table-snapshot-pts {
+  font-weight: 700;
+  color: var(--chalk);
+}
+
+/* Die eigene Zeile hebt sich per Gold-Fläche ab - derselbe Akzent wie
+   Hover/Selected auf Options-Karten, damit sie sich sofort finden lässt. */
+.table-snapshot-row.own {
+  background: rgba(201, 162, 39, 0.1);
+  border-radius: var(--radius);
+  border-bottom-color: transparent;
+}
+
+.table-snapshot-row.own .table-snapshot-club {
+  color: var(--gold-bright);
+  font-weight: 700;
+}
+
+.table-snapshot-row.own .table-snapshot-pts {
+  color: var(--gold-bright);
+}
+
 /* ---------------- Timeline modal ---------------- */
 
 .modal-overlay {

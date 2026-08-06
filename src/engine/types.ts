@@ -146,6 +146,24 @@ export interface ClubTenure {
   relegated: boolean;
 }
 
+/** Eine Zeile im Tabellen-Ausschnitt am Saisonende (siehe `buildTableSnapshot` in
+ * leagueEngine.ts) - keine echte Spiel-für-Spiel-Simulation, sondern eine
+ * rang-basierte Annäherung, die um `leaguePosition` herum plausible Werte liefert. */
+export interface TableRow {
+  clubId: string;
+  club: string;
+  position: number;
+  isPlayerClub: boolean;
+  played: number;
+  wins: number;
+  draws: number;
+  losses: number;
+  goalsFor: number;
+  goalsAgainst: number;
+  goalDiff: number;
+  points: number;
+}
+
 export interface SeasonStats {
   seasonLabel: string; // z.B. "Saison 2031/32"
   age: number;
@@ -180,6 +198,8 @@ export interface SeasonStats {
   scoreFactors: ScoreFactor[];
   /** In dieser Saison neu freigeschaltete Erfolge - für kontextualisiertes Feedback direkt im Saisonrückblick. */
   newAchievements: Achievement[];
+  /** Tabellen-Ausschnitt (3 Vereine über/unter dem eigenen) für den Saisonrückblick. */
+  tableSnapshot: TableRow[];
 }
 
 export interface LogEntry {
