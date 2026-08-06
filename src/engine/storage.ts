@@ -25,6 +25,17 @@ export function loadGame(): GameState | null {
       state.player.nationalTeamGoals ??= 0;
       state.player.startingRoleGuaranteeSeasons ??= 0;
       state.player.cupExitThisSeason ??= false;
+      // Ältere Spielstände kennen `playedAbroad` noch nicht - da wir nicht mehr
+      // rekonstruieren können, ob je ins Ausland gewechselt wurde, im Zweifel als
+      // "bereits im Ausland gespielt" annehmen (kein rückwirkendes "Ligalegende" für
+      // Spielstände, die dieses Flag nie hätten aufbauen können).
+      state.player.playedAbroad ??= true;
+      state.player.loanActive ??= false;
+      state.player.loanReturnClub ??= null;
+      state.player.loanReturnCountryId ??= null;
+      state.player.definingMoment ??= null;
+      state.player.edeljokerLocked ??= false;
+      state.player.formSlumpSeasons ??= 0;
       // Ältere Spielstände kennen das Heimatland noch nicht - als bestmögliche
       // Annäherung das aktuelle Land nehmen (nur relevant für künftige Rückkehr-Erkennung).
       state.player.homeCountryId ??= state.player.country;

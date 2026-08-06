@@ -32,6 +32,22 @@ export const POSITION_LABEL: Record<Position, string> = {
 // Position staffelt (TW 0.02 bis ST 1.0) - Angreifer sind dort schon die
 // klare Torgefahr, Verteidiger tragen ihren Wert stattdessen fast komplett
 // über diese OVR-Gewichtung statt über Scorerpunkte bei.
+/**
+ * Reine, Player-unabhängige Gesamtstärken-Berechnung (siehe `overallRating` in
+ * careerEngine.ts für den Player-Wrapper) - lebt bewusst hier in types.ts statt
+ * in careerEngine.ts, damit auch events.ts sie nutzen kann (z.B. für die
+ * Nationalmannschafts-Berufungslogik), ohne einen zirkulären Import von
+ * careerEngine.ts zu erzeugen.
+ */
+export function overallRatingFromAttributes(attributes: Attributes, position: Position): number {
+  const weights = POSITION_WEIGHTS[position];
+  let sum = 0;
+  for (const key of Object.keys(weights) as AttributeKey[]) {
+    sum += attributes[key] * weights[key];
+  }
+  return Math.round(sum);
+}
+
 export const POSITION_WEIGHTS: Record<Position, Attributes> = {
   TW: { technik: 0.15, tempo: 0.05, physis: 0.25, mentalitaet: 0.35, intelligenz: 0.15, charisma: 0.05 },
   IV: { technik: 0.12, tempo: 0.13, physis: 0.33, mentalitaet: 0.25, intelligenz: 0.12, charisma: 0.05 },
@@ -227,6 +243,16 @@ export interface EffectDelta {
    * verhindert, dass `simulateSeason` trotzdem einen Pokaltitel für dieselbe Saison
    * auswürfelt (siehe `Player.cupExitThisSeason`). */
   cupExit?: boolean;
+  /** Springt direkt vom Jugendspieler (Ausbildungsspieler) in einen echten Profikader-
+   * Vertrag (siehe "jugend_amateurentdeckung_1") - ohne den regulären Weg über das
+   * Profidebüt-Event am 18. Geburtstag. Setzt Kaderrolle, Vertrag und Gehalt direkt. */
+  earlyProDebut?: boolean;
+  /** Setzt einen karriereprägenden Moment (siehe `Player.definingMoment`). */
+  definingMoment?: { positive: boolean; text: string };
+  /** Setzt `Player.edeljokerLocked` dauerhaft (siehe dort). */
+  edeljokerLocked?: boolean;
+  /** Setzt/verlängert `Player.formSlumpSeasons` (siehe dort). */
+  formSlumpSeasons?: number;
   logText?: string;
   logKind?: LogEntry["kind"];
 }
@@ -359,6 +385,18 @@ export interface Player {
   nationalTeamCaptain: boolean;
   /** Anzahl tatsächlich vollzogener Vereinswechsel (für Legacy-Faktoren/Achievements). */
   clubChangesCount: number;
+  /** True, sobald mindestens einmal in ein anderes Land als `homeCountryId` gewechselt
+   * wurde - Grundlage für das "Ligalegende"-Achievement (ganze Karriere in einem Land). */
+  playedAbroad: boolean;
+  /** True, solange ein Leihgeschäft läuft (siehe `ClubOfferReason` "loan"/"loan-return")
+   * - erzwingt im folgenden Sommertransferfenster die automatische Rückkehr. */
+  loanActive: boolean;
+  /** Herkunftsverein, zu dem nach einer laufenden Leihe zurückgekehrt wird - null
+   * außerhalb einer laufenden Leihe. */
+  loanReturnClub: { clubId: string; name: string; country: string; tier: LeagueTier; strength: number } | null;
+  /** Land des `loanReturnClub` - getrennt gespeichert, da `Club.country` nur der
+   * Anzeigename ist, hier aber die echte `CountryId` für den League-Lookup gebraucht wird. */
+  loanReturnCountryId: CountryId | null;
   /** Aufsummierte Verletzungswochen über die gesamte Karriere. */
   totalInjuryWeeks: number;
   /** Wird per `EffectDelta.cupExit` gesetzt (siehe `pokal_kraftakt`) und von
@@ -378,6 +416,17 @@ export interface Player {
   trainingBoostSeasons: number;
   /** IDs bereits freigeschalteter Erfolge - für die "neu"-Erkennung im Saisonrückblick. */
   unlockedAchievementIds: string[];
+  /** Ein karriereprägender Moment (siehe "historisches_spiel_1") - für die Erwähnung
+   * im Karriereende-Epilog (siehe `buildEpilogue`). */
+  definingMoment: { positive: boolean; text: string } | null;
+  /** Einmal dauerhaft gesetzt (siehe "edeljoker_1"): der Trainer nutzt den Spieler
+   * gezielt als Einwechselspieler statt als Stammspieler - deckelt die Kaderrolle
+   * in `resolveClubSituation` dauerhaft bei "Rotation", selbst wenn die reine
+   * Gesamtstärke eigentlich für "Stammspieler" reichen würde. */
+  edeljokerLocked: boolean;
+  /** Solange > 0, drückt ein Formtief (siehe "sommermaerchen_delle_1") zusätzlich
+   * auf die Saison-Bewertung in `simulateSeason` - klingt über die Saisons ab. */
+  formSlumpSeasons: number;
 }
 
 export interface Achievement {

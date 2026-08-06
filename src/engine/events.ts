@@ -1,4 +1,5 @@
 import type { EventTemplate, Player } from "./types";
+import { overallRatingFromAttributes } from "./types";
 import { clamp, FEMALE_FIRST_NAMES, FIRST_NAMES, LAST_NAMES } from "./data";
 
 // Hilfsfunktion für lesbaren Vereinsnamen im Text
@@ -8,11 +9,13 @@ const club = (p: Player) => p.club.name;
 // wird immer mit einem Namen aus FIRST_NAMES erzeugt (siehe `createPlayer`) -
 // da die allermeisten Spieler also männlich sind und heterosexuelle
 // Beziehungen der Normalfall sind, bekommt der Partner/die Partnerin ganz
-// überwiegend einen weiblichen Namen (95%), nur in seltenen Fällen (5%) einen
-// männlichen - statt beide Pools gleich zu gewichten, was viel zu oft
-// männliche Partnernamen ergäbe.
+// überwiegend einen weiblichen Namen. Bewusst auf 2% (statt der ursprünglich
+// gedachten 5%) gesenkt: über eine ganze Karriere hinweg kann "erste_liebe"/
+// "beziehung_neu" mehrfach feuern (z.B. nach einer Trennung), wodurch sich
+// mehrere unabhängige 5%-Würfe schon innerhalb einer einzigen Karriere spürbar
+// zu oft zu mindestens einem männlichen Partnernamen aufsummierten.
 function randomPartnerName(rng: () => number): string {
-  const pool = rng() < 0.05 ? FIRST_NAMES : FEMALE_FIRST_NAMES;
+  const pool = rng() < 0.02 ? FIRST_NAMES : FEMALE_FIRST_NAMES;
   return pool[Math.floor(rng() * pool.length)];
 }
 
@@ -20,6 +23,21 @@ function randomPartnerName(rng: () => number): string {
 // (dieselbe Entscheidung soll sich nicht jedes Mal exakt gleich anfühlen).
 function rInt(ctx: { rng: () => number }, min: number, max: number): number {
   return min + Math.floor(ctx.rng() * (max - min + 1));
+}
+
+/** Wahrscheinlichkeit einer Nationalmannschafts-Berufung DIESE Saison - siehe
+ * ausführlichen Kommentar bei `nationalmannschaft_einladung`. Per Monte-Carlo-
+ * Simulation über ein ~20-saisonales Länderspiel-Fenster kalibriert: Gesamtstärke
+ * 50 bleibt praktisch chancenlos (Ø 1 Karriere-Cap), 70 ergibt eine solide,
+ * aber nicht übermächtige Nebenkarriere (Ø ~19), 90 einen echten Stammspieler
+ * der Nationalelf (Ø ~62), 95+ einen ernsthaften Kandidaten für die 100-Cap-Marke
+ * (Ø ~105) - "Wunderkind"-Bereich statt Standard-Verlauf.
+ */
+function nationalTeamCallUpChance(overall: number, tier: 1 | 2, established: boolean): number {
+  const base = clamp((overall - 52) / 42, 0.02, 0.97);
+  const tierFactor = tier === 1 ? 1 : 0.3;
+  const establishedBonus = established ? 0.15 : 0;
+  return clamp(base * tierFactor + establishedBonus, 0.02, 0.98);
 }
 
 // Frühestes typisches Heiratsalter, gekoppelt an Bildung: wer viel in Bildung
@@ -997,18 +1015,34 @@ export const EVENT_TEMPLATES: EventTemplate[] = [
     maxAge: 38,
     weight: 2,
     // Der Nationaltrainer beobachtet praktisch nur die erste Liga - ein Liga-2-Spieler
-    // braucht schon eine wirklich außergewöhnliche Saison (Ø-Note 8+), um trotzdem
-    // aufzufallen. Reine Liga-2-Routine reicht nicht für eine Nominierung.
+    // braucht schon eine wirklich außergewöhnliche Saison (Ø-Note 8+) UND ein
+    // ordentliches Grundniveau, um trotzdem aufzufallen. Reine Liga-2-Routine
+    // reicht nicht für eine Nominierung.
     condition: (p) => {
       if (p.reputation <= 40) return false;
-      if (p.club.tier === 1) return true;
-      const last = p.seasonHistory[p.seasonHistory.length - 1];
-      return !!last && last.avgRating >= 8;
+      const overall = overallRatingFromAttributes(p.attributes, p.position);
+      if (p.club.tier === 2) {
+        const last = p.seasonHistory[p.seasonHistory.length - 1];
+        if (!last || last.avgRating < 8 || overall < 68) return false;
+      }
+      const established = p.nationalTeamCaps >= 10;
+      return Math.random() < nationalTeamCallUpChance(overall, p.club.tier, established);
     },
     build: (p, ctx) => {
       const isDebut = p.nationalTeamCaps === 0;
+      const overall = overallRatingFromAttributes(p.attributes, p.position);
       const attackWeight = { TW: 0, IV: 0.1, AV: 0.2, ZM: 0.35, FS: 0.6, ST: 0.75 }[p.position];
       const goalsDelta = ctx.rng() < attackWeight ? rInt(ctx, 1, 2) : 0;
+      // Sowohl die Erfolgschance des Einsatzes als auch die Zahl der dabei
+      // gesammelten Länderspiele skalieren mit der Gesamtstärke - ein echtes
+      // Wunderkind (95+) ist im Nationaltrikot praktisch gesetzt und sammelt pro
+      // Berufung mehrere Einsätze, ein knapper Grenzfall-Kandidat bleibt auch dort
+      // eher Mitläufer. Genau diese Staffelung macht 100+ Länderspiele zu einem
+      // realistischen (wenn auch seltenen) Ziel für absolute Ausnahmespieler,
+      // statt für jeden Nationalspieler gleich erreichbar zu sein.
+      const successChance = clamp(0.32 + (overall - 55) / 85, 0.32, 0.95);
+      const capsOnSuccess =
+        overall >= 95 ? rInt(ctx, 5, 8) : overall >= 85 ? rInt(ctx, 3, 5) : overall >= 70 ? rInt(ctx, 2, 4) : rInt(ctx, 1, 3);
       return {
         category: "nationalmannschaft",
         title: isDebut ? "Einladung zur Nationalmannschaft" : "Erneute Berufung in die Nationalmannschaft",
@@ -1021,18 +1055,20 @@ export const EVENT_TEMPLATES: EventTemplate[] = [
             label: "Der Einladung folgen",
             effects: {},
             followUpChance: {
-              chance: 0.6,
+              chance: successChance,
               success: {
                 reputation: 14,
                 fitness: -6,
                 morale: 8,
-                capsDelta: 3,
+                capsDelta: capsOnSuccess,
                 goalsDelta,
                 attributes: { mentalitaet: 1, physis: 1 },
                 traitDeltas: { fuehrung: 1 },
                 logText:
                   (isDebut
                     ? "hat sein/ihr Debüt für die Nationalmannschaft gegeben und überzeugt."
+                    : capsOnSuccess >= 5
+                    ? "war beim Nationalmannschafts-Camp gesetzt und sammelte gleich mehrere weitere Länderspiele."
                     : "kam erneut für die Nationalmannschaft zum Einsatz und überzeugte.") +
                   (goalsDelta > 0 ? ` Dabei ${goalsDelta === 1 ? "erzielte er/sie ein Länderspieltor" : `erzielte er/sie ${goalsDelta} Länderspieltore`}.` : ""),
                 logKind: "milestone",
@@ -4786,6 +4822,318 @@ export const EVENT_TEMPLATES: EventTemplate[] = [
         },
       ],
     }),
+  },
+
+  // ---------------------------------------------------------------------
+  // ENTDECKUNG, PRÄGENDE MOMENTE, ROLLENFINDUNG (Update 39)
+  // ---------------------------------------------------------------------
+
+  // --- Amateur-Entdeckung mit Sofort-Durchbruch (nur U19, sehr seltenes "Wunderkind") ---
+  {
+    id: "jugend_amateurentdeckung_1",
+    category: "jugend",
+    minAge: 15,
+    maxAge: 17,
+    weight: 0.6,
+    // Extrem seltener alternativer Weg in den Profifußball: statt über die
+    // reguläre Nachwuchsakademie (siehe `shouldOfferProDebut`/PRO_DEBUT_AGE) wird
+    // ein noch unentdecktes Ausnahmetalent direkt aus dem Amateurbereich in einen
+    // echten Profikader geholt - Jahre vor dem üblichen Profidebüt. Nur für echte
+    // "Wunderkinder" (hohes Gesamtpotenzial) UND selbst dann nur mit kleiner
+    // Zusatzchance, damit es die seltene Ausnahme bleibt, nicht die Regel.
+    condition: (p) => {
+      if (p.stage !== "jugend" || p.contract.squadRole !== "Ausbildungsspieler") return false;
+      if (p.completedStorylines.includes("amateurentdeckung") || p.activeStorylines.some((t) => t.storylineId === "amateurentdeckung")) {
+        return false;
+      }
+      const potAvg = (Object.values(p.potential) as number[]).reduce((a, b) => a + b, 0) / 6;
+      if (potAvg < 82) return false;
+      return Math.random() < 0.35;
+    },
+    build: (p) => ({
+      category: "jugend",
+      title: "Entdeckung im Amateurbereich",
+      description: `Bei einem Kreisliga-Spiel deiner Freizeitmannschaft sitzt zufällig ein Scout auf der Tribüne - was er sieht, überzeugt ihn sofort. Statt über die Nachwuchsakademie bietet ${club(p)} dir direkt einen Platz im Profikader an. Kein Jugendweg, keine Bewährung in der U-Mannschaft - nur du und eine riesige Chance.`,
+      choices: [
+        {
+          id: "annehmen",
+          label: "Das Angebot sofort annehmen",
+          effects: {
+            earlyProDebut: true,
+            reputation: 8,
+            morale: 10,
+            logText: "wird sensationell direkt aus dem Amateurbereich in den Profikader geholt - ohne den üblichen Weg über die Nachwuchsakademie.",
+            logKind: "milestone",
+            storyline: {
+              storylineId: "amateurentdeckung",
+              label: "Vom Bolzplatz in den Profikader",
+              stage: 1,
+              totalStages: 3,
+              nextTemplateId: "jugend_amateurentdeckung_2",
+              delaySeasons: 1,
+            },
+          },
+        },
+        {
+          id: "ablehnen",
+          label: "Ablehnen und den regulären Weg über die Jugend gehen",
+          effects: {
+            traitDeltas: { disziplin: 2 },
+            logText: "lehnt das sensationelle Angebot ab und setzt lieber auf den geregelten Weg über die Jugendakademie.",
+            logKind: "info",
+          },
+        },
+      ],
+    }),
+  },
+  {
+    id: "jugend_amateurentdeckung_2",
+    category: "jugend",
+    minAge: 15,
+    maxAge: 19,
+    weight: 0,
+    storylineOnly: true,
+    build: (p) => ({
+      category: "jugend",
+      title: "Zweifel an der Legitimität",
+      description: `Trotz ordentlicher Leistungen wird ${p.name} in der Kabine und in den Medien immer wieder als "der Amateur, der nur Glück hatte" belächelt - selbst gute Auftritte werden klein geredet. Wie gehst du damit um?`,
+      choices: [
+        {
+          id: "medien",
+          label: "Sich der Kritik offen in Interviews stellen",
+          effects: {},
+          followUpChance: {
+            chance: 0.55,
+            success: {
+              traitDeltas: { medienimage: 6, fuehrung: 2 },
+              reputation: 6,
+              logText: "stellt sich der Kritik offen in Interviews und dreht die öffentliche Wahrnehmung spürbar zu seinen Gunsten.",
+              logKind: "positive",
+              storyline: { storylineId: "amateurentdeckung", label: "Vom Bolzplatz in den Profikader", stage: 2, totalStages: 3, nextTemplateId: "jugend_amateurentdeckung_3", delaySeasons: 1, data: { outcome: "anerkannt" } },
+            },
+            failure: {
+              morale: -5,
+              traitDeltas: { medienimage: -2 },
+              logText: "gerät mit offenen Interviews zur eigenen Legitimität eher noch tiefer in die Debatte hinein.",
+              logKind: "negative",
+              storyline: { storylineId: "amateurentdeckung", label: "Vom Bolzplatz in den Profikader", stage: 2, totalStages: 3, nextTemplateId: "jugend_amateurentdeckung_3", delaySeasons: 1, data: { outcome: "zweifel" } },
+            },
+          },
+        },
+        {
+          id: "leistung",
+          label: "Nur mit Leistung auf dem Platz antworten",
+          effects: {
+            traitDeltas: { arbeitsmoral: 4, disziplin: 2 },
+            attributes: { mentalitaet: 1 },
+            logText: "reagiert auf die Zweifel bewusst nicht öffentlich, sondern lässt ausschließlich Leistung auf dem Platz sprechen.",
+            logKind: "positive",
+            storyline: { storylineId: "amateurentdeckung", label: "Vom Bolzplatz in den Profikader", stage: 2, totalStages: 3, nextTemplateId: "jugend_amateurentdeckung_3", delaySeasons: 1, data: { outcome: "leistung" } },
+          },
+        },
+      ],
+    }),
+  },
+  {
+    id: "jugend_amateurentdeckung_3",
+    category: "jugend",
+    minAge: 16,
+    maxAge: 20,
+    weight: 0,
+    storylineOnly: true,
+    build: (p, ctx) => {
+      const outcome = ctx.storyData?.outcome ?? "leistung";
+      const text =
+        outcome === "anerkannt"
+          ? `Die Zweifel an ${p.name}s Weg sind endgültig verstummt - inzwischen gilt die Entdeckungsgeschichte selbst als Teil der eigenen Legende.`
+          : outcome === "zweifel"
+          ? `Ganz verstummt sind die Zweifel nie - aber ${p.name} hat gelernt, mit der ewigen "Amateur"-Erzählung zu leben, statt sie zu bekämpfen.`
+          : `Ohne ein einziges großes Interview hat ${p.name} die Zweifel schlicht totgespielt - Leistung statt Worte war die beste Antwort.`;
+      return {
+        category: "jugend",
+        title: "Angekommen im Profifußball",
+        description: text,
+        choices: [
+          {
+            id: "ok",
+            label: "Weitermachen",
+            effects: {
+              reputation: outcome === "zweifel" ? 2 : 6,
+              clubRelation: 4,
+              logText:
+                outcome === "anerkannt"
+                  ? "hat sich endgültig als vollwertiger Profi etabliert - die Amateur-Herkunft ist heute nur noch eine gute Geschichte."
+                  : outcome === "zweifel"
+                  ? "lebt weiter mit gelegentlichen Seitenhieben auf die ungewöhnliche Herkunft, lässt sich davon aber nicht mehr beirren."
+                  : "hat die Zweifel an der eigenen Legitimität einfach durch nackte Leistung zum Schweigen gebracht.",
+              logKind: "positive",
+              storyline: { storylineId: "amateurentdeckung", label: "Vom Bolzplatz in den Profikader", stage: 3, totalStages: 3 },
+            },
+          },
+        ],
+      };
+    },
+  },
+
+  // --- Entscheidendes Tor/Fehler in einem historischen Spiel (karriereprägend, 1-5%) ---
+  {
+    id: "historisches_spiel_1",
+    category: "meilenstein",
+    minAge: 20,
+    maxAge: 37,
+    weight: 3,
+    unique: true,
+    // Bewusst nur ein winziger Wurf pro Saison (statt hoher Weight), damit die
+    // kumulierte Wahrscheinlichkeit über eine ganze Karriere im gewünschten
+    // 1-5%-Bereich bleibt, statt bei ~18 möglichen Saisons fast garantiert
+    // mindestens einmal zu feuern.
+    condition: (p) => p.contract.squadRole !== "Ausbildungsspieler" && Math.random() < 0.0025,
+    build: (p) => ({
+      category: "meilenstein",
+      title: "Das Spiel, das alles verändern könnte",
+      description: `Relegation, Pokalfinale oder die letzte entscheidende Aktion einer engen Meisterschaft - ${club(p)} steht vor dem größten Spiel der Saison, und in der Schlussphase landet der Ball ausgerechnet bei dir. Übernimmst du die Verantwortung?`,
+      choices: [
+        {
+          id: "verantwortung",
+          label: "Verantwortung übernehmen",
+          effects: {},
+          followUpChance: {
+            chance: 0.5,
+            success: {
+              reputation: 20,
+              morale: 15,
+              clubRelation: 10,
+              traitDeltas: { fuehrung: 6 },
+              attributes: { mentalitaet: 2 },
+              definingMoment: {
+                positive: true,
+                text: "der entscheidende Treffer im größten Spiel der Karriere, der bis heute in jeder Rückschau gezeigt wird.",
+              },
+              logText: "erzielt den entscheidenden Treffer im größten Spiel der Karriere - ein Moment für immer verknüpft mit seinem/ihrem Namen.",
+              logKind: "milestone",
+            },
+            failure: {
+              morale: -12,
+              clubRelation: -6,
+              reputation: -4,
+              definingMoment: {
+                positive: false,
+                text: "der vergebene entscheidende Moment im größten Spiel der Karriere, den Kritiker bis heute nicht vergessen.",
+              },
+              logText: "vergibt den entscheidenden Moment im größten Spiel der Karriere - ein Fehler, der für immer mit seinem/ihrem Namen verknüpft bleibt.",
+              logKind: "negative",
+            },
+          },
+        },
+        {
+          id: "zurueckhalten",
+          label: "Sich zurückhalten, einem Mitspieler überlassen",
+          effects: {
+            clubRelation: 2,
+            logText: "überlässt im entscheidenden Moment lieber einem Mitspieler die Verantwortung.",
+            logKind: "info",
+          },
+        },
+      ],
+    }),
+  },
+
+  // --- Edeljoker statt Stammspieler: eine dauerhafte Trainer-Präferenz ---
+  {
+    id: "edeljoker_1",
+    category: "taktik",
+    minAge: 22,
+    maxAge: 34,
+    weight: 0.8,
+    unique: true,
+    // Kein klassischer Formverlust - der Trainer nutzt den Spieler bewusst als
+    // Einwechselspieler, obwohl das Leistungsniveau eigentlich für einen
+    // Stammplatz reichen würde (daher die Bedingung an Rotation/Stammspieler-Nähe,
+    // nicht an schwache Werte).
+    condition: (p) =>
+      !p.edeljokerLocked &&
+      (p.contract.squadRole === "Rotation" || p.contract.squadRole === "Stammspieler") &&
+      p.consecutiveBenchSeasons === 0 &&
+      // Zusätzlicher Wurf, damit es über eine ganze Karriere bei ~5-10% Vorkommen
+      // bleibt statt bei jeder passenden Saison eine ernsthafte Chance zu haben.
+      Math.random() < 0.3,
+    build: (p) => ({
+      category: "taktik",
+      title: "Der Trainer hat eine klare Meinung von dir",
+      description: `${club(p)}s Trainer schwört auf dich - aber anders als erhofft: nicht als gesetzten Stammspieler, sondern als gezielten Einwechselspieler, der Spiele in der Schlussphase entscheidet. "Deine Wirkung von der Bank ist Gold wert", sagt er offen. Wie gehst du damit um?`,
+      choices: [
+        {
+          id: "akzeptieren",
+          label: "Die Rolle pragmatisch akzeptieren",
+          effects: {
+            edeljokerLocked: true,
+            clubRelation: 8,
+            morale: 4,
+            traitDeltas: { arbeitsmoral: 2 },
+            logText: "akzeptiert pragmatisch die Rolle als gezielter Einwechselspieler - der Trainer setzt fortan konsequent auf dieses Muster.",
+            logKind: "positive",
+          },
+        },
+        {
+          id: "widersprechen",
+          label: "Öffentlich einen Stammplatz einfordern",
+          effects: {
+            edeljokerLocked: true,
+            clubRelation: -6,
+            morale: -3,
+            reputation: 2,
+            logText: "fordert öffentlich einen Stammplatz ein - der Trainer bleibt trotzdem bei seinem Muster, das Verhältnis kühlt spürbar ab.",
+            logKind: "negative",
+          },
+        },
+      ],
+    }),
+  },
+
+  // --- Sommermärchen-Delle: Formeinbruch nach großem Erfolg ---
+  {
+    id: "sommermaerchen_delle_1",
+    category: "taktik",
+    minAge: 19,
+    maxAge: 37,
+    weight: 1.5,
+    condition: (p) => {
+      const last = p.seasonHistory[p.seasonHistory.length - 1];
+      if (!last) return false;
+      const bigSuccess = last.trophies.length > 0 && last.avgRating >= 7.2;
+      return bigSuccess && p.formSlumpSeasons === 0;
+    },
+    build: (p) => {
+      const last = p.seasonHistory[p.seasonHistory.length - 1];
+      return {
+        category: "taktik",
+        title: "Die Sommermärchen-Delle",
+        description: `Nach dem Höhepunkt der letzten Saison (${last?.trophies.join(", ") ?? "Titelgewinn"}) will bei ${club(p)} einfach nicht mehr dieselbe Energie aufkommen wie vorher - die Erwartungen bleiben riesig, die eigene Motivation fühlt sich seltsam flach an.`,
+        choices: [
+          {
+            id: "durchziehen",
+            label: "Einfach weitermachen wie bisher",
+            effects: {
+              formSlumpSeasons: 1,
+              morale: -3,
+              logText: "kämpft nach dem großen Erfolg der Vorsaison mit einer spürbaren Sättigungs-/Motivationsdelle.",
+              logKind: "negative",
+            },
+          },
+          {
+            id: "auszeit",
+            label: "Bewusst eine mentale Auszeit einlegen",
+            effects: {
+              formSlumpSeasons: 1,
+              fitness: 4,
+              traitDeltas: { arbeitsmoral: 1 },
+              logText: "legt nach dem Erfolgshöhepunkt bewusst eine mentale Auszeit ein, um die Delle möglichst kurz zu halten.",
+              logKind: "info",
+            },
+          },
+        ],
+      };
+    },
   },
 ];
 

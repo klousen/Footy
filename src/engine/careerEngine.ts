@@ -19,7 +19,7 @@ import type {
   SquadRole,
   TraitKey,
 } from "./types";
-import { POSITION_WEIGHTS } from "./types";
+import { overallRatingFromAttributes, POSITION_WEIGHTS } from "./types";
 import { clamp } from "./data";
 import { ATTRIBUTE_LABEL, ATTRIBUTE_ORDER, formatMoney, RELATIONSHIP_LABEL, SQUAD_ROLE_RANK, TRAIT_LABEL, TRAIT_ORDER } from "./labels";
 import { eligibleTemplates, getTemplateById, EVENT_TEMPLATES } from "./events";
@@ -165,6 +165,10 @@ export function createPlayer(
       startingRoleGuaranteeSeasons: 0,
       nationalTeamCaptain: false,
       clubChangesCount: 0,
+      playedAbroad: false,
+      loanActive: false,
+      loanReturnClub: null,
+      loanReturnCountryId: null,
       totalInjuryWeeks: 0,
       cupExitThisSeason: false,
       relationshipStatus: "single",
@@ -175,6 +179,9 @@ export function createPlayer(
       completedStorylines: [],
       trainingBoostSeasons: 0,
       unlockedAchievementIds: [],
+      definingMoment: null,
+      edeljokerLocked: false,
+      formSlumpSeasons: 0,
     },
   };
 }
@@ -202,12 +209,7 @@ export function finalizeYouthClub(player: Player, league: LeagueState, clubId: s
 }
 
 export function overallRating(p: Player): number {
-  const weights = POSITION_WEIGHTS[p.position];
-  let sum = 0;
-  for (const key of ATTRIBUTE_KEYS) {
-    sum += p.attributes[key] * weights[key];
-  }
-  return Math.round(sum);
+  return overallRatingFromAttributes(p.attributes, p.position);
 }
 
 function stageForAge(age: number): CareerStage {
@@ -432,6 +434,28 @@ function applyEffects(player: Player, effects: EventChoice["effects"], season: n
   }
   if (effects.nationalTeamCaptain) player.nationalTeamCaptain = true;
   if (effects.squadRoleOverride) player.contract.squadRole = effects.squadRoleOverride;
+  // Direkter Sprung vom Jugend- in den Profikader (siehe "jugend_amateurentdeckung_1") -
+  // ohne den überhaupt nie passierten Weg über das reguläre Profidebüt-Event, deshalb
+  // hier die Vertrags-/Gehaltslogik direkt nachgebildet statt auf `applyClubOfferChoice`
+  // zu warten. Bewusst eine bescheidene Startrolle (weit unter Vereinsstärke), da der
+  // Sprung Jahre früher als üblich passiert - kein geschütztes Startelf-Versprechen.
+  if (effects.earlyProDebut) {
+    const overall = overallRating(player);
+    // Kein Liga-Rang verfügbar (diese Funktion kennt hier keine `LeagueState`) -
+    // vernachlässigbar für eine erste, bescheidene Vertragssumme.
+    const wage = estimateWage(overall, player.reputation, player.club, player.country);
+    player.contract = {
+      club: player.club.name,
+      yearsLeft: 2,
+      wagePerYear: Math.max(6000, Math.round(wage * 0.6)),
+      squadRole: squadRoleForOverall(overall, player.club.strength),
+    };
+  }
+  if (effects.definingMoment) player.definingMoment = effects.definingMoment;
+  if (effects.edeljokerLocked) player.edeljokerLocked = true;
+  if (effects.formSlumpSeasons) {
+    player.formSlumpSeasons = Math.max(player.formSlumpSeasons, effects.formSlumpSeasons);
+  }
   if (effects.traitDeltas) {
     for (const key of Object.keys(effects.traitDeltas) as TraitKey[]) {
       const delta = effects.traitDeltas[key] ?? 0;
@@ -636,7 +660,12 @@ export function simulateSeason(player: Player, seasonNumber: number, league: Lea
   // dadurch keinen Abzug - nur echte Scorer werden zusätzlich belohnt.
   const productionPerMatch = matches > 0 ? (goals + assists * 0.7) / matches : 0;
   const productionFactor = clamp(productionPerMatch * 1.3, 0, 1.1);
-  const ratingBase = 6.0 + (overall - clubStrength) / 45 + form * 0.6 + disziplinFactor + relationshipFactor + productionFactor;
+  // "Sommermärchen-Delle" (siehe "sommermaerchen_delle_1"): ein spürbarer, aber
+  // vorübergehender Leistungsdämpfer nach einem großen Erfolgshöhepunkt - klingt
+  // über die Saisons ab (siehe `ageUpPlayer`), statt die Karriere dauerhaft zu prägen.
+  const slumpFactor = player.formSlumpSeasons > 0 ? -0.4 : 0;
+  const ratingBase =
+    6.0 + (overall - clubStrength) / 45 + form * 0.6 + disziplinFactor + relationshipFactor + productionFactor + slumpFactor;
   const avgRating = clamp(ratingBase + (rng() - 0.5) * 0.6, 3.5, 9.5);
 
   // Niedrige Disziplin erhöht die Kartenwahrscheinlichkeit spürbar, hohe senkt sie
@@ -938,6 +967,7 @@ export function ageUpPlayer(player: Player): void {
   if (player.roleProtectionSeasons > 0) player.roleProtectionSeasons -= 1;
   if (player.startingRoleGuaranteeSeasons > 0) player.startingRoleGuaranteeSeasons -= 1;
   if (player.trainingBoostSeasons > 0) player.trainingBoostSeasons -= 1;
+  if (player.formSlumpSeasons > 0) player.formSlumpSeasons -= 1;
 
   if (player.injury) {
     const remaining = player.injury.weeksOut - 16; // Sommerpause heilt viel
@@ -1207,6 +1237,14 @@ export function resolveClubSituation(player: Player, league: LeagueState): LogEn
   if (player.startingRoleGuaranteeSeasons > 0 && SQUAD_ROLE_RANK[newRole] < SQUAD_ROLE_RANK["Stammspieler"]) {
     newRole = "Stammspieler";
   }
+  // Edeljoker-Rolle (siehe "edeljoker_1"): der Trainer nutzt den Spieler dauerhaft
+  // gezielt von der Bank statt als gesetzten Stammspieler - deckelt die Kaderrolle
+  // bei "Rotation", selbst wenn die reine Gesamtstärke eigentlich mehr hergäbe. Eine
+  // vertragliche Stammplatzgarantie (siehe oben) bleibt davon unberührt - ein klares
+  // Vertragsversprechen sticht die informelle Trainer-Präferenz.
+  if (player.edeljokerLocked && player.startingRoleGuaranteeSeasons <= 0 && SQUAD_ROLE_RANK[newRole] > SQUAD_ROLE_RANK["Rotation"]) {
+    newRole = "Rotation";
+  }
   player.contract.squadRole = newRole;
 
   if (newRole === "Ersatzbank" || newRole === "Ergänzungsspieler") {
@@ -1305,7 +1343,7 @@ export function applyLeaguePromotionRelegation(player: Player, league: LeagueSta
 // Sichtbare Vereinswechsel: Profidebüt, Transferangebote, Bankphasen-Druck
 // ---------------------------------------------------------------------------
 
-export type ClubOfferReason = "pro-debut" | "opportunity" | "pressure" | "lockruf";
+export type ClubOfferReason = "pro-debut" | "opportunity" | "pressure" | "lockruf" | "loan" | "loan-return";
 
 const CLUB_OFFER_PREFIX = "club_offer:";
 
@@ -1396,6 +1434,30 @@ export function shouldTriggerSingleClubApproach(player: Player): boolean {
   const strongForm = last.avgRating >= 7.0 || last.scoreTier === "Starke Saison" || last.scoreTier === "Überragende Saison";
   if (!strongForm) return false;
   return rng() < 0.22;
+}
+
+/**
+ * Auslöser für ein zeitweises Leihgeschäft ins Ausland (siehe `ClubOfferReason`
+ * "loan") - bewusst nur für junge Spieler (≤23), die bei ihrem aktuellen Verein
+ * nicht auf ausreichend Einsatzzeit kommen: genau die Situation, in der ein
+ * Verein einen vielversprechenden, aber noch nicht durchgesetzten Spieler
+ * "parkt", statt ihn auf der Bank verkümmern zu lassen. Niedrigste Priorität
+ * in `decideClubOfferInjection` - füllt nur die Lücken, in denen sonst gar
+ * kein Vereins-Event fällig wäre und keine der oben priorisierten,
+ * "aktiveren" Auslöser (Bankdruck-Wechsel, Scouting-Interesse) bereits
+ * gegriffen haben.
+ */
+export function shouldTriggerLoanAbroad(player: Player): boolean {
+  if (player.stage === "jugend") return false;
+  if (player.age > 23) return false;
+  if (player.loanActive) return false;
+  if (player.wantsTransfer) return false;
+  if (player.injury && player.injury.weeksOut > 0) return false;
+  if (player.seasonsSinceTransferEvent < 1) return false;
+  const strugglingForMinutes =
+    player.contract.squadRole === "Ergänzungsspieler" || player.contract.squadRole === "Ersatzbank";
+  if (!strugglingForMinutes) return false;
+  return rng() < 0.18;
 }
 
 /** Baut die Liga-Pyramide eines fremden Landes lazy und cached sie danach dauerhaft -
@@ -1504,12 +1566,38 @@ function buildClubOfferEvent(
   const pool = [...league.tier1, ...league.tier2];
   const lastStats = player.seasonHistory[player.seasonHistory.length - 1];
 
+  // Rückkehr von der Leihe (siehe `ClubOfferReason` "loan"): kein Angebots-
+  // Vergleich, keine Wahl - der Leihvertrag sieht die Rückkehr zum genau
+  // gespeicherten Stammverein vor (siehe `player.loanReturnClub`), garantiert
+  // und ohne Alternative. Baut das Event direkt und kehrt früh zurück, bevor
+  // die generische Kandidaten-Logik unten überhaupt anläuft.
+  if (reason === "loan-return") {
+    const back = player.loanReturnClub!;
+    const wagePreview = estimateWage(overall, player.reputation, back, player.loanReturnCountryId ?? player.homeCountryId, undefined);
+    return {
+      id: `cluboffer-${player.age}-loan-return-${Math.round(rng() * 1e6)}`,
+      templateId: `${CLUB_OFFER_PREFIX}loan-return`,
+      category: "transfer",
+      title: "Rückkehr von der Leihe",
+      description: `Die vereinbarte Leihzeit bei ${player.club.name} ist vorbei - laut Vertrag geht es jetzt zurück zu ${back.name}. Wie die Leihe verlaufen ist, entscheidet mit darüber, wie du dort empfangen wirst.`,
+      choices: [
+        {
+          id: `club-${back.clubId}`,
+          label: `Zurück zu ${back.name}`,
+          detail: `${back.tier === 1 ? "1." : "2."} Liga · Vereinsstärke ${back.strength} · Gehalt ca. ${formatMoney(wagePreview)}/Jahr`,
+          effects: {},
+        },
+      ],
+    };
+  }
+
   let targetStrength: number;
   let excludeCurrent: boolean;
-  // "lockruf" zeigt bewusst nur EINEN konkreten Kandidaten (siehe unten) statt
-  // einer Auswahl - ein einzelner, überraschender Lockversuch fühlt sich anders
-  // an als organisches Scouting-Interesse mehrerer Vereine gleichzeitig.
-  const totalCount = reason === "lockruf" ? 1 : 3;
+  // "lockruf" und "loan" zeigen bewusst nur EINEN konkreten Kandidaten (siehe
+  // unten) statt einer Auswahl - ein einzelner, überraschender Lockversuch
+  // bzw. ein einzelnes Leihangebot fühlt sich anders an als organisches
+  // Scouting-Interesse mehrerer Vereine gleichzeitig.
+  const totalCount = reason === "lockruf" || reason === "loan" ? 1 : 3;
   if (reason === "pro-debut") {
     targetStrength = targetStrengthForReputation(player.reputation, overall);
     // Der eigene Jugendverein bekommt einen eigenen, klar erkennbaren
@@ -1545,6 +1633,12 @@ function buildClubOfferEvent(
     const ratingAnchor = overall + rng() * 6;
     targetStrength = clamp(Math.max(jumpTarget, ratingAnchor), 35, 97);
     excludeCurrent = true;
+  } else if (reason === "loan") {
+    // Eine Leihe muss weder deutlich stärker noch schwächer sein als der
+    // aktuelle Verein - entscheidend ist die Aussicht auf echte Einsatzzeit,
+    // nicht das Prestige. Bewusst mit Streuung um das eigene Vereinsniveau.
+    targetStrength = clamp(currentStrength - 5 + rng() * 15, 25, 90);
+    excludeCurrent = true;
   } else {
     targetStrength = clamp(currentStrength - 18, 22, 90);
     excludeCurrent = true;
@@ -1555,9 +1649,14 @@ function buildClubOfferEvent(
   // bewusst immer inländisch - ein einzelner Auslandskandidat würde die
   // Total-Kandidatenzahl (genau 1, siehe oben) durcheinanderbringen und die
   // pointierte "ein Verein will dich SOFORT"-Prämisse verwässern.
-  const wantsForeign = reason === "lockruf" ? false : rng() < internationalOfferChance(reason, player, overall);
+  // "loan" ist immer ein Auslandsgeschäft ("fremde Liga/Kultur" ist der ganze
+  // Sinn dahinter), "lockruf" bleibt bewusst immer inländisch (siehe oben).
+  const wantsForeign = reason === "loan" ? true : reason === "lockruf" ? false : rng() < internationalOfferChance(reason, player, overall);
   const veryFamous = player.reputation >= 70 || overall >= 80;
-  const foreignCount = wantsForeign ? (veryFamous && rng() < 0.3 ? 2 : 1) : 0;
+  // "loan" zeigt IMMER genau einen Auslandskandidaten (totalCount === 1, siehe
+  // oben) - der veryFamous-Bonus (2 statt 1 Auslandsangebot) würde hier den
+  // Kandidatenzähler ins Negative treiben.
+  const foreignCount = wantsForeign ? (reason !== "loan" && veryFamous && rng() < 0.3 ? 2 : 1) : 0;
   const domesticCount = totalCount - foreignCount;
 
   const domesticOffers = pickDistinctClubOffers(
@@ -1633,13 +1732,19 @@ function buildClubOfferEvent(
     const promiseChance = rolePromiseChance(transferOverall, cand.club.strength);
     return {
       id: `club-${cand.club.id}`,
-      label: cand.isForeign
-        ? `Auslandswechsel zu ${cand.club.city} (${cand.flag} ${cand.countryName})`
-        : `Wechsel zu ${cand.club.city}`,
+      label:
+        reason === "loan"
+          ? `Leihe zu ${cand.club.city} (${cand.flag} ${cand.countryName})`
+          : cand.isForeign
+          ? `Auslandswechsel zu ${cand.club.city} (${cand.flag} ${cand.countryName})`
+          : `Wechsel zu ${cand.club.city}`,
       // Vereinsstärke des Kandidaten DIREKT neben der des aktuellen Vereins, damit
       // der Sprung (oder Rückschritt) auf einen Blick erkennbar ist, statt den
       // eigenen Vereinswert erst im Dashboard nachschlagen zu müssen.
-      detail: `${cand.leagueLabel} · Vereinsstärke ${cand.club.strength} (aktuell: ${currentStrength}) · Einsatzminuten-Versprechen: ${promisedRole} (${Math.round(promiseChance * 100)}% Erfolgschance) · Gehalt ca. ${formatMoney(wagePreview)}/Jahr${cand.isForeign ? " · Auslandswechsel" : ""}`,
+      detail:
+        reason === "loan"
+          ? `${cand.leagueLabel} · Vereinsstärke ${cand.club.strength} · Ein Jahr Leihe, danach automatische Rückkehr zu ${player.club.name} · Gehalt ca. ${formatMoney(wagePreview)}/Jahr`
+          : `${cand.leagueLabel} · Vereinsstärke ${cand.club.strength} (aktuell: ${currentStrength}) · Einsatzminuten-Versprechen: ${promisedRole} (${Math.round(promiseChance * 100)}% Erfolgschance) · Gehalt ca. ${formatMoney(wagePreview)}/Jahr${cand.isForeign ? " · Auslandswechsel" : ""}`,
       effects: {},
     };
   });
@@ -1667,6 +1772,13 @@ function buildClubOfferEvent(
       id: "stay",
       label: `Bei ${player.club.name} bleiben`,
       detail: `Zeigt dem Verein die Treue - stärkt die Vereinsbeziehung. Vereinsstärke bleibt bei ${currentStrength}.`,
+      effects: {},
+    });
+  } else if (reason === "loan") {
+    choices.push({
+      id: "stay",
+      label: `Beim Verein um den Stammplatz kämpfen`,
+      detail: `Lehnt die Leihe ab und bleibt bei ${player.club.name} - riskanter, aber keine Reise ins Ungewisse.`,
       effects: {},
     });
   } else if (reason === "pressure") {
@@ -1707,6 +1819,8 @@ function buildClubOfferEvent(
         : `${lockrufClub} will dich sofort verpflichten`
       : reason === "opportunity"
       ? "Interesse von anderen Vereinen im Sommertransferfenster"
+      : reason === "loan"
+      ? "Der Verein bietet eine Leihe an"
       : "Wechselgerüchte im Winterfenster";
 
   // Konkreter Bezug zur letzten Saison, damit klar wird, WARUM sich gerade jetzt
@@ -1743,6 +1857,8 @@ function buildClubOfferEvent(
         : `${lastSeasonRef}meldet sich der Verein völlig überraschend (Vereinsstärke ${candidates[0]?.club.strength}) mit einem einzelnen, konkreten Angebot. Kein Vorgeplänkel, direkt mit Konditionen: annehmen oder bei ${player.club.name} (Vereinsstärke ${currentStrength}) bleiben.`
       : reason === "opportunity"
       ? `${lastSeasonRef}sind Scouts auf ${player.name} bei ${player.club.name} aufmerksam geworden. Im Sommertransferfenster erkundigen sich ${count} Vereine nach dir.${foreignNote}`
+      : reason === "loan"
+      ? `Bei ${player.club.name} kommst du kaum zum Einsatz - statt dich weiter auf der Bank verkümmern zu lassen, bietet der Verein eine einjährige Leihe zu ${candidates[0]?.club.city} (${candidates[0]?.flag} ${candidates[0]?.countryName}) an. Du hast dabei kaum Mitsprache bei der Wahl - Vorgabe ist Vorgabe. Nach einem Jahr geht es garantiert zurück zu ${player.club.name}.`
       : `${pressureReason}. Im Winterfenster wäre der Verein offen für einen Wechsel - ${count} Vereine haben bereits angefragt.${foreignNote}`;
 
   return {
@@ -1762,6 +1878,15 @@ function buildClubOfferEvent(
  * KEIN GameEvent (siehe `buildEventFromId` - lazy, erst bei Anzeige).
  */
 export function decideClubOfferInjection(player: Player): ClubOfferReason | null {
+  // Höchste Priorität, noch vor dem Profidebüt: eine laufende Leihe (siehe
+  // `ClubOfferReason` "loan") endet nicht zufällig, sondern erzwingt im
+  // nächsten Sommertransferfenster GARANTIERT die vertraglich vereinbarte
+  // Rückkehr zum Stammverein - kein Losglück, keine Konkurrenz zu anderen
+  // Auslösern.
+  if (player.loanActive) {
+    player.seasonsSinceTransferEvent = 0;
+    return "loan-return";
+  }
   if (shouldOfferProDebut(player)) {
     // Das Profidebüt bleibt unconditional (auch bei Verletzung) - der Übergang
     // hängt exakt am 18. Geburtstag (siehe `shouldOfferProDebut`), ein
@@ -1799,6 +1924,13 @@ export function decideClubOfferInjection(player: Player): ClubOfferReason | null
   if (shouldTriggerSingleClubApproach(player)) {
     player.seasonsSinceTransferEvent = 0;
     return "lockruf";
+  }
+  // Niedrigste Priorität von allen: ein zeitweises Leihgeschäft für junge
+  // Spieler ohne ausreichend Einsatzzeit (siehe `shouldTriggerLoanAbroad`) -
+  // füllt nur die Lücken, in denen wirklich kein anderer Auslöser gegriffen hat.
+  if (shouldTriggerLoanAbroad(player)) {
+    player.seasonsSinceTransferEvent = 0;
+    return "loan";
   }
   return null;
 }
@@ -1920,6 +2052,8 @@ export function applyClubOfferChoice(
   const overall = overallRating(player);
   const oldName = player.club.name;
   const oldStrength = player.club.strength;
+  const oldClubId = player.club.clubId;
+  const oldTier = player.club.tier;
   const wageCountryId = movingCountryId ?? player.country;
   player.club = { clubId: chosen.id, name: chosen.city, country: targetLeague.countryName, tier: chosen.tier, strength: chosen.strength };
   const wage = estimateWage(overall, player.reputation, chosen, wageCountryId, clubLeagueRank(chosen.id, chosen.tier, targetLeague));
@@ -1956,14 +2090,23 @@ export function applyClubOfferChoice(
     delete foreignLeagues[movingCountryId];
     player.country = movingCountryId;
     newActiveLeague = targetLeague;
+    // Einmal im Ausland gespielt heißt für die "Ligalegende" (siehe computeAchievements)
+    // dauerhaft raus - auch eine spätere Heimkehr macht die Karriere nicht rückwirkend
+    // wieder zu einer reinen Ein-Land-Karriere.
+    player.playedAbroad = true;
   }
 
   const leagueLabel = leagueNameForTier(targetLeague, chosen.tier);
 
-  const kind: LogEntry["kind"] = reason === "pro-debut" ? "milestone" : reason === "pressure" ? "negative" : "positive";
+  const kind: LogEntry["kind"] =
+    reason === "pro-debut" ? "milestone" : reason === "pressure" ? "negative" : reason === "loan-return" ? "info" : "positive";
   const text =
     reason === "pro-debut"
       ? `${player.name} unterschreibt den ersten Profivertrag bei ${chosen.city} (${leagueLabel}).`
+      : reason === "loan"
+      ? `${player.name} wird für ein Jahr an ${chosen.city} (${targetLeague.flag} ${targetLeague.countryName}, ${leagueLabel}) verliehen.`
+      : reason === "loan-return"
+      ? `${player.name} kehrt nach der Leihe zu ${chosen.city} zurück.`
       : movingCountryId
       ? `${player.name} wagt den Auslandswechsel von ${oldName} zu ${chosen.city} (${targetLeague.flag} ${targetLeague.countryName}, ${leagueLabel}).`
       : `${player.name} wechselt von ${oldName} zu ${chosen.city} (${leagueLabel}).`;
@@ -1971,15 +2114,54 @@ export function applyClubOfferChoice(
 
   // Ergebnis des Einsatzminuten-Versprechens als eigener Log-Eintrag - klar
   // getrennt von der reinen Wechsel-Meldung, damit sichtbar wird, WARUM die
-  // tatsächliche Rolle ggf. von der versprochenen abweicht.
-  player.log.push({
-    season: 0,
-    age: player.age,
-    text: promiseKept
-      ? `${chosen.city} hält das Einsatzminuten-Versprechen ein - ${player.name} startet als ${newRole}.`
-      : `${chosen.city} hält das Einsatzminuten-Versprechen nicht ein - ${player.name} landet zunächst nur als ${newRole} im Kader.`,
-    kind: promiseKept ? "positive" : "negative",
-  });
+  // tatsächliche Rolle ggf. von der versprochenen abweicht. Bei der Rückkehr
+  // von der Leihe entfällt das (siehe Cointoss-Block unten stattdessen).
+  if (reason !== "loan-return") {
+    player.log.push({
+      season: 0,
+      age: player.age,
+      text: promiseKept
+        ? `${chosen.city} hält das Einsatzminuten-Versprechen ein - ${player.name} startet als ${newRole}.`
+        : `${chosen.city} hält das Einsatzminuten-Versprechen nicht ein - ${player.name} landet zunächst nur als ${newRole} im Kader.`,
+      kind: promiseKept ? "positive" : "negative",
+    });
+  }
+
+  // Leihgeschäft: Buchhaltung für die garantierte Rückkehr (siehe
+  // `decideClubOfferInjection`) bzw. Auflösung + Cointoss-Bonus bei der
+  // tatsächlichen Rückkehr - bewusst als echter Münzwurf (nicht an die
+  // Leih-Saison-Bewertung gekoppelt), weil die Perspektive nach einer Leihe
+  // laut Vorgabe bewusst UNGEWISS bleiben soll, nicht kalkulierbar.
+  if (reason === "loan") {
+    player.loanActive = true;
+    player.loanReturnClub = { clubId: oldClubId, name: oldName, country: league.countryName, tier: oldTier, strength: oldStrength };
+    player.loanReturnCountryId = oldCountryId;
+  } else if (reason === "loan-return") {
+    player.loanActive = false;
+    player.loanReturnClub = null;
+    player.loanReturnCountryId = null;
+    const coinToss = rng() < 0.5;
+    if (coinToss) {
+      player.reputation = clamp(player.reputation + 6, 0, 100);
+      player.morale = clamp(player.morale + 6, 0, 100);
+      player.roleProtectionSeasons = Math.max(player.roleProtectionSeasons, 2);
+      player.log.push({
+        season: 0,
+        age: player.age,
+        text: `${player.name} kehrt gereift von der Leihe zurück und überzeugt beim alten Verein von Beginn an.`,
+        kind: "positive",
+      });
+    } else {
+      player.morale = clamp(player.morale - 4, 0, 100);
+      player.clubRelation = clamp(player.clubRelation - 3, 0, 100);
+      player.log.push({
+        season: 0,
+        age: player.age,
+        text: `${player.name} tut sich nach der Rückkehr von der Leihe zunächst schwer, sich wieder einzufügen.`,
+        kind: "negative",
+      });
+    }
+  }
 
   // Vereinsgebundene Ereignis-Reihen enden mit dem Wechsel: der Konkurrent aus
   // dem "Rivalität im Kabinenflur"-Duell, der Trainer aus "Zoff mit dem
@@ -2009,9 +2191,13 @@ export function applyClubOfferChoice(
     `Liga: ${leagueLabel}`,
     `Gehalt: ${formatMoney(wage)} / Jahr`,
     `Rolle im Kader: ${newRole}`,
-    promiseKept
-      ? `Einsatzminuten-Versprechen eingehalten (${Math.round(promiseChance * 100)}% Chance)`
-      : `Einsatzminuten-Versprechen NICHT eingehalten (${Math.round(promiseChance * 100)}% Chance verpasst) - Vereinsbeziehung startet niedriger`,
+    ...(reason === "loan-return"
+      ? []
+      : [
+          promiseKept
+            ? `Einsatzminuten-Versprechen eingehalten (${Math.round(promiseChance * 100)}% Chance)`
+            : `Einsatzminuten-Versprechen NICHT eingehalten (${Math.round(promiseChance * 100)}% Chance verpasst) - Vereinsbeziehung startet niedriger`,
+        ]),
   ];
 
   // Ein Wechsel zu einem spürbar stärkeren Verein UND/ODER einer angeseheneren Liga
@@ -2185,6 +2371,31 @@ export function computeLegacy(player: Player): { score: number; tier: string; fa
 // Achievements ("Erfolge") - werden am Karriereende einmalig berechnet
 // ---------------------------------------------------------------------------
 
+/**
+ * Vermögens-Erfolg, gestaffelt statt einer einzelnen Schwelle: eine Simulation
+ * über 300 Karrieren zeigte, dass die alte einzelne Schwelle (2 Mio.) bei den
+ * im Spiel üblichen Gehältern praktisch IMMER erreicht wurde (P10 der
+ * simulierten Karrieren lag schon bei über 3 Mio.) - das Achievement war damit
+ * kaum aussagekräftig. Absteigend geprüft, nur die höchste erreichte Stufe
+ * wird gezeigt (kein Zuschütten mit 3 redundanten Badges gleichzeitig).
+ */
+/** Länderspiel-Erfolg, ebenfalls gestaffelt (siehe `WEALTH_TIERS`) statt einer
+ * einzelnen Schwelle - passend zur neu gestaffelten Berufungslogik (siehe
+ * `nationalTeamCallUpChance` in events.ts): 20+ bleibt ein solider Nationalspieler-
+ * Meilenstein, 100+ ist der seltene "Wunderkind"-Legendenstatus. */
+const NATIONAL_TEAM_TIERS: { id: string; label: string; description: string; threshold: number }[] = [
+  { id: "nationalmannschaft_legende", label: "Nationalmannschafts-Legende", description: "Über 100 Länderspiele - eine echte Institution in der Nationalelf.", threshold: 100 },
+  { id: "nationalmannschaft_stuetze", label: "Nationalmannschafts-Stütze", description: "Über 50 Länderspiele - ein fester Bestandteil der Nationalelf.", threshold: 50 },
+  { id: "nationalspieler", label: "Nationalspieler", description: "20 oder mehr Länderspiele bestritten.", threshold: 20 },
+];
+
+const WEALTH_TIERS: { id: string; label: string; description: string; threshold: number }[] = [
+  { id: "wirtschaftsimperium", label: "Eigenes Wirtschaftsimperium", description: "Über 25 Mio. € Karrierevermögen - ein eigenes Wirtschaftsimperium neben dem Fußball.", threshold: 25_000_000 },
+  { id: "fussball_kroesus", label: "Fußball-Krösus", description: "Über 15 Mio. € Karrierevermögen erwirtschaftet.", threshold: 15_000_000 },
+  { id: "multimillionaer", label: "Multimillionär", description: "Über 8 Mio. € Karrierevermögen erwirtschaftet.", threshold: 8_000_000 },
+  { id: "millionaer", label: "Selfmade-Millionär", description: "Über 2 Mio. € Karrierevermögen erwirtschaftet.", threshold: 2_000_000 },
+];
+
 export function computeAchievements(player: Player): Achievement[] {
   const t = player.careerTotals;
   const avgRatingOverall =
@@ -2193,15 +2404,24 @@ export function computeAchievements(player: Player): Achievement[] {
       : 6;
   const wasCaptain = player.log.some((e) => e.text.includes("Kapitänsbinde") || e.text.includes("Mannschaftskapitän"));
   const lowMatchSeasons = player.seasonHistory.filter((s) => s.matches < 10).length;
+  const wealthTier = WEALTH_TIERS.find((tier) => player.wealth >= tier.threshold);
+  const nationalTeamTier = NATIONAL_TEAM_TIERS.find((tier) => player.nationalTeamCaps >= tier.threshold);
 
   const defs: { id: string; label: string; description: string; positive: boolean; condition: boolean }[] = [
     { id: "torjaeger", label: "Torjäger", description: "Über 150 Karrieretore erzielt.", positive: true, condition: t.goals >= 150 },
     { id: "vorlagengeber", label: "Vorlagengeber", description: "Über 100 Karrierevorlagen aufgelegt.", positive: true, condition: t.assists >= 100 },
     { id: "titelsammler", label: "Titelsammler", description: "Mindestens 5 Titel gewonnen.", positive: true, condition: t.trophies.length >= 5 },
     { id: "weltklasse", label: "Weltklasse-Niveau", description: "Karriere-Ø-Bewertung von mindestens 7,5.", positive: true, condition: avgRatingOverall >= 7.5 },
-    { id: "nationalspieler", label: "Nationalspieler", description: "20 oder mehr Länderspiele bestritten.", positive: true, condition: player.nationalTeamCaps >= 20 },
+    ...(nationalTeamTier ? [{ id: nationalTeamTier.id, label: nationalTeamTier.label, description: nationalTeamTier.description, positive: true, condition: true }] : []),
     { id: "vereinstreue", label: "Vereinstreue", description: "Höchstens ein Vereinswechsel in der ganzen Karriere.", positive: true, condition: player.clubChangesCount <= 1 },
-    { id: "millionaer", label: "Selfmade-Millionär", description: "Über 2 Mio. € Karrierevermögen erwirtschaftet.", positive: true, condition: player.wealth >= 2_000_000 },
+    {
+      id: "ligalegende",
+      label: "Ligalegende",
+      description: "Die gesamte Karriere in einem einzigen Land bestritten - nie ins Ausland gewechselt.",
+      positive: true,
+      condition: !player.playedAbroad && t.matches >= 100,
+    },
+    ...(wealthTier ? [{ id: wealthTier.id, label: wealthTier.label, description: wealthTier.description, positive: true, condition: true }] : []),
     { id: "gebildet", label: "Kluger Kopf", description: "Hohes Bildungsniveau (80+) neben dem Profialltag gepflegt.", positive: true, condition: player.education >= 80 },
     { id: "familienmensch", label: "Familienmensch", description: "Verheiratet mit mindestens einem Kind.", positive: true, condition: player.relationshipStatus === "verheiratet" && player.children >= 1 },
     { id: "kapitaen", label: "Führungsspieler", description: "Wurde zum Mannschaftskapitän ernannt.", positive: true, condition: wasCaptain },
@@ -2497,7 +2717,14 @@ export function buildEpilogue(player: Player, tier: string): string {
 
   const outcome = choosePostCareerOutcome(player);
 
-  return [intro, attrLine, familyLine(player), outcome.line(player.name)].join(" ");
+  // Ein karriereprägender Moment (siehe "historisches_spiel_1") rahmt die Karriere
+  // rückblickend - namentlich für immer mit diesem einen Ereignis verknüpft, egal
+  // wie die restliche Karriere sonst verlief.
+  const definingMomentLine = player.definingMoment
+    ? ` Bis heute wird ${player.name} vor allem mit einem einzigen Moment in Verbindung gebracht: ${player.definingMoment.text}`
+    : "";
+
+  return [intro, attrLine, familyLine(player), outcome.line(player.name) + definingMomentLine].join(" ");
 }
 
 export function buildRetirementEvent(player: Player): GameEvent {
