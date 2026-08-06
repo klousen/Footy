@@ -163,6 +163,164 @@ export const EVENT_TEMPLATES: EventTemplate[] = [
       ],
     }),
   },
+  {
+    id: "jugend_turnierfahrt",
+    category: "jugend",
+    minAge: 15,
+    maxAge: 17,
+    weight: 1.4,
+    build: (p) => ({
+      category: "jugend",
+      title: "Auswärtsfahrt zum Jugendturnier",
+      description: `Die Jugendmannschaft von ${club(p)} fährt zu einem großen internationalen Nachwuchsturnier - eine seltene Chance, sich vor Scouts zu zeigen.`,
+      choices: [
+        {
+          id: "beweisen",
+          label: "Sich unbedingt beweisen wollen",
+          effects: {},
+          followUpChance: {
+            chance: 0.5,
+            success: { reputation: 5, attributes: { technik: 1 }, logText: "hat sich beim Jugendturnier vor den Scouts glänzend präsentiert.", logKind: "positive" },
+            failure: { morale: -3, logText: "hat sich beim Jugendturnier unter Druck gesetzt und enttäuscht.", logKind: "negative" },
+          },
+        },
+        {
+          id: "team",
+          label: "Vor allem als Team auftreten",
+          effects: { traitDeltas: { fuehrung: 1 }, clubRelation: 2, logText: "hat beim Jugendturnier vor allem den Teamgedanken in den Vordergrund gestellt.", logKind: "info" },
+        },
+      ],
+    }),
+  },
+  {
+    id: "jugend_wachstumsschmerzen",
+    category: "verletzung",
+    minAge: 14,
+    maxAge: 17,
+    weight: 1,
+    build: (_p, ctx) => ({
+      category: "verletzung",
+      title: "Wachstumsschmerzen im Knie",
+      description: "Der schnelle Wachstumsschub macht sich mit stechenden Schmerzen unterhalb der Kniescheibe bemerkbar - eine typische Wachstumsverletzung in diesem Alter.",
+      choices: [
+        {
+          id: "durchbeissen",
+          label: "Trotz der Schmerzen weitertrainieren",
+          effects: {},
+          followUpChance: {
+            chance: 0.4,
+            success: { attributes: { mentalitaet: 1 }, logText: "hat sich trotz Wachstumsschmerzen durchgebissen und keinen Schaden davongetragen.", logKind: "positive" },
+            failure: { injuryWeeksOut: rInt(ctx, 3, 6), injuryLabel: "Reizung am Knie (Wachstumsschmerzen)", morale: -3, logText: "hat die Wachstumsschmerzen ignoriert und sich eine Reizung am Knie zugezogen.", logKind: "negative" },
+          },
+        },
+        {
+          id: "pausieren",
+          label: "Pausieren und zum Physiotherapeuten gehen",
+          effects: { fitness: 4, educationPoints: 2, logText: "hat die Wachstumsschmerzen ernst genommen und pausiert.", logKind: "positive" },
+        },
+      ],
+    }),
+  },
+  {
+    id: "jugend_socialmedia_hype",
+    category: "medien",
+    minAge: 15,
+    maxAge: 17,
+    weight: 1,
+    // Bewusst niedrige Schwelle: mit 15-17 hat man realistisch noch keine große
+    // Bekanntheit aufgebaut, aber schon ein bisschen lokalen Buzz reicht für
+    // virale Jugendspiel-Ausschnitte.
+    condition: (p) => p.reputation > 6,
+    build: () => ({
+      category: "medien",
+      title: "Die ersten Follower als Nachwuchsspieler",
+      description: "Ausschnitte deiner Jugendspiele verbreiten sich in den sozialen Medien - plötzlich hast du als Teenager eine echte Fangemeinde.",
+      choices: [
+        {
+          id: "pflegen",
+          label: "Die Community aktiv pflegen",
+          effects: { traitDeltas: { medienimage: 3 }, reputation: 2, fitness: -1, logText: "hat als Jugendspieler begonnen, die eigene Social-Media-Präsenz aktiv zu pflegen.", logKind: "info" },
+        },
+        {
+          id: "raushalten",
+          label: "Sich raushalten und auf den Sport konzentrieren",
+          effects: { attributes: { mentalitaet: 1 }, logText: "hat sich vom frühen Social-Media-Hype bewusst ferngehalten.", logKind: "info" },
+        },
+      ],
+    }),
+  },
+  {
+    id: "jugend_vergleich_talent",
+    category: "jugend",
+    minAge: 14,
+    maxAge: 17,
+    weight: 1.2,
+    build: (p) => ({
+      category: "jugend",
+      title: "Das noch größere Talent",
+      description: `Ein Mitspieler in der Jugendmannschaft von ${club(p)} gilt als noch größeres Ausnahmetalent - die Vergleiche mit ihm/ihr sind allgegenwärtig.`,
+      choices: [
+        {
+          id: "anspornen",
+          label: "Sich davon anspornen lassen",
+          effects: { attributes: { technik: 1 }, traitDeltas: { arbeitsmoral: 3 }, logText: "hat sich vom Vergleich mit dem Ausnahmetalent zusätzlich anspornen lassen.", logKind: "positive" },
+        },
+        {
+          id: "resignieren",
+          label: "Sich im Vergleich klein fühlen",
+          effects: { morale: -4, traitDeltas: { arbeitsmoral: -1 }, logText: "hat sich im Schatten des Ausnahmetalents zunehmend klein gefühlt.", logKind: "negative" },
+        },
+      ],
+    }),
+  },
+  {
+    id: "jugend_elternehrgeiz",
+    category: "jugend",
+    minAge: 14,
+    maxAge: 16,
+    weight: 1,
+    build: () => ({
+      category: "jugend",
+      title: "Elternehrgeiz",
+      description: "Ein Elternteil mischt sich zunehmend in Training und Aufstellung ein und setzt dich mit hohen Erwartungen unter Druck.",
+      choices: [
+        {
+          id: "abgrenzen",
+          label: "Sich klar abgrenzen",
+          effects: { attributes: { mentalitaet: 1 }, morale: 2, traitDeltas: { disziplin: 1 }, logText: "hat sich klar von elterlichem Druck abgegrenzt.", logKind: "positive" },
+        },
+        {
+          id: "fuegen",
+          label: "Sich den Erwartungen fügen",
+          effects: { morale: -3, educationPoints: 2, logText: "hat sich dem elterlichen Ehrgeiz gefügt, statt sich abzugrenzen.", logKind: "negative" },
+        },
+      ],
+    }),
+  },
+  {
+    id: "jugend_heimweh_internat",
+    category: "lifestyle",
+    minAge: 14,
+    maxAge: 16,
+    weight: 1,
+    build: (p) => ({
+      category: "lifestyle",
+      title: "Heimweh im Internat",
+      description: `Das Leben im Nachwuchsleistungszentrum von ${club(p)}, weit weg von zu Hause, macht sich mit starkem Heimweh bemerkbar.`,
+      choices: [
+        {
+          id: "durchhalten",
+          label: "Die Zähne zusammenbeißen und durchhalten",
+          effects: { traitDeltas: { arbeitsmoral: 2, disziplin: 1 }, morale: -2, logText: "hat das Heimweh im Internat tapfer durchgestanden.", logKind: "info" },
+        },
+        {
+          id: "gespraech",
+          label: "Das Gespräch mit den Eltern und Betreuern suchen",
+          effects: { morale: 6, clubRelation: 2, logText: "hat das Heimweh offen angesprochen und Unterstützung gefunden.", logKind: "positive" },
+        },
+      ],
+    }),
+  },
 
   // ---------------------------------------------------------------------
   // TRAINING & LIFESTYLE (alle Altersstufen)
@@ -224,6 +382,60 @@ export const EVENT_TEMPLATES: EventTemplate[] = [
             id: "mental",
             label: "Mentaltraining mit dem Sportpsychologen",
             effects: { attributes: { mentalitaet: gain }, morale: 2, traitDeltas: { arbeitsmoral: 2 }, logText: "hat mentale Stärke aufgebaut.", logKind: "info" },
+          },
+        ],
+      };
+    },
+  },
+  {
+    id: "durchbruch_kabinenritual",
+    category: "lifestyle",
+    minAge: 18,
+    maxAge: 23,
+    weight: 1.3,
+    unique: true,
+    build: (p) => ({
+      category: "lifestyle",
+      title: "Kabinen-Ritual für Neuzugänge",
+      description: `Als Neuzugang bei ${club(p)} sollst du dich der Mannschaftstradition stellen: ein peinliches Lied vor versammelter Kabine singen.`,
+      choices: [
+        {
+          id: "mitmachen",
+          label: "Mit Humor mitmachen",
+          effects: { clubRelation: 8, attributes: { charisma: 1 }, traitDeltas: { medienimage: 1 }, logText: "hat das Kabinen-Ritual mit Humor über sich ergehen lassen und die Mannschaft für sich gewonnen.", logKind: "positive" },
+        },
+        {
+          id: "verweigern",
+          label: "Sich verweigern",
+          effects: { clubRelation: -6, traitDeltas: { disziplin: 1 }, logText: "hat sich dem traditionellen Kabinen-Ritual verweigert.", logKind: "negative" },
+        },
+      ],
+    }),
+  },
+  {
+    id: "durchbruch_erstes_gehalt",
+    category: "lifestyle",
+    minAge: 18,
+    maxAge: 23,
+    weight: 1,
+    unique: true,
+    condition: (p) => p.contract.wagePerYear > 20000,
+    build: (_p, ctx) => {
+      const carCost = rInt(ctx, 30, 60) * 1000;
+      return {
+        category: "lifestyle",
+        title: "Der erste große Gehaltsscheck",
+        description: "Das erste richtige Profi-Gehalt ist da - deutlich mehr Geld, als du je zuvor zur Verfügung hattest.",
+        choices: [
+          {
+            id: "investieren",
+            label: "Klug anlegen und sparen",
+            effects: { wealth: 8000, traitDeltas: { arbeitsmoral: 2 }, attributes: { intelligenz: 1 }, logText: "hat das erste große Gehalt klug angelegt statt es zu verprassen.", logKind: "positive" },
+          },
+          {
+            id: "auto",
+            label: "Sich ein Luxusauto gönnen",
+            effects: { wealth: -carCost, morale: 8, reputation: 2, logText: `hat sich vom ersten großen Gehalt ein Luxusauto für ${Math.round(carCost / 1000)} Tsd € gegönnt.`, logKind: "info" },
           },
         ],
       };
@@ -1292,6 +1504,146 @@ export const EVENT_TEMPLATES: EventTemplate[] = [
           id: "nein",
           label: "Lieber bescheiden bleiben",
           effects: { clubRelation: 3, logText: "hat auf ein großes Testimonial-Spiel verzichtet.", logKind: "info" },
+        },
+      ],
+    }),
+  },
+  {
+    id: "veteran_regeneration",
+    category: "training",
+    minAge: 30,
+    maxAge: 40,
+    weight: 1.4,
+    build: (p, ctx) => ({
+      category: "training",
+      title: "Der Kampf gegen die Uhr",
+      description: `Der Körper erholt sich nicht mehr wie mit 20 - der Athletiktrainer von ${club(p)} rät zu einem angepassten Trainingspensum.`,
+      choices: [
+        {
+          id: "reduzieren",
+          label: "Pensum bewusst reduzieren, auf Regeneration setzen",
+          effects: { fitness: rInt(ctx, 5, 9), traitDeltas: { disziplin: 1 }, logText: "hat das Trainingspensum bewusst reduziert und auf Regeneration gesetzt.", logKind: "positive" },
+        },
+        {
+          id: "vollgas",
+          label: "Weiter Vollgas geben wie eh und je",
+          effects: {},
+          followUpChance: {
+            chance: 0.5,
+            success: { attributes: { physis: 1 }, traitDeltas: { arbeitsmoral: 2 }, logText: "hat trotz des Alters weiter Vollgas gegeben und sich behauptet.", logKind: "positive" },
+            failure: { injuryWeeksOut: rInt(ctx, 3, 6), injuryLabel: "Überlastung", fitness: -6, logText: "hat sich mit dem alten Trainingspensum überlastet.", logKind: "negative" },
+          },
+        },
+      ],
+    }),
+  },
+  {
+    id: "veteran_binde_abgeben",
+    category: "meilenstein",
+    minAge: 32,
+    maxAge: 40,
+    weight: 1,
+    unique: true,
+    condition: (p) => p.traits.fuehrung >= 55 && p.clubRelation > 50,
+    build: (p) => ({
+      category: "meilenstein",
+      title: "Die Binde geht weiter",
+      description: `Der Trainer von ${club(p)} findet, es sei Zeit, die Kapitänsbinde an einen jüngeren Spieler weiterzureichen.`,
+      choices: [
+        {
+          id: "wuerdevoll",
+          label: "Die Rolle würdevoll abgeben und als Vorbild wirken",
+          effects: { clubRelation: 6, reputation: 4, traitDeltas: { fuehrung: 3 }, logText: "hat die Kapitänsbinde würdevoll an einen jüngeren Spieler weitergegeben.", logKind: "positive" },
+        },
+        {
+          id: "kaempfen",
+          label: "Um die Binde kämpfen",
+          effects: { morale: 4, clubRelation: -5, traitDeltas: { fuehrung: -1 }, logText: "hat um die Kapitänsbinde gekämpft, statt sie kampflos abzugeben.", logKind: "negative" },
+        },
+      ],
+    }),
+  },
+  {
+    id: "veteran_lockruf_geld",
+    category: "transfer",
+    minAge: 32,
+    maxAge: 38,
+    weight: 1,
+    condition: (p) => p.reputation > 55,
+    build: (p, ctx) => {
+      const wealthGain = rInt(ctx, 400, 900) * 1000;
+      return {
+        category: "transfer",
+        title: "Lockruf des großen Geldes",
+        description: `Ein finanzstarker Verein aus einer weniger konkurrenzfähigen Liga will dich von ${club(p)} weglocken - ein letzter großer, gut dotierter Vertrag vor dem Karriereende.`,
+        choices: [
+          {
+            id: "wechseln",
+            label: "Den lukrativen Wechsel wagen",
+            effects: {
+              wealth: wealthGain,
+              reputation: -6,
+              morale: 6,
+              wantsTransfer: true,
+              logText: `hat sich für den letzten großen Zahltag entschieden und wechselt in eine weniger konkurrenzfähige Liga (+${Math.round(wealthGain / 1000)} Tsd €).`,
+              logKind: "info",
+            },
+          },
+          {
+            id: "ablehnen",
+            label: "Sportlichen Ehrgeiz über das Geld stellen",
+            effects: { reputation: 3, clubRelation: 4, traitDeltas: { arbeitsmoral: 2 }, logText: "hat den lukrativen Lockruf abgelehnt und den sportlichen Ehrgeiz über das Geld gestellt.", logKind: "positive" },
+          },
+        ],
+      };
+    },
+  },
+  {
+    id: "veteran_tv_experte",
+    category: "medien",
+    minAge: 30,
+    maxAge: 40,
+    weight: 1,
+    condition: (p) => p.traits.medienimage >= 45,
+    build: () => ({
+      category: "medien",
+      title: "Erste Angebote als TV-Experte",
+      description: "Ein Sportsender fragt an, ob du schon während der aktiven Karriere gelegentlich als Experte vor der Kamera auftreten willst - eine frühe Investition in die Zeit danach.",
+      choices: [
+        {
+          id: "annehmen",
+          label: "Erste TV-Auftritte annehmen",
+          effects: { wealth: 12000, traitDeltas: { medienimage: 3 }, fitness: -2, logText: "hat neben der aktiven Karriere erste Auftritte als TV-Experte angenommen.", logKind: "positive" },
+        },
+        {
+          id: "ablehnen",
+          label: "Sich voll aufs Feld konzentrieren",
+          effects: { attributes: { mentalitaet: 1 }, logText: "hat sich lieber voll auf das Sportliche konzentriert statt auf TV-Auftritte.", logKind: "info" },
+        },
+      ],
+    }),
+  },
+  {
+    id: "veteran_familie_karriere",
+    category: "beziehung",
+    minAge: 30,
+    maxAge: 40,
+    weight: 1.2,
+    condition: (p) => p.relationshipStatus === "verheiratet" || p.children > 0,
+    build: (p) => ({
+      category: "beziehung",
+      title: "Die Familie wächst mit der Karriere",
+      description: `Zwischen Auswärtsspielen, Lehrgängen und dem Alltag bei ${club(p)} wird es zunehmend schwerer, genug Zeit für die Familie zu finden.`,
+      choices: [
+        {
+          id: "familie",
+          label: "Bewusst mehr Zeit für die Familie freihalten",
+          effects: { morale: 6, attributes: { mentalitaet: 1 }, clubRelation: -2, logText: "hält sich bewusst mehr Zeit für die Familie frei.", logKind: "positive" },
+        },
+        {
+          id: "karriere",
+          label: "Der Karriere weiter Priorität geben",
+          effects: { reputation: 3, clubRelation: 3, morale: -4, logText: "gibt der Karriere weiter klar Priorität vor dem Familienleben.", logKind: "negative" },
         },
       ],
     }),
