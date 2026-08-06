@@ -226,6 +226,11 @@ export interface EffectDelta {
   relationshipStatus?: RelationshipStatus;
   /** `null` setzt explizit "keine Partnerschaft mehr" (Trennung). */
   partnerName?: string | null;
+  /** Merkt sich den Namen einer/eines Ex-Partnerin/-Partners nach einer Trennung
+   * durch Auslandswechsel (siehe `beziehung_auslandswechsel_risiko`) - Grundlage
+   * für "beziehung_alte_liebe_zurueck" nach der Rückkehr in die Heimat.
+   * `null` setzt explizit zurück (z.B. nach Auflösung dieses Handlungsstrangs). */
+  exPartnerName?: string | null;
   childrenDelta?: number;
   /** Länderspiel-Einsätze (Nationalmannschaft), addiert auf `Player.nationalTeamCaps`. */
   capsDelta?: number;
@@ -433,6 +438,9 @@ export interface Player {
   cupExitThisSeason: boolean;
   relationshipStatus: RelationshipStatus;
   partnerName: string | null;
+  /** Name der/des Ex-Partnerin/-Partners nach einer Trennung durch Auslandswechsel -
+   * siehe `EffectDelta.exPartnerName` und "beziehung_alte_liebe_zurueck". */
+  exPartnerName: string | null;
   children: number;
   /** Charakterwerte aus vergangenen Entscheidungen - siehe `TraitKey`. */
   traits: Traits;

@@ -174,6 +174,7 @@ export function createPlayer(
       cupExitThisSeason: false,
       relationshipStatus: "single",
       partnerName: null,
+      exPartnerName: null,
       children: 0,
       traits: { arbeitsmoral: 50, disziplin: 50, medienimage: 50, fuehrung: 50 },
       activeStorylines: [],
@@ -462,6 +463,7 @@ function applyEffects(player: Player, effects: EventChoice["effects"], season: n
     player.secondSpringSeasons = Math.max(player.secondSpringSeasons, 3);
   }
   if (effects.partnerName !== undefined) player.partnerName = effects.partnerName;
+  if (effects.exPartnerName !== undefined) player.exPartnerName = effects.exPartnerName;
   if (effects.childrenDelta) player.children = Math.max(0, player.children + effects.childrenDelta);
   if (effects.capsDelta) player.nationalTeamCaps = Math.max(0, player.nationalTeamCaps + effects.capsDelta);
   if (effects.goalsDelta) player.nationalTeamGoals = Math.max(0, player.nationalTeamGoals + effects.goalsDelta);

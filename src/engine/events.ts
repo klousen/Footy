@@ -1432,7 +1432,8 @@ export const EVENT_TEMPLATES: EventTemplate[] = [
       p.country !== p.homeCountryId &&
       recentlyTransferred(p),
     build: (p) => {
-      const name = p.partnerName ?? "deine Partnerin/dein Partner";
+      const realName = p.partnerName;
+      const name = realName ?? "deine Partnerin/dein Partner";
       return {
         category: "beziehung",
         title: "Fernbeziehung oder Umzug?",
@@ -1466,6 +1467,10 @@ export const EVENT_TEMPLATES: EventTemplate[] = [
               failure: {
                 relationshipStatus: "single",
                 partnerName: null,
+                // Trennung durch den Auslandswechsel - Grundlage für ein mögliches
+                // Wiederaufflammen nach der Rückkehr in die Heimat (siehe
+                // "beziehung_alte_liebe_zurueck").
+                exPartnerName: realName,
                 morale: -9,
                 logText: `Die Fernbeziehung mit ${name} ist an der Distanz zum neuen Auslandsverein zerbrochen.`,
                 logKind: "negative",
@@ -1479,6 +1484,7 @@ export const EVENT_TEMPLATES: EventTemplate[] = [
             effects: {
               relationshipStatus: "single",
               partnerName: null,
+              exPartnerName: realName,
               morale: -5,
               logText: `hat sich vor dem Auslandswechsel einvernehmlich von ${name} getrennt.`,
               logKind: "negative",
@@ -1561,6 +1567,81 @@ export const EVENT_TEMPLATES: EventTemplate[] = [
                 logText: `hat die eigene Lustlosigkeit einfach ignoriert, bis die Beziehung mit ${name} daran zerbrochen ist.`,
                 logKind: "negative",
               },
+            },
+          },
+        ],
+      };
+    },
+  },
+  {
+    id: "beziehung_alte_liebe_zurueck",
+    category: "beziehung",
+    minAge: 19,
+    maxAge: 40,
+    weight: 2.5,
+    // Nur einmal pro Karriere relevant - hängt an einem konkreten Ex-Partner/einer
+    // konkreten Ex-Partnerin (siehe `exPartnerName`), nicht an einem wiederholbaren
+    // Muster.
+    unique: true,
+    exclusiveGroup: "beziehung_start",
+    // Setzt voraus: aktuell Single UND ein offener Handlungsstrang aus einer
+    // früheren Trennung durch Auslandswechsel (siehe `beziehung_auslandswechsel_risiko`
+    // - `exPartnerName` wird NUR dort gesetzt). Da eine Trennung durch Auslandswechsel
+    // per Definition voraussetzt, dass man das Land verlassen hatte, bedeutet
+    // `p.country === p.homeCountryId` hier automatisch "wieder zurück in der Heimat" -
+    // ohne zusätzliche `recentlyTransferred`-Einschränkung, da diese das Zeitfenster
+    // (frischer Wechsel + Single + daheim, alles gleichzeitig) unrealistisch eng
+    // gemacht und das Event dadurch de facto nie zum Zug kommen ließ.
+    condition: (p) => p.relationshipStatus === "single" && !!p.exPartnerName && p.country === p.homeCountryId,
+    build: (p) => {
+      const name = p.exPartnerName ?? "der alten Liebe";
+      return {
+        category: "beziehung",
+        title: "Nachricht aus alten Zeiten",
+        description: `Zurück in der Heimat meldet sich unerwartet ${name} per WhatsApp - die Person, von der du dich damals wegen des Auslandswechsels getrennt hattest. Ob sich nach der Zeit und der Distanz wieder etwas anknüpfen lässt?`,
+        choices: [
+          {
+            id: "antworten_treffen",
+            label: "Antworten und sich treffen",
+            detail: "Ein echter zweiter Anlauf - ob der alte Funke wieder überspringt, ist offen.",
+            effects: {},
+            followUpChance: {
+              chance: 0.6,
+              success: {
+                relationshipStatus: "in_beziehung",
+                partnerName: name,
+                exPartnerName: null,
+                morale: 12,
+                reputation: 1,
+                logText: `hat sich nach der Rückkehr in die Heimat mit der alten Liebe ${name} wiedergefunden.`,
+                logKind: "positive",
+              },
+              failure: {
+                exPartnerName: null,
+                morale: -3,
+                logText: `hat sich mit ${name} getroffen - der alte Funke war nach der Zeit auseinander aber einfach nicht mehr da.`,
+                logKind: "negative",
+              },
+            },
+          },
+          {
+            id: "freundlich_ablehnen",
+            label: "Freundlich, aber bestimmt ablehnen",
+            detail: "Klarer Schnitt - die Vergangenheit bleibt Vergangenheit.",
+            effects: {
+              exPartnerName: null,
+              logText: `hat der Nachricht von ${name} freundlich, aber bestimmt eine Absage erteilt.`,
+              logKind: "info",
+            },
+          },
+          {
+            id: "nicht_antworten",
+            label: "Nicht antworten",
+            detail: "Die Nachricht bleibt unbeantwortet im Chat stehen.",
+            effects: {
+              exPartnerName: null,
+              logText: `hat auf die Nachricht von ${name} gar nicht erst reagiert.`,
+              logKind: "info",
             },
           },
         ],
