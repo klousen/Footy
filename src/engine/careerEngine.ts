@@ -899,15 +899,17 @@ function growthRate(age: number): number {
 /** Anteil des aktuellen Werts, der pro Saison im Alter abgebaut wird - moderner
  * Profifußball erlaubt eine deutlich längere Prime als früher üblich: bis
  * 32/33 ist heute oft noch echtes Topniveau drin, der harte Abbau setzt daher
- * bewusst erst danach ein (vorher: schon ab 30 spürbar, ab 33 richtig hart -
- * das ließ selbst kerngesunde Spieler zu früh spürbar altern). Siehe
- * `declineConditionMultiplier` für die individuelle Modulation je Spieler
- * (Physis/Verletzungshistorie). */
+ * bewusst erst danach ein. ABER: selbst mit dieser verlängerten Prime muss der
+ * Abbau ab Mitte 30 spürbar bleiben - ein 36-Jähriger mit praktisch
+ * unverändertem Peak-Niveau (90 OVR) wirkt unrealistisch, selbst für
+ * Ausnahmeathleten (siehe `declineConditionMultiplier`). Frühere Werte (0.025/
+ * 0.05/0.09) ließen genau das zu, weil sie sich mit den Multiplikatoren unten
+ * zu weit nach unten kombinieren ließen. Jetzt spürbar steiler: */
 function declineRate(age: number): number {
   if (age <= 32) return 0;
-  if (age <= 35) return 0.025;
-  if (age <= 38) return 0.05;
-  return 0.09;
+  if (age <= 35) return 0.04;
+  if (age <= 38) return 0.075;
+  return 0.13;
 }
 
 /**
@@ -922,13 +924,16 @@ function declineRate(age: number): number {
  *   Ausfallwochen angesammelt hat, zahlt das Alter über spürbar früheren
  *   Verschleiß zurück.
  * Beide Faktoren multiplizieren sich - ein durchweg gesunder Spieler mit
- * hoher Physis kann seine Prime damit deutlich über das alte pauschale Modell
- * hinaus verlängern, ein verletzungsanfälliger Spieler mit niedriger Physis
- * baut entsprechend schneller ab als der Altersschnitt.
+ * hoher Physis baut spürbar langsamer ab als der Altersschnitt, ein
+ * verletzungsanfälliger Spieler mit niedriger Physis entsprechend schneller.
+ * Die Bandbreite bleibt bewusst enger als in einer früheren Version: selbst
+ * der bestmögliche Fall (Top-Physis, nie verletzt) darf den Abbau nicht auf
+ * die Hälfte drücken - sonst bleiben genau die Ausnahmespieler, die man am
+ * ehesten bis zum Karriereende spielt, unrealistisch nah am Peak.
  */
 function declineConditionMultiplier(player: Player): number {
-  const physisFactor = clamp(1.15 - (player.attributes.physis - 50) / 150, 0.7, 1.3);
-  const injuryFactor = clamp(0.85 + player.totalInjuryWeeks / 250, 0.85, 1.5);
+  const physisFactor = clamp(1.1 - (player.attributes.physis - 50) / 200, 0.8, 1.25);
+  const injuryFactor = clamp(0.9 + player.totalInjuryWeeks / 300, 0.9, 1.4);
   return physisFactor * injuryFactor;
 }
 
@@ -948,7 +953,7 @@ function squadRoleGrowthMultiplier(role: SquadRole): number {
   return 1;
 }
 function squadRoleDeclineMultiplier(role: SquadRole): number {
-  if (role === "Stammspieler") return 0.75;
+  if (role === "Stammspieler") return 0.85;
   if (role === "Rotation") return 1;
   if (role === "Ergänzungsspieler") return 1.25;
   if (role === "Ersatzbank") return 1.6;
@@ -1520,13 +1525,39 @@ function getOrBuildForeignLeague(
   return built;
 }
 
-function pickForeignCountryIds(excludeId: CountryId, count: number): CountryId[] {
-  const pool = COUNTRIES.map((c) => c.id).filter((id) => id !== excludeId);
+/**
+ * Zielland-Auswahl für Auslandsangebote - bewusst NICHT gleichverteilt über alle
+ * neun übrigen Länder, sondern mit realem Transfermarkt-Muster gewichtet: Top-
+ * Ligen (niedriger `uefaRank`) haben mehr Scouting-Reichweite/Geld und tauchen
+ * daher grundsätzlich etwas häufiger als Zielland auf. Steckt der Spieler
+ * gerade in einer wenig angesehenen Liga (`currentLeagueRank` groß), wird
+ * dieser Effekt deutlich verstärkt - genau dann jagen die Top-3-Ligen gezielt
+ * nach Perlen in kleineren Ligen, statt gleichmäßig über alle Länder zu
+ * streuen (siehe Bugreport: eine Karriere blieb fast komplett auf Belgien
+ * beschränkt, obwohl die Gesamtstärke längst Top-Liga-Niveau erreicht hatte). */
+function pickForeignCountryIds(excludeId: CountryId, count: number, currentLeagueRank: number): CountryId[] {
+  const isInWeakLeague = currentLeagueRank >= 5;
+  const weighted = COUNTRIES.filter((c) => c.id !== excludeId).map((c) => {
+    const rank = c.uefaRank - 1; // 0 = angesehenste Liga der Auswahl
+    let weight = 1 / (1 + rank * 0.25);
+    if (isInWeakLeague && rank <= 2) weight *= 2.2;
+    return { id: c.id, weight };
+  });
+
   const picked: CountryId[] = [];
-  for (let i = 0; i < count && pool.length > 0; i++) {
-    const idx = Math.floor(rng() * pool.length);
-    picked.push(pool[idx]);
-    pool.splice(idx, 1);
+  for (let i = 0; i < count && weighted.length > 0; i++) {
+    const totalWeight = weighted.reduce((s, w) => s + w.weight, 0);
+    let r = rng() * totalWeight;
+    let idx = weighted.length - 1;
+    for (let j = 0; j < weighted.length; j++) {
+      r -= weighted[j].weight;
+      if (r <= 0) {
+        idx = j;
+        break;
+      }
+    }
+    picked.push(weighted[idx].id);
+    weighted.splice(idx, 1);
   }
   return picked;
 }
@@ -1537,16 +1568,27 @@ function pickForeignCountryIds(excludeId: CountryId, count: number): CountryId[]
  * Karriereende zieht es die meisten Spieler, die noch in der Heimat spielen, eher
  * seltener in ein komplett neues Land - wer bereits im Ausland spielt, bekommt
  * weiterhin regelmäßig "Auslands"-Angebote, die dann aber gezielt Richtung Heimat
- * zeigen (siehe `buildClubOfferEvent`), statt in ein drittes, neues Land. */
+ * zeigen (siehe `buildClubOfferEvent`), statt in ein drittes, neues Land.
+ *
+ * Zusätzlicher "Scouting-Bonus": eine hohe Gesamtstärke in einer wenig
+ * angesehenen Liga (siehe `leaguePrestigeRank`) fällt Scouts der Topligen
+ * besonders auf - eine "verkannte Perle in der kleinen Liga" ist ein reales,
+ * häufiges Transfermarkt-Muster. Ohne diesen Bonus konnte eine Karriere
+ * praktisch komplett in einer einzigen kleinen Liga verlaufen, selbst bei
+ * Top-Liga-reifer Gesamtstärke, weil die Chance bis hierhin nur von
+ * Bekanntheit/Gesamtstärke absolut, nie vom Kontrast zur eigenen (schwachen)
+ * Liga abhing. */
 function internationalOfferChance(reason: ClubOfferReason, player: Player, overall: number): number {
   const fameFactor = player.reputation / 250 + overall / 300; // ~0 .. 0.65
-  if (player.wantsTransfer) return clamp(0.55 + fameFactor, 0.45, 0.9);
+  const currentLeagueRank = leaguePrestigeRank(player.country); // 0 (Top-Liga) .. 9 (schwächste)
+  const scoutingBonus = clamp((overall - 70) / 30, 0, 1) * clamp(currentLeagueRank / 9, 0, 1) * 0.3; // 0 .. 0.3
+  if (player.wantsTransfer) return clamp(0.55 + fameFactor + scoutingBonus, 0.45, 0.92);
   const base =
     reason === "pro-debut"
-      ? clamp(0.15 + fameFactor, 0.1, 0.5)
+      ? clamp(0.15 + fameFactor + scoutingBonus, 0.1, 0.55)
       : reason === "opportunity"
-      ? clamp(0.3 + fameFactor, 0.25, 0.75)
-      : clamp(0.15 + fameFactor, 0.1, 0.4);
+      ? clamp(0.3 + fameFactor + scoutingBonus, 0.25, 0.8)
+      : clamp(0.15 + fameFactor + scoutingBonus, 0.1, 0.45);
   const isLateCareerAtHome =
     (player.stage === "veteran" || player.stage === "spaetphase") && player.country === player.homeCountryId;
   return isLateCareerAtHome ? base * 0.5 : base;
@@ -1731,10 +1773,14 @@ function buildClubOfferEvent(
     // "Auslands"-Plätze wird dann gezielt mit dem Heimatland belegt statt zufällig
     // gewählt (siehe `internationalOfferChance` für die Kehrseite: wer schon zuhause
     // spielt, bekommt seltener ein brandneues Auslandsangebot).
+    const currentLeagueRank = leaguePrestigeRank(player.country);
     const foreignCountryIds =
       isLateCareer && isAbroad && rng() < 0.7
-        ? [player.homeCountryId, ...pickForeignCountryIds(player.country, foreignCount - 1)].slice(0, foreignCount)
-        : pickForeignCountryIds(player.country, foreignCount);
+        ? [player.homeCountryId, ...pickForeignCountryIds(player.country, foreignCount - 1, currentLeagueRank)].slice(
+            0,
+            foreignCount
+          )
+        : pickForeignCountryIds(player.country, foreignCount, currentLeagueRank);
     for (const countryId of foreignCountryIds) {
       const foreignLeague = getOrBuildForeignLeague(foreignLeagues, countryId);
       const foreignPool = [...foreignLeague.tier1, ...foreignLeague.tier2];

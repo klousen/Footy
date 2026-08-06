@@ -180,15 +180,16 @@ export function drawShareCard(canvas: HTMLCanvasElement, data: ShareCardData): v
   ctx.font = `800 ${nameSize}px "Segoe UI", system-ui, sans-serif`;
   ctx.fillText(data.name, W / 2, cursorY);
 
-  // Position / Land / Verein
+  // Position / Land / Verein - über fitText schrumpfen statt fest 30px, sonst
+  // läuft eine lange Kombination (z.B. "Zentrales Mittelfeld · Niederlande ·
+  // 14-38 Jahre") rechts über den Canvas-Rand hinaus (siehe Bugreport: Zeile
+  // war im Sharepic abgeschnitten).
   cursorY += 48;
-  ctx.font = '500 30px "Segoe UI", system-ui, sans-serif';
+  const metaLine = `${data.positionLabel} · ${data.flag} ${data.countryName} · ${data.ageRange} Jahre`;
+  const metaSize = fitText(ctx, metaLine, W - 120, 30, 18, "500");
+  ctx.font = `500 ${metaSize}px "Segoe UI", system-ui, sans-serif`;
   ctx.fillStyle = CHALK_DIM;
-  ctx.fillText(
-    `${data.positionLabel} · ${data.flag} ${data.countryName} · ${data.ageRange} Jahre`,
-    W / 2,
-    cursorY
-  );
+  ctx.fillText(metaLine, W / 2, cursorY);
   cursorY += 42;
   ctx.font = '500 26px "Segoe UI", system-ui, sans-serif';
   ctx.fillStyle = CHALK_DIM;
