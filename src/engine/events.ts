@@ -1130,7 +1130,11 @@ export const EVENT_TEMPLATES: EventTemplate[] = [
     minAge: 17,
     maxAge: 40,
     weight: 3,
-    condition: (p) => p.contract.yearsLeft <= 1,
+    // Der Ausbildungsvertrag in der Jugendakademie (siehe `createPlayer`, läuft
+    // ebenfalls mit yearsLeft) ist noch kein echter Profivertrag - eine
+    // "Vertragsverlängerung" ergibt inhaltlich erst ab dem ersten Profivertrag
+    // Sinn (siehe `shouldOfferProDebut`/`applyClubOfferChoice` "stay-debut").
+    condition: (p) => p.contract.squadRole !== "Ausbildungsspieler" && p.contract.yearsLeft <= 1,
     build: (p) => ({
       category: "vertrag",
       title: "Vertragsverlängerung",

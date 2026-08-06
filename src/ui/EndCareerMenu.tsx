@@ -20,7 +20,7 @@ export function EndCareerMenu({
         <p className="muted">Wie möchtest du fortfahren?</p>
         <div className="end-career-actions">
           <button className="btn btn-primary" onClick={onViewSummary}>
-            Karriereübersicht ansehen
+            Karriere beenden und Übersicht ansehen
           </button>
           <button className="btn btn-secondary" onClick={onNewCareer}>
             Neue Karriere starten
