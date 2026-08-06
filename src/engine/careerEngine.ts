@@ -10,6 +10,7 @@ import type {
   GameEvent,
   GameState,
   LeagueState,
+  LeagueTier,
   LogEntry,
   Player,
   Position,
@@ -884,6 +885,21 @@ function leaguePrestigeMultiplier(countryId: CountryId): number {
 }
 
 /**
+ * 1-indexierter Rang eines Vereins innerhalb der ERSTEN Liga seines Landes nach
+ * Stärke (1 = stärkster Erstligist) - dient als Näherung dafür, ob ein Verein nicht
+ * nur "eine hohe Zahl" hat, sondern tatsächlich die klare Tabellenspitze seiner Liga
+ * ist (siehe `internationalFlairBonus`). Zweitligisten sind hierfür nie relevant
+ * (liefert dann `undefined`) - laut echten UEFA-Team-Koeffizienten sind praktisch
+ * ausschließlich Erstligisten unter den international prägenden Topklubs.
+ */
+function clubLeagueRank(clubId: string, tier: LeagueTier, league: LeagueState): number | undefined {
+  if (tier !== 1) return undefined;
+  const sorted = [...league.tier1].sort((a, b) => b.strength - a.strength);
+  const idx = sorted.findIndex((c) => c.id === clubId);
+  return idx === -1 ? undefined : idx + 1;
+}
+
+/**
  * "Internationaler Flair"-Bonus: ein wirklich absoluter Topklub (Champions-League-
  * Format-Niveau) IN einer der großen Ligen bringt kommerziell mehr mit, als die reine
  * Stärkezahl hergibt - globale Sponsoren, TV-Vermarktung, CL-Prämien. Bewusst als
@@ -893,11 +909,23 @@ function leaguePrestigeMultiplier(countryId: CountryId): number {
  * Verein in einer Topliga bekommt keinen Flair-Aufschlag nur fürs Liga-Ansehen (das
  * deckt bereits `leaguePrestigeMultiplier` ab). Wirkt daher nur ganz oben - ab Stärke
  * 80 aufwärts und nur in den (grob) fünf angesehensten Ligen dieser Auswahl.
+ *
+ * Zusätzlich ein spürbarer Aufschlag für die absolute Tabellenspitze der eigenen Liga
+ * (siehe `clubLeagueRank`, optionaler `leagueRank`-Parameter): laut den echten UEFA-
+ * Team-Koeffizienten (siehe `CountryDef.uefaRank`) sind die WELTWEIT prägenden
+ * Topklubs nicht gleichmäßig über eine Topliga verteilt, sondern konzentrieren sich
+ * auf deren Tabellenspitze (Bayern klar vor dem Rest der Bundesliga, PSG klar vor dem
+ * Rest der Ligue 1, während England/Spanien gleich mehrere Vereine ganz oben stellen)
+ * - ein Rang-1-Verein bekommt daher den größten Aufschlag, Rang 2/3 einen kleineren,
+ * gestaffelt nach demselben Liga-Ansehen wie der Basis-Flair.
  */
-function internationalFlairBonus(clubStrength: number, countryId: CountryId): number {
+function internationalFlairBonus(clubStrength: number, countryId: CountryId, leagueRank?: number): number {
   const strengthFactor = clamp((clubStrength - 80) / 19, 0, 1); // 0 unter 80, 1 ab Stärke 99
   const prestigeFactor = clamp((leaguePrestigeMultiplier(countryId) - 1) / 0.3, 0, 1); // 0 ab Rang 5, 1 bei Rang 0
-  return strengthFactor * prestigeFactor;
+  let bonus = strengthFactor * prestigeFactor;
+  const rankBonus = leagueRank === 1 ? 1 : leagueRank === 2 ? 0.55 : leagueRank === 3 ? 0.3 : 0;
+  bonus += rankBonus * prestigeFactor * strengthFactor * 0.6;
+  return bonus;
 }
 
 /**
@@ -909,10 +937,11 @@ function internationalFlairBonus(clubStrength: number, countryId: CountryId): nu
  * ein "92" beim internationalen Aushängeschild nochmal mehr als ein "92" beim
  * soliden Mittelständler derselben Liga - dient als einheitliche Basis fürs
  * Gehalt (und ließe sich künftig für weitere vereinsbezogene Berechnungen
- * wiederverwenden).
+ * wiederverwenden). `leagueRank` (optional, siehe `clubLeagueRank`) verstärkt
+ * das für die tatsächliche Tabellenspitze der eigenen Liga zusätzlich.
  */
-function clubCoefficient(club: { strength: number }, countryId: CountryId): number {
-  const flair = internationalFlairBonus(club.strength, countryId);
+function clubCoefficient(club: { strength: number }, countryId: CountryId, leagueRank?: number): number {
+  const flair = internationalFlairBonus(club.strength, countryId, leagueRank);
   return club.strength * leaguePrestigeMultiplier(countryId) * (1 + flair * 0.5);
 }
 
@@ -924,9 +953,15 @@ function clubCoefficient(club: { strength: number }, countryId: CountryId): numb
  * eines Kellerkinds, nicht nur spürbar mehr. Wird sowohl in der Angebots-
  * Vorschau als auch bei der tatsächlichen Zusage verwendet, damit das
  * versprochene Gehalt exakt dem entspricht, was man am Ende bekommt. */
-function estimateWage(overall: number, reputation: number, club: { strength: number }, countryId: CountryId): number {
+function estimateWage(
+  overall: number,
+  reputation: number,
+  club: { strength: number },
+  countryId: CountryId,
+  leagueRank?: number
+): number {
   const baseline = 8000 + reputation * 900 + overall * 1200;
-  const coeff = clubCoefficient(club, countryId);
+  const coeff = clubCoefficient(club, countryId, leagueRank);
   // 55 als grober Referenzwert für einen "durchschnittlichen" Erstliga-Verein -
   // Vereine deutlich darüber/darunter skalieren das Gehalt spürbar über- bzw.
   // unterproportional (Potenz statt linearer Faktor). Obergrenze bewusst höher als
@@ -1259,6 +1294,9 @@ interface OfferCandidate {
   flag: string;
   leagueLabel: string;
   isForeign: boolean;
+  /** Tabellenplatz nach Stärke innerhalb der Erstliga des Kandidaten-Vereins, siehe
+   * `clubLeagueRank` - fließt in den "internationaler Flair"-Gehaltsaufschlag ein. */
+  leagueRank?: number;
 }
 
 /**
@@ -1291,6 +1329,7 @@ function pastClubCandidate(
         flag: lg.flag,
         leagueLabel: leagueNameForTier(lg, club.tier),
         isForeign: countryId !== player.country,
+        leagueRank: clubLeagueRank(club.id, club.tier, lg),
       };
     }
   }
@@ -1365,6 +1404,7 @@ function buildClubOfferEvent(
     flag: league.flag,
     leagueLabel: leagueNameForTier(league, c.tier),
     isForeign: false,
+    leagueRank: clubLeagueRank(c.id, c.tier, league),
   }));
 
   if (foreignCount > 0) {
@@ -1390,6 +1430,7 @@ function buildClubOfferEvent(
         flag: foreignLeague.flag,
         leagueLabel: leagueNameForTier(foreignLeague, club.tier),
         isForeign: true,
+        leagueRank: clubLeagueRank(club.id, club.tier, foreignLeague),
       });
     }
   }
@@ -1410,7 +1451,7 @@ function buildClubOfferEvent(
   const choices: EventChoice[] = candidates.map((cand) => {
     // Dieselbe Formel wie bei der tatsächlichen Zusage (siehe `applyClubOfferChoice`),
     // damit das hier gezeigte Gehalt exakt dem entspricht, was man am Ende bekommt.
-    const wagePreview = estimateWage(overall, player.reputation, cand.club, cand.countryId);
+    const wagePreview = estimateWage(overall, player.reputation, cand.club, cand.countryId, cand.leagueRank);
     const transferOverall = transferEffectiveOverall(player, overall, currentStrength);
     const promisedRole = squadRoleForOverall(transferOverall, cand.club.strength);
     // Das Einsatzminuten-Versprechen eines NEUEN Vereins ist nie hundertprozentig
@@ -1434,7 +1475,13 @@ function buildClubOfferEvent(
     // gegenüber einem Fremdwechsel (bessere Startbeziehung, etwas Moral- und
     // Mentalitätsschub durch die vertraute Umgebung), damit "beim Verein
     // bleiben" eine attraktive und keine bloß neutrale Wahl ist.
-    const stayWagePreview = estimateWage(overall, player.reputation, player.club, player.country);
+    const stayWagePreview = estimateWage(
+      overall,
+      player.reputation,
+      player.club,
+      player.country,
+      clubLeagueRank(player.club.clubId, player.club.tier, league)
+    );
     choices.push({
       id: "stay-debut",
       label: `Profivertrag bei ${player.club.name} unterschreiben`,
@@ -1592,7 +1639,13 @@ export function applyClubOfferChoice(
     // (75 statt 60) und ein kleiner Mentalitäts-/Moralschub durch die
     // vertraute Umgebung.
     const overall = overallRating(player);
-    const wage = estimateWage(overall, player.reputation, player.club, player.country);
+    const wage = estimateWage(
+      overall,
+      player.reputation,
+      player.club,
+      player.country,
+      clubLeagueRank(player.club.clubId, player.club.tier, league)
+    );
     const newRole = squadRoleForOverall(overall, player.club.strength);
     player.contract = { club: player.club.name, yearsLeft: 3, wagePerYear: wage, squadRole: newRole };
     player.clubRelation = 75;
@@ -1657,7 +1710,7 @@ export function applyClubOfferChoice(
   const oldStrength = player.club.strength;
   const wageCountryId = movingCountryId ?? player.country;
   player.club = { clubId: chosen.id, name: chosen.city, country: targetLeague.countryName, tier: chosen.tier, strength: chosen.strength };
-  const wage = estimateWage(overall, player.reputation, chosen, wageCountryId);
+  const wage = estimateWage(overall, player.reputation, chosen, wageCountryId, clubLeagueRank(chosen.id, chosen.tier, targetLeague));
   // Derselbe bewiesene Stammspieler-Bodensatz wie in der Angebots-Vorschau (siehe
   // `transferEffectiveOverall`), damit das dort gezeigte Versprechen exakt dem
   // entspricht, was hier tatsächlich ausgewürfelt wird.
