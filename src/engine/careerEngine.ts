@@ -1066,6 +1066,12 @@ export function resolveClubSituation(player: Player, league: LeagueState): LogEn
  * Simuliert die komplette Liga-Saison (alle Vereine) und wendet Auf-/Abstieg an.
  * Aktualisiert `player.club`, falls der eigene Verein betroffen ist, und markiert
  * die zuletzt gespeicherten Saisonstatistiken entsprechend.
+ *
+ * Da die Liga-Pyramide nur zwei Ebenen kennt (siehe `simulateLeaguePromotionRelegation`),
+ * kann `wasRelegated` für einen Liga-2-Spieler nie zutreffen - ein Liga-2-Verein hat
+ * keine tiefere Liga, in die er absteigen könnte, bleibt bei schwacher Tabellenlage
+ * also einfach in Liga 2. Nur Liga-1-Vereine können absteigen, nur Liga-2-Vereine
+ * aufsteigen.
  */
 export function applyLeaguePromotionRelegation(player: Player, league: LeagueState): LogEntry | null {
   const result = simulateLeaguePromotionRelegation(league, rng);

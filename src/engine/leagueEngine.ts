@@ -139,6 +139,15 @@ export interface PromotionRelegationResult {
  * Simuliert die komplette Saison für Liga 1 und Liga 2 eines Landes und wendet
  * Auf-/Abstieg an (mutiert `league.tier1` / `league.tier2`). Vereins-IDs bleiben
  * über Auf-/Abstieg hinweg stabil.
+ *
+ * WICHTIG: Die Liga-Pyramide hat bewusst nur zwei Ebenen (siehe `LeagueTier = 1 | 2`
+ * in types.ts) - es gibt keine dritte Liga. `relegated` wird daher ausschließlich
+ * aus den schwächsten Liga-1-Vereinen gespeist (steigen nach Liga 2 ab), `promoted`
+ * ausschließlich aus den stärksten Liga-2-Vereinen (steigen nach Liga 1 auf). Ein
+ * Liga-2-Verein kann hier strukturell NIEMALS als "relegated" landen, weil
+ * `tier1Order`/`tier2Order` streng getrennt bleiben - ihm fehlt schlicht eine
+ * niedrigere Liga, in die er absteigen könnte. Die Auf-/Abstiegsmechanik
+ * zwischen Liga 1 und Liga 2 bleibt davon unberührt voll erhalten.
  */
 export function simulateLeaguePromotionRelegation(
   league: LeagueState,
@@ -148,7 +157,10 @@ export function simulateLeaguePromotionRelegation(
   const tier2Order = simulateTable(league.tier2, rng);
 
   const n = Math.min(league.swapCount, league.tier1.length - 1, league.tier2.length - 1);
+  // Abstieg NUR aus Liga 1 (die schwächsten n Vereine) ...
   const relegated = tier1Order.slice(-n).map(({ rank: _rank, ...c }) => c);
+  // ... Aufstieg NUR aus Liga 2 (die stärksten n Vereine) - Liga 2 selbst hat
+  // keine "Abstiegszone", da es keine dritte Liga gibt.
   const promoted = tier2Order.slice(0, n).map(({ rank: _rank, ...c }) => c);
 
   const relegatedIds = new Set(relegated.map((c) => c.id));
