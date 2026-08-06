@@ -144,6 +144,7 @@ export function createPlayer(
       seasonsSinceTransferEvent: 0,
       consecutiveBenchSeasons: 0,
       roleProtectionSeasons: 0,
+      startingRoleGuaranteeSeasons: 0,
       nationalTeamCaptain: false,
       clubChangesCount: 0,
       totalInjuryWeeks: 0,
@@ -407,6 +408,9 @@ function applyEffects(player: Player, effects: EventChoice["effects"], season: n
   if (effects.roleProtectionSeasons) {
     player.roleProtectionSeasons = Math.max(player.roleProtectionSeasons, effects.roleProtectionSeasons);
   }
+  if (effects.startingRoleGuaranteeSeasons) {
+    player.startingRoleGuaranteeSeasons = Math.max(player.startingRoleGuaranteeSeasons, effects.startingRoleGuaranteeSeasons);
+  }
   if (effects.nationalTeamCaptain) player.nationalTeamCaptain = true;
   if (effects.squadRoleOverride) player.contract.squadRole = effects.squadRoleOverride;
   if (effects.traitDeltas) {
@@ -475,6 +479,7 @@ export function summarizeEffects(effects: EventChoice["effects"]): string[] {
   if (effects.capsDelta) lines.push(`Länderspiele ${signed(effects.capsDelta)}`);
   if (effects.goalsDelta) lines.push(`Länderspieltore ${signed(effects.goalsDelta)}`);
   if (effects.roleProtectionSeasons) lines.push(`Kaderrolle für ${effects.roleProtectionSeasons} Saison(en) abgesichert`);
+  if (effects.startingRoleGuaranteeSeasons) lines.push(`Stammplatz für ${effects.startingRoleGuaranteeSeasons} Saison(en) garantiert`);
   if (effects.squadRoleOverride) lines.push(`Neue Kaderrolle: ${effects.squadRoleOverride}`);
   if (effects.traitDeltas) {
     for (const key of TRAIT_ORDER) {
@@ -805,6 +810,7 @@ export function ageUpPlayer(player: Player): void {
   player.morale = clamp(player.morale + (player.morale < 50 ? 5 : 0), 0, 100);
   player.seasonsSinceTransferEvent += 1;
   if (player.roleProtectionSeasons > 0) player.roleProtectionSeasons -= 1;
+  if (player.startingRoleGuaranteeSeasons > 0) player.startingRoleGuaranteeSeasons -= 1;
   if (player.trainingBoostSeasons > 0) player.trainingBoostSeasons -= 1;
 
   if (player.injury) {
@@ -912,6 +918,13 @@ export function resolveClubSituation(player: Player, league: LeagueState): LogEn
   // Saisons vor dem Abrutschen unter "Rotation" - der Durchbruch bleibt spürbar.
   if (player.roleProtectionSeasons > 0 && SQUAD_ROLE_RANK[newRole] < SQUAD_ROLE_RANK["Rotation"]) {
     newRole = "Rotation";
+  }
+  // Vertragliche Stammplatzgarantie: stärkere Absicherung als die Bewährungschance,
+  // garantiert für die vereinbarte Dauer mindestens "Stammspieler" - wirkt sich über
+  // `roleFactor`/`minutesPerMatchByRole` in `simulateSeason` direkt auf Einsatzminuten
+  // und darüber auf Tore/Vorlagen aus, statt nur ein Stimmungs-Bonus zu sein.
+  if (player.startingRoleGuaranteeSeasons > 0 && SQUAD_ROLE_RANK[newRole] < SQUAD_ROLE_RANK["Stammspieler"]) {
+    newRole = "Stammspieler";
   }
   player.contract.squadRole = newRole;
 

@@ -873,7 +873,17 @@ export const EVENT_TEMPLATES: EventTemplate[] = [
         {
           id: "verlaengern_rolle",
           label: "Verlängern, Fokus auf Stammplatzgarantie",
-          effects: { clubRelation: 6, morale: 4, wantsTransfer: false, logText: "hat verlängert mit Fokus auf eine klare Rolle im Team.", logKind: "milestone" },
+          effects: {
+            clubRelation: 6,
+            morale: 4,
+            wantsTransfer: false,
+            // Echte vertragliche Garantie statt nur eines Stimmungs-Bonus: für 2
+            // Saisons mindestens Stammspieler, was sich über die Kaderrolle direkt
+            // auf Einsatzminuten und darüber auf Tore/Vorlagen auswirkt.
+            startingRoleGuaranteeSeasons: 2,
+            logText: "hat verlängert mit vertraglich fixierter Stammplatzgarantie für die kommenden zwei Saisons.",
+            logKind: "milestone",
+          },
         },
         {
           id: "ablehnen",

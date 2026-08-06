@@ -23,6 +23,7 @@ export function loadGame(): GameState | null {
       state.player.unlockedAchievementIds ??= [];
       state.player.growthCarry ??= {};
       state.player.nationalTeamGoals ??= 0;
+      state.player.startingRoleGuaranteeSeasons ??= 0;
       // Bei älteren Spielständen als Basis den aktuellen Stand nehmen, damit nicht
       // plötzlich alle bisherigen Länderspiele als "diese Saison" gewertet werden.
       state.player.capsAtSeasonStart ??= state.player.nationalTeamCaps ?? 0;

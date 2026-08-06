@@ -186,6 +186,10 @@ export interface EffectDelta {
   goalsDelta?: number;
   /** Schützt die Kaderrolle für N weitere Saisons vor dem Abrutschen unter "Rotation". */
   roleProtectionSeasons?: number;
+  /** Stärkere Variante von `roleProtectionSeasons`: garantiert für N Saisons mindestens
+   * "Stammspieler" (z.B. vertraglich vereinbarte Stammplatzgarantie) - wirkt sich über
+   * die Kaderrolle direkt auf Einsatzminuten, Tore/Vorlagen etc. aus. */
+  startingRoleGuaranteeSeasons?: number;
   /** Ernennt zum Kapitän der Nationalmannschaft. */
   nationalTeamCaptain?: boolean;
   /** Setzt die Kaderrolle sofort direkt (z.B. Durchbruch nach einer Bewährungschance). */
@@ -329,6 +333,8 @@ export interface Player {
   consecutiveBenchSeasons: number;
   /** Solange > 0, rutscht die Kaderrolle nicht unter "Rotation" ab (Bewährungschance). */
   roleProtectionSeasons: number;
+  /** Solange > 0, ist mindestens "Stammspieler" garantiert (vertragliche Stammplatzgarantie). */
+  startingRoleGuaranteeSeasons: number;
   /** Wurde bereits Kapitän der Nationalmannschaft (schaltet u.a. ein Achievement frei). */
   nationalTeamCaptain: boolean;
   /** Anzahl tatsächlich vollzogener Vereinswechsel (für Legacy-Faktoren/Achievements). */
