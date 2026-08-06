@@ -63,8 +63,11 @@ export function pickClubNearStrength(
   const candidates = clubs.filter((c) => c.id !== excludeId);
   const pool = candidates.length > 0 ? candidates : clubs;
   const sorted = [...pool].sort((a, b) => Math.abs(a.strength - targetStrength) - Math.abs(b.strength - targetStrength));
-  // Unter den 4 nächstliegenden Vereinen zufällig wählen, statt immer den exakt nächsten zu nehmen
-  const shortlist = sorted.slice(0, Math.min(4, sorted.length));
+  // Unter den 8 nächstliegenden Vereinen zufällig wählen, statt immer den exakt
+  // nächsten zu nehmen - ein zu enger Radius (früher 4) sorgte dafür, dass sich
+  // über eine ganze Karriere hinweg immer wieder dieselbe Handvoll Vereine
+  // wiederholte, weil sich die Ziel-Stärke zwischen Events nur langsam verschiebt.
+  const shortlist = sorted.slice(0, Math.min(8, sorted.length));
   return shortlist[Math.floor(rng() * shortlist.length)];
 }
 
@@ -86,7 +89,13 @@ export function pickDistinctClubOffers(
   const sorted = [...pool].sort(
     (a, b) => Math.abs(a.strength - targetStrength) - Math.abs(b.strength - targetStrength)
   );
-  const shortlistSize = Math.min(Math.max(count * 3, 6), sorted.length);
+  // Ein zu enger Radius (früher count*3, min. 6) griff über eine ganze Karriere
+  // hinweg immer wieder auf dieselbe Handvoll Vereine zurück, weil sich die
+  // Ziel-Stärke zwischen aufeinanderfolgenden Angebots-Events nur langsam
+  // verschiebt - deutlich breiter gefasst sorgt für echte Abwechslung, bleibt
+  // aber durch die Sortierung nach Distanz weiter auf plausible Kandidaten
+  // fokussiert (kein zufälliger Verein von komplett falschem Niveau).
+  const shortlistSize = Math.min(Math.max(count * 6, 14), sorted.length);
   const shortlist = sorted.slice(0, shortlistSize);
 
   const picked: ClubState[] = [];
