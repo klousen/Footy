@@ -881,12 +881,40 @@ function growthRate(age: number): number {
   return 0;
 }
 
-/** Anteil des aktuellen Werts, der pro Saison im Alter abgebaut wird. */
+/** Anteil des aktuellen Werts, der pro Saison im Alter abgebaut wird - moderner
+ * Profifußball erlaubt eine deutlich längere Prime als früher üblich: bis
+ * 32/33 ist heute oft noch echtes Topniveau drin, der harte Abbau setzt daher
+ * bewusst erst danach ein (vorher: schon ab 30 spürbar, ab 33 richtig hart -
+ * das ließ selbst kerngesunde Spieler zu früh spürbar altern). Siehe
+ * `declineConditionMultiplier` für die individuelle Modulation je Spieler
+ * (Physis/Verletzungshistorie). */
 function declineRate(age: number): number {
-  if (age <= 29) return 0;
-  if (age <= 32) return 0.03;
-  if (age <= 35) return 0.06;
-  return 0.1;
+  if (age <= 32) return 0;
+  if (age <= 35) return 0.025;
+  if (age <= 38) return 0.05;
+  return 0.09;
+}
+
+/**
+ * Individueller Multiplikator auf die altersbedingte Abbaurate (siehe
+ * `declineRate`) - zwei Spieler im selben Alter bauen unterschiedlich schnell
+ * ab, je nachdem wie robust sie über die Karriere waren:
+ * - Physis ist der direkteste Fitness-/Robustheits-Indikator: hohe Physis
+ *   (Kraft, Athletik, Regenerationsfähigkeit) verlängert die Prime spürbar,
+ *   niedrige beschleunigt den Abbau.
+ * - Verletzungshistorie: wer über die Karriere kaum verletzt war, hat den
+ *   Körper spürbar weniger strapaziert und baut langsamer ab. Wer viele
+ *   Ausfallwochen angesammelt hat, zahlt das Alter über spürbar früheren
+ *   Verschleiß zurück.
+ * Beide Faktoren multiplizieren sich - ein durchweg gesunder Spieler mit
+ * hoher Physis kann seine Prime damit deutlich über das alte pauschale Modell
+ * hinaus verlängern, ein verletzungsanfälliger Spieler mit niedriger Physis
+ * baut entsprechend schneller ab als der Altersschnitt.
+ */
+function declineConditionMultiplier(player: Player): number {
+  const physisFactor = clamp(1.15 - (player.attributes.physis - 50) / 150, 0.7, 1.3);
+  const injuryFactor = clamp(0.85 + player.totalInjuryWeeks / 250, 0.85, 1.5);
+  return physisFactor * injuryFactor;
 }
 
 /** Kaderrolle der GERADE ABGELAUFENEN Saison (siehe `ageUpPlayer` - läuft vor dem
@@ -930,6 +958,9 @@ export function ageUpPlayer(player: Player): void {
   // Bank bremst nicht nur, sondern kostet echte Substanz - unabhängig vom Alter.
   const roleGrowthMultiplier = squadRoleGrowthMultiplier(player.contract.squadRole);
   const roleDeclineMultiplier = squadRoleDeclineMultiplier(player.contract.squadRole);
+  // Individuelle Robustheit (Physis + Verletzungshistorie, siehe dort) moduliert
+  // die altersbedingte Abbaurate zusätzlich zur Kaderrolle.
+  const conditionDeclineMultiplier = declineConditionMultiplier(player);
   const isBenchWarmer = player.contract.squadRole === "Ersatzbank";
   for (const key of ATTRIBUTE_KEYS) {
     const current = player.attributes[key];
@@ -940,7 +971,7 @@ export function ageUpPlayer(player: Player): void {
       rawDelta = gRate * room * workEthicMultiplier * trainingEnvironmentMultiplier * roleGrowthMultiplier * (0.7 + rng() * 0.6);
       rawDelta = Math.max(0, rawDelta);
     } else if (dRate > 0) {
-      rawDelta = -dRate * current * roleDeclineMultiplier * (0.7 + rng() * 0.6);
+      rawDelta = -dRate * current * roleDeclineMultiplier * conditionDeclineMultiplier * (0.7 + rng() * 0.6);
     } else {
       rawDelta = 0;
     }
@@ -2345,7 +2376,12 @@ export function computeLegacy(player: Player): { score: number; tier: string; fa
     { label: "Ø Bewertung Karriere", points: Math.round(avgRatingOverall * 25) },
     { label: "Bekanntheit", points: player.reputation * 2 },
     { label: "Vermögen", points: Math.round(player.wealth / 5000) },
-    { label: "Vereinstreue", points: player.clubChangesCount <= 1 ? 30 : player.clubChangesCount >= 4 ? -20 : 0 },
+    // Gestaffelt statt einer harten 3-Stufen-Klippe: die allermeisten Karrieren
+    // laufen realistisch über 3-4 Vereine, nicht nur einen einzigen - das zählt
+    // hier bewusst noch als "treu" (spürbar positiv), statt neutral/bestraft zu
+    // werden. Erst ab 5+ Wechseln kippt der Faktor ins Negative, die alte harte
+    // Grenze von -20 bleibt als Untergrenze für echte Nomaden erhalten.
+    { label: "Vereinstreue", points: clamp(28 - player.clubChangesCount * 6, -20, 30) },
     { label: "Familie", points: (player.relationshipStatus === "verheiratet" ? 10 : 0) + player.children * 5 },
     { label: "Verletzungshistorie", points: player.totalInjuryWeeks >= 60 ? -30 : player.totalInjuryWeeks <= 10 ? 15 : 0 },
     {
@@ -2413,7 +2449,10 @@ export function computeAchievements(player: Player): Achievement[] {
     { id: "titelsammler", label: "Titelsammler", description: "Mindestens 5 Titel gewonnen.", positive: true, condition: t.trophies.length >= 5 },
     { id: "weltklasse", label: "Weltklasse-Niveau", description: "Karriere-Ø-Bewertung von mindestens 7,5.", positive: true, condition: avgRatingOverall >= 7.5 },
     ...(nationalTeamTier ? [{ id: nationalTeamTier.id, label: nationalTeamTier.label, description: nationalTeamTier.description, positive: true, condition: true }] : []),
-    { id: "vereinstreue", label: "Vereinstreue", description: "Höchstens ein Vereinswechsel in der ganzen Karriere.", positive: true, condition: player.clubChangesCount <= 1 },
+    // Schwelle bewusst bei 4 statt 1 (siehe Legacy-Faktor "Vereinstreue" oben) -
+    // 3-4 Vereine über eine ganze Karriere sind der Normalfall, nicht die
+    // Ausnahme, und zählen als "treu" statt nur der reine Ein-Klub-Sonderfall.
+    { id: "vereinstreue", label: "Vereinstreue", description: "Höchstens 4 Vereinswechsel in der ganzen Karriere.", positive: true, condition: player.clubChangesCount <= 4 },
     {
       id: "ligalegende",
       label: "Ligalegende",
@@ -2429,7 +2468,7 @@ export function computeAchievements(player: Player): Achievement[] {
     { id: "individuelle_krone", label: "Individuelle Krönung", description: "Mindestens einmal als Torschützenkönig oder Spieler der Saison ausgezeichnet.", positive: true, condition: t.trophies.some((tr) => tr === "Torschützenkönig" || tr === "Spieler der Saison") },
     { id: "geschichtenerzaehler", label: "Bewegte Karriere", description: "Mindestens drei mehrjährige Geschichten bis zum Ende durchlebt.", positive: true, condition: player.completedStorylines.length >= 3 },
     { id: "verletzungsanfaellig", label: "Verletzungsanfällig", description: "Über 60 Wochen der Karriere verletzt ausgefallen.", positive: false, condition: player.totalInjuryWeeks >= 60 },
-    { id: "vielwechsler", label: "Vielwechsler", description: "Vier oder mehr Vereinswechsel - nie richtig sesshaft geworden.", positive: false, condition: player.clubChangesCount >= 4 },
+    { id: "vielwechsler", label: "Vielwechsler", description: "Sechs oder mehr Vereinswechsel - nie richtig sesshaft geworden.", positive: false, condition: player.clubChangesCount >= 6 },
     { id: "kartenkoenig", label: "Kartenkönig", description: "Über 80 Gelbe Karten oder 5 Platzverweise kassiert.", positive: false, condition: t.yellowCards >= 80 || t.redCards >= 5 },
     { id: "bankdruecker", label: "Bankdrücker", description: "In mindestens 5 Saisons kaum zum Einsatz gekommen.", positive: false, condition: lowMatchSeasons >= 5 },
     {
