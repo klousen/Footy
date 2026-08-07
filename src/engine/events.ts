@@ -93,7 +93,7 @@ function lastNationalCup(p: Player) {
 }
 
 function europeanCompetitionName(competition: "CL" | "EL"): string {
-  return competition === "CL" ? "Champions League" : "Europa League";
+  return competition === "CL" ? "Champions Cup" : "Europa Cup";
 }
 
 export const EVENT_TEMPLATES: EventTemplate[] = [

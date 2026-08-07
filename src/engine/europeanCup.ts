@@ -1,4 +1,4 @@
-// Europäische Wettbewerbe (Champions-/Europa-League-Äquivalent) - Elo-artige
+// Europäische Wettbewerbe (Champions Cup/Europa Cup) - Elo-artige
 // Qualifikations- und Turniersimulation, adaptiert aus den vom Nutzer bereitgestellten
 // Referenzmodulen (european-cup-elo.js, liga-elo-drift.js) auf die tatsächliche Footca-
 // Architektur:
@@ -118,12 +118,91 @@ export function deriveLeagueStrengths(topEloByCountry: Partial<Record<CountryId,
 
 /** Startplätze aus dem Liga-Stärke-Faktor ableiten (adaptiert aus `liga-elo-drift.js`) -
  * die stärksten Ligen der Auswahl (England/Spanien/Italien-Niveau) bekommen 4 CL- und
- * 2 EL-Plätze, die schwächste dieser Zehnerauswahl nur 1/1. */
+ * 2 EL-Plätze, die schwächste dieser Zehnerauswahl nur 1/1. Dient NUR noch dem
+ * synthetischen Gegner-Feld anderer Länder (siehe `field`-Aufbau in
+ * `computeSeasonEuropeanCupResult`) - für die Qualifikation des Spielervereins SELBST
+ * gilt seit dem Bugreport "hängt Tabellenplatz nicht wirklich dran" stattdessen die
+ * feste, reale Platzierungs-Tabelle in `COUNTRY_EUROPEAN_SLOTS`. */
 export function deriveSlotsFromStrength(leagueStrength: number): { clSlots: number; elSlots: number } {
   if (leagueStrength >= 0.9) return { clSlots: 4, elSlots: 2 };
   if (leagueStrength >= 0.75) return { clSlots: 3, elSlots: 2 };
   if (leagueStrength >= 0.6) return { clSlots: 2, elSlots: 2 };
   return { clSlots: 1, elSlots: 1 };
+}
+
+/**
+ * Feste, reale Qualifikationsplätze für Champions Cup/Europa Cup je Land dieser
+ * Zehnerauswahl (Nutzer-Vorgabe, an das echte UEFA-System angelehnt) - ersetzt die
+ * vorherige rein Stärke-basierte Herleitung für die Qualifikation des SPIELERVEREINS
+ * (die reine Stärke-Herleitung bleibt nur noch fürs synthetische Gegner-Feld übrig,
+ * siehe `deriveSlotsFromStrength`). Damit hängt die eigene Qualifikation jetzt direkt
+ * und nachvollziehbar am tatsächlichen Tabellenplatz.
+ *
+ * - `clDirect`: Tabellenplätze 1..N, die OHNE Risiko direkt den Champions Cup
+ *   erreichen.
+ * - `clQualifyingPosition`: EIN zusätzlicher Tabellenplatz direkt dahinter, der sich
+ *   den Champions-Cup-Platz erst über eine Qualifikationsrunde erspielen muss (reale
+ *   Play-off-Logik kleinerer Ligen) - bei Erfolg Champions Cup, sonst fällt der Verein
+ *   in den Europa Cup durch (nicht komplett leer aus, siehe `resolveEuropeanCompetition`).
+ * - `elDirectPosition`: EIN Tabellenplatz, der ohne Qualifikationsrisiko direkt den
+ *   Europa Cup erreicht.
+ * - `cupWinnerGetsEL`: ob der Sieger des nationalen Pokals zusätzlich einen Europa-
+ *   Cup-Platz bekommt, falls er sich nicht ohnehin schon über die Tabelle qualifiziert
+ *   hat.
+ *
+ * Polen ist in der Nutzer-Vorgabe nicht explizit aufgeführt - bewusst wie Belgien/
+ * Türkei behandelt (strukturell die schwächste Liga dieser Auswahl, siehe
+ * `CountryDef.uefaRank`, damit dasselbe Muster: 1 Platz über Qualifikation, 1 Platz
+ * direkt Europa Cup, kein zusätzlicher Pokalsieger-Slot).
+ */
+export interface CountryEuropeanSlots {
+  clDirect: number;
+  clQualifyingPosition?: number;
+  elDirectPosition: number;
+  cupWinnerGetsEL: boolean;
+}
+
+const COUNTRY_EUROPEAN_SLOTS: Record<CountryId, CountryEuropeanSlots> = {
+  germany: { clDirect: 4, elDirectPosition: 5, cupWinnerGetsEL: true },
+  england: { clDirect: 4, elDirectPosition: 5, cupWinnerGetsEL: true },
+  spain: { clDirect: 4, elDirectPosition: 5, cupWinnerGetsEL: true },
+  italy: { clDirect: 4, elDirectPosition: 5, cupWinnerGetsEL: true },
+  france: { clDirect: 3, elDirectPosition: 4, cupWinnerGetsEL: true },
+  netherlands: { clDirect: 1, clQualifyingPosition: 2, elDirectPosition: 3, cupWinnerGetsEL: false },
+  portugal: { clDirect: 1, clQualifyingPosition: 2, elDirectPosition: 3, cupWinnerGetsEL: true },
+  belgium: { clDirect: 0, clQualifyingPosition: 1, elDirectPosition: 2, cupWinnerGetsEL: false },
+  turkey: { clDirect: 0, clQualifyingPosition: 1, elDirectPosition: 2, cupWinnerGetsEL: false },
+  poland: { clDirect: 0, clQualifyingPosition: 1, elDirectPosition: 2, cupWinnerGetsEL: false },
+};
+
+/** Typische Stärke eines kontinentalen Qualifikations-Gegners (Play-off-Runde) auf der
+ * Elo-Skala dieses Moduls (siehe `clubElo`) - deutlich über dem Durchschnitt einer
+ * mittleren Liga, aber unter den absoluten Spitzenvereinen der stärksten Ligen. Ein
+ * Verein mit `clQualifyingPosition` hat damit eine reale, aber klar unterlegene
+ * Chance, sich noch in den Champions Cup vorzuspielen. */
+const QUALIFYING_ROUND_OPPONENT_ELO = 1900;
+
+/**
+ * Ermittelt, ob (und in welchem Wettbewerb) sich der Spielerverein über seinen
+ * tatsächlichen Tabellenplatz + (falls einschlägig) den nationalen Pokalsieg
+ * qualifiziert - siehe `COUNTRY_EUROPEAN_SLOTS`. `null` = keine Qualifikation.
+ */
+function resolveEuropeanCompetition(
+  countryId: CountryId,
+  leaguePosition: number,
+  playerElo: number,
+  wonNationalCup: boolean,
+  rng: () => number
+): "CL" | "EL" | null {
+  const rules = COUNTRY_EUROPEAN_SLOTS[countryId];
+  if (leaguePosition <= rules.clDirect) return "CL";
+  if (rules.clQualifyingPosition && leaguePosition === rules.clQualifyingPosition) {
+    const qualifyWinChance = expectedScore(playerElo, QUALIFYING_ROUND_OPPONENT_ELO);
+    return rng() < qualifyWinChance ? "CL" : "EL";
+  }
+  if (leaguePosition === rules.elDirectPosition) return "EL";
+  if (wonNationalCup && rules.cupWinnerGetsEL) return "EL";
+  return null;
 }
 
 function computeLeagueStrengths(
@@ -183,28 +262,47 @@ export interface EuropeanCupContext {
   foreignLeagues: Partial<Record<CountryId, LeagueState>>;
   /** `GameState.europeanLeagueDrift` - wird hier NUR gelesen, siehe `advanceEuropeanLeagueDrift`. */
   drift: Partial<Record<CountryId, number>>;
+  /** Hat der Spielerverein DIESE Saison den nationalen Pokal gewonnen (siehe
+   * `computeSeasonNationalCupResult`) - zusätzlicher Qualifikationsweg für den Europa
+   * Cup in einigen Ligen, siehe `COUNTRY_EUROPEAN_SLOTS`. */
+  playerWonNationalCup: boolean;
   rng: () => number;
 }
 
 /**
  * Ermittelt Qualifikation + Turnierausgang für die aktuelle Saison. Gibt `null` zurück,
- * wenn der Tabellenplatz nicht für CL/EL reicht (Zweitligisten werden vom Aufrufer gar
- * nicht erst hierher gereicht, siehe `simulateSeason`).
+ * wenn weder Tabellenplatz noch Pokalsieg für Champions Cup/Europa Cup reichen
+ * (Zweitligisten werden vom Aufrufer gar nicht erst hierher gereicht, siehe
+ * `simulateSeason`).
  */
 export function computeSeasonEuropeanCupResult(ctx: EuropeanCupContext): EuropeanCupResult | null {
-  const { playerCountryId, playerClubId, playerLeaguePosition, playerClubCoefficient, league, foreignLeagues, drift, rng } = ctx;
-
-  const leagueStrengths = computeLeagueStrengths(playerCountryId, league, foreignLeagues, drift, rng);
-  const ownStrength = leagueStrengths[playerCountryId] ?? 0.3;
-  const { clSlots, elSlots } = deriveSlotsFromStrength(ownStrength);
-
-  let competition: "CL" | "EL" | null = null;
-  if (playerLeaguePosition <= clSlots) competition = "CL";
-  else if (playerLeaguePosition <= clSlots + elSlots) competition = "EL";
-  if (!competition) return null;
+  const {
+    playerCountryId,
+    playerClubId,
+    playerLeaguePosition,
+    playerClubCoefficient,
+    league,
+    foreignLeagues,
+    drift,
+    playerWonNationalCup,
+    rng,
+  } = ctx;
 
   const ownDrift = drift[playerCountryId] ?? 0;
   const playerElo = ELO_BASE + playerClubCoefficient * ELO_COEFF_SCALE + ownDrift;
+
+  // Eigene Qualifikation: fest an den tatsächlichen Tabellenplatz (+ ggf. Pokalsieg)
+  // gekoppelt, siehe `COUNTRY_EUROPEAN_SLOTS`/`resolveEuropeanCompetition` - NICHT mehr
+  // an die fuzzy Stärke-Herleitung, die den Bezug zum Tabellenplatz für den Spieler
+  // selbst zu unklar wirken ließ (Bugreport).
+  const competition = resolveEuropeanCompetition(playerCountryId, playerLeaguePosition, playerElo, playerWonNationalCup, rng);
+  if (!competition) return null;
+
+  // Das synthetische Gegner-Feld anderer Länder nutzt weiterhin die fuzzy Stärke-
+  // Herleitung (`deriveSlotsFromStrength`) - hier geht es nur um eine plausible
+  // Turnier-SCHWIERIGKEIT, nicht um die exakte reale Qualifikation fremder Vereine,
+  // die dieses Spiel ohnehin nicht einzeln simuliert.
+  const leagueStrengths = computeLeagueStrengths(playerCountryId, league, foreignLeagues, drift, rng);
 
   // Feld: pro Land die für DIESEN Wettbewerb infrage kommenden Top-Vereine (CL: die
   // besten `clSlots`, EL: die `elSlots` direkt dahinter). Im eigenen Land wird der

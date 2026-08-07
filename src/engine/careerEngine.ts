@@ -900,13 +900,14 @@ export function simulateSeason(
   player.cupExitThisSeason = false;
   if (nationalCup.champion) trophies.push("Landespokal");
 
-  // Europäische Wettbewerbe (Champions/Europa League) - siehe europeanCup.ts. Der
+  // Europäische Wettbewerbe (Champions Cup/Europa Cup) - siehe europeanCup.ts. Der
   // Struktur-Drift der 10 Ligen (siehe `advanceEuropeanLeagueDrift`) läuft JEDE Saison
   // weiter, unabhängig davon, ob der eigene Verein sich qualifiziert - sonst würden
   // sich Liga-Stärken nur in den Saisons verschieben, in denen der Spieler selbst in
-  // Europa mitspielt. Nur Erstligisten können sich qualifizieren (siehe `deriveSlots
-  // FromStrength`/`clubLeagueRank` - Zweitliga-Vereine sind für die europäischen
-  // Team-Koeffizienten praktisch nie relevant).
+  // Europa mitspielt. Nur Erstligisten können sich qualifizieren - die eigene
+  // Qualifikation hängt fest am tatsächlichen Tabellenplatz (+ ggf. Pokalsieg) dieser
+  // Saison (siehe `COUNTRY_EUROPEAN_SLOTS` in europeanCup.ts), Zweitliga-Vereine sind
+  // dafür strukturell nie vorgesehen (reale nationale Ligasysteme).
   advanceEuropeanLeagueDrift(europeanLeagueDrift, rng);
   const europeanCup =
     player.club.tier === 1
@@ -918,6 +919,7 @@ export function simulateSeason(
           league,
           foreignLeagues,
           drift: europeanLeagueDrift,
+          playerWonNationalCup: nationalCup.champion,
           rng,
         })
       : null;
@@ -927,7 +929,7 @@ export function simulateSeason(
     // Trophy-Schleife unten) - nur die Turniertiefe ohne Titel braucht einen
     // separaten Log-Eintrag (siehe unten nach der Trophy-Schleife).
     if (europeanCup.champion) {
-      trophies.push(europeanCup.competition === "CL" ? "Champions League" : "Europa League");
+      trophies.push(europeanCup.competition === "CL" ? "Champions Cup" : "Europa Cup");
     }
     const stageIndex = EUROPEAN_STAGE_ORDER.indexOf(europeanCup.stageReached);
     const europeanReputationGain = clamp(3 + stageIndex * 3, 0, 24);
@@ -958,7 +960,7 @@ export function simulateSeason(
 
   for (const trophy of trophies) {
     const isIndividual = trophy === "Torschützenkönig" || trophy === "Spieler der Saison" || trophy === "Talent der Saison";
-    const isEuropean = trophy === "Champions League" || trophy === "Europa League";
+    const isEuropean = trophy === "Champions Cup" || trophy === "Europa Cup";
     player.log.push({
       season: seasonNumber,
       age: player.age,
@@ -974,7 +976,7 @@ export function simulateSeason(
   // Europäische Teilnahme ohne Titel bekommt einen eigenen Log-Eintrag (der Titelfall
   // ist bereits über die Trophy-Schleife oben abgedeckt).
   if (europeanCup && !europeanCup.champion) {
-    const compName = europeanCup.competition === "CL" ? "Champions League" : "Europa League";
+    const compName = europeanCup.competition === "CL" ? "Champions Cup" : "Europa Cup";
     const stageText = europeanCup.stageReached === "Ligaphase" ? "in der Ligaphase" : `im ${europeanCup.stageReached}`;
     player.log.push({
       season: seasonNumber,
@@ -2801,7 +2803,7 @@ export function computeAchievements(player: Player): Achievement[] {
     { id: "kapitaen", label: "Führungsspieler", description: "Wurde zum Mannschaftskapitän ernannt.", positive: true, condition: wasCaptain },
     { id: "nationalkapitaen", label: "Nationalmannschaftskapitän", description: "Führte die Nationalmannschaft aufs Feld.", positive: true, condition: player.nationalTeamCaptain },
     { id: "individuelle_krone", label: "Individuelle Krönung", description: "Mindestens einmal als Torschützenkönig oder Spieler der Saison ausgezeichnet.", positive: true, condition: t.trophies.some((tr) => tr === "Torschützenkönig" || tr === "Spieler der Saison") },
-    { id: "europapokalsieger", label: "Europapokalsieger", description: "Champions League oder Europa League gewonnen.", positive: true, condition: t.trophies.some((tr) => tr === "Champions League" || tr === "Europa League") },
+    { id: "europapokalsieger", label: "Europapokalsieger", description: "Champions Cup oder Europa Cup gewonnen.", positive: true, condition: t.trophies.some((tr) => tr === "Champions Cup" || tr === "Europa Cup") },
     { id: "geschichtenerzaehler", label: "Bewegte Karriere", description: "Mindestens drei mehrjährige Geschichten bis zum Ende durchlebt.", positive: true, condition: player.completedStorylines.length >= 3 },
     { id: "verletzungsanfaellig", label: "Verletzungsanfällig", description: "Über 60 Wochen der Karriere verletzt ausgefallen.", positive: false, condition: player.totalInjuryWeeks >= 60 },
     { id: "vielwechsler", label: "Vielwechsler", description: "Sechs oder mehr Vereinswechsel - nie richtig sesshaft geworden.", positive: false, condition: player.clubChangesCount >= 6 },
