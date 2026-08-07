@@ -25,6 +25,14 @@ function rInt(ctx: { rng: () => number }, min: number, max: number): number {
   return min + Math.floor(ctx.rng() * (max - min + 1));
 }
 
+// Hilfsfunktion: zufällige Text-Variante aus einer Liste wählen - für sehr häufig
+// gezogene Events (mehrfach pro Karriere, siehe Bugreport "Repetition"), deren
+// Titel/Beschreibung sonst jedes Mal wortgleich wäre. Bewusst NUR Text-Varianz,
+// keine neuen Effekte/Entscheidungen - reine Abwechslung, keine Spiellogik-Änderung.
+function pickVariant<T>(ctx: { rng: () => number }, options: readonly T[]): T {
+  return options[Math.floor(ctx.rng() * options.length)];
+}
+
 /** Wahrscheinlichkeit einer Nationalmannschafts-Berufung DIESE Saison - siehe
  * ausführlichen Kommentar bei `nationalmannschaft_einladung`. Per Monte-Carlo-
  * Simulation über ein ~20-saisonales Länderspiel-Fenster kalibriert: Gesamtstärke
@@ -397,10 +405,20 @@ export const EVENT_TEMPLATES: EventTemplate[] = [
       const gain = rInt(ctx, 1, 2);
       const cost = rInt(ctx, 3, 7);
       const recover = rInt(ctx, 3, 6);
+      // Eines der am häufigsten gezogenen Events der ganzen Karriere (Ø 3x, siehe
+      // Bugreport "Repetition") - Titel/Beschreibung variieren, damit die x-te
+      // Extraschicht nicht wortgleich zur ersten wirkt. Effekte/Entscheidungen
+      // bleiben unverändert, reine Textvarianz.
+      const variant = pickVariant(ctx, [
+        { title: "Zusätzliche Trainingseinheit", description: "Der Athletiktrainer bietet eine freiwillige Extraschicht am Abend an." },
+        { title: "Freiwilliges Extratraining", description: "Nach dem regulären Training fragt der Fitnesscoach, ob du noch eine Zusatzeinheit dranhängen willst." },
+        { title: "Angebot: Sondertraining", description: "Der Athletiktrainer hat abends noch die Halle frei und bietet dir eine individuelle Extraschicht an." },
+        { title: "Extra-Einheit am Abend", description: "Wieder mal steht eine freiwillige Abendeinheit im Kraftraum zur Wahl - Athletiktrainer inklusive." },
+      ]);
       return {
         category: "training",
-        title: "Zusätzliche Trainingseinheit",
-        description: "Der Athletiktrainer bietet eine freiwillige Extraschicht am Abend an.",
+        title: variant.title,
+        description: variant.description,
         choices: [
           {
             id: "ja",
@@ -425,10 +443,18 @@ export const EVENT_TEMPLATES: EventTemplate[] = [
     build: (_p, ctx) => {
       const gain = rInt(ctx, 1, 3);
       const cost = rInt(ctx, 1, 3);
+      // Zweithäufigstes Event der Karriere (Ø 2.8x) - Text-Varianten aus demselben
+      // Grund wie bei "training_extraschicht" (siehe dort).
+      const variant = pickVariant(ctx, [
+        { title: "Individueller Trainingsschwerpunkt", description: "Der Trainerstab lässt dich einen Schwerpunkt für die kommenden Wochen wählen." },
+        { title: "Trainingsplan-Update", description: "Der Trainerstab passt den Trainingsplan an und fragt, worauf du in den nächsten Wochen besonders Wert legen willst." },
+        { title: "Persönlicher Fokus im Training", description: "Vor der nächsten Trainingswoche darfst du selbst festlegen, welcher Bereich besonders im Fokus stehen soll." },
+        { title: "Schwerpunktwoche", description: "Der Trainerstab kündigt eine Schwerpunktwoche an und lässt dich die Richtung mitbestimmen." },
+      ]);
       return {
         category: "training",
-        title: "Individueller Trainingsschwerpunkt",
-        description: "Der Trainerstab lässt dich einen Schwerpunkt für die kommenden Wochen wählen.",
+        title: variant.title,
+        description: variant.description,
         choices: [
           {
             id: "technik",
@@ -533,10 +559,19 @@ export const EVENT_TEMPLATES: EventTemplate[] = [
     minAge: 16,
     maxAge: 38,
     weight: 2,
-    build: () => ({
+    build: (_p, ctx) => {
+      // Häufiges Lifestyle-Event über die Karriere hinweg (Ø 2.2x) - Text-Varianten
+      // aus demselben Grund wie bei den anderen Events oben (siehe dort).
+      const variant = pickVariant(ctx, [
+        { title: "Ernährungsberatung", description: "Der Vereinsarzt schlägt eine strikte Ernährungsumstellung vor." },
+        { title: "Neuer Ernährungsplan", description: "Die Vereinsernährungsberaterin will deinen Speiseplan grundlegend umstellen." },
+        { title: "Ernährungscheck beim Verein", description: "Bei der jährlichen Untersuchung empfiehlt der Vereinsarzt deutlich striktere Ernährungsgewohnheiten." },
+        { title: "Diät-Empfehlung", description: "Der Fitnesscoach rät zu einer strengeren Ernährungsumstellung, um noch mehr aus dir herauszuholen." },
+      ]);
+      return {
       category: "lifestyle",
-      title: "Ernährungsberatung",
-      description: "Der Vereinsarzt schlägt eine strikte Ernährungsumstellung vor.",
+      title: variant.title,
+      description: variant.description,
       choices: [
         {
           id: "ja",
@@ -549,7 +584,8 @@ export const EVENT_TEMPLATES: EventTemplate[] = [
           effects: { morale: 1, traitDeltas: { disziplin: -1 }, logText: "ist bei den gewohnten Essgewohnheiten geblieben.", logKind: "info" },
         },
       ],
-    }),
+      };
+    },
   },
   {
     id: "lifestyle_investition",
@@ -616,10 +652,19 @@ export const EVENT_TEMPLATES: EventTemplate[] = [
     minAge: 17,
     maxAge: 40,
     weight: 3,
-    build: (p) => ({
+    build: (p, ctx) => {
+      // Dritthäufigstes Event der Karriere (Ø 2.7x) - Text-Varianten aus demselben
+      // Grund wie bei den Trainings-Events oben (siehe dort).
+      const variant = pickVariant(ctx, [
+        { title: "Pressekonferenz", description: `Nach einer wichtigen Partie will die Presse wissen, wie du die Lage bei ${club(p)} einschätzt.` },
+        { title: "Medienrunde nach dem Spiel", description: `Die Reporter warten schon in der Mixed Zone von ${club(p)} und wollen deine Einschätzung zur aktuellen Lage hören.` },
+        { title: "Fragerunde der Beat-Reporter", description: `Die Beat-Reporter, die ${club(p)} regelmäßig begleiten, bitten dich um ein kurzes Statement zur Situation.` },
+        { title: "Interviewanfrage nach dem Training", description: `Nach dem Training bittet ein Sender um ein kurzes O-Ton-Interview zur Lage bei ${club(p)}.` },
+      ]);
+      return {
       category: "medien",
-      title: "Pressekonferenz",
-      description: `Nach einer wichtigen Partie will die Presse wissen, wie du die Lage bei ${club(p)} einschätzt.`,
+      title: variant.title,
+      description: variant.description,
       choices: [
         {
           id: "diplomatisch",
@@ -637,7 +682,8 @@ export const EVENT_TEMPLATES: EventTemplate[] = [
           effects: { logText: "hat sich bei der Pressekonferenz bedeckt gehalten.", logKind: "info" },
         },
       ],
-    }),
+      };
+    },
   },
   {
     id: "medien_interview_privat",
@@ -699,23 +745,33 @@ export const EVENT_TEMPLATES: EventTemplate[] = [
     maxAge: 40,
     weight: 2,
     condition: (p) => p.reputation > 15,
-    build: () => ({
-      category: "sponsoring",
-      title: "Angebot eines Schuhherstellers",
-      description: "Ein Sportartikelhersteller bietet dir einen Ausrüstervertrag an - inklusive Werbeterminen neben dem Training.",
-      choices: [
-        {
-          id: "annehmen",
-          label: "Vertrag annehmen",
-          effects: { wealth: 15000, fitness: -3, logText: "hat einen Ausrüstervertrag unterschrieben.", logKind: "positive" },
-        },
-        {
-          id: "ablehnen",
-          label: "Ablehnen, volle Konzentration auf den Sport",
-          effects: { fitness: 2, attributes: { physis: 1 }, logText: "hat ein Sponsoring-Angebot abgelehnt.", logKind: "info" },
-        },
-      ],
-    }),
+    build: (_p, ctx) => {
+      // Häufiges Sponsoring-Event (Ø >2x/Karriere) - Text-Varianten, damit nicht
+      // jedes Mal wortgleich derselbe Schuhhersteller-Deal auftaucht.
+      const variant = pickVariant(ctx, [
+        { title: "Angebot eines Schuhherstellers", description: "Ein Sportartikelhersteller bietet dir einen Ausrüstervertrag an - inklusive Werbeterminen neben dem Training." },
+        { title: "Neuer Ausrüsterdeal", description: "Eine bekannte Sportmarke will dich als Testimonial gewinnen - inklusive regelmäßiger Werbetermine." },
+        { title: "Schuhvertrag im Angebot", description: "Ein Ausrüster meldet sich mit einem lukrativen Vertragsangebot samt Marketingauftritten." },
+        { title: "Werbepartner klopft an", description: "Ein Sportartikelhersteller wirbt um dich als Aushängeschild - mit Terminen abseits des Trainings." },
+      ]);
+      return {
+        category: "sponsoring",
+        title: variant.title,
+        description: variant.description,
+        choices: [
+          {
+            id: "annehmen",
+            label: "Vertrag annehmen",
+            effects: { wealth: 15000, fitness: -3, logText: "hat einen Ausrüstervertrag unterschrieben.", logKind: "positive" },
+          },
+          {
+            id: "ablehnen",
+            label: "Ablehnen, volle Konzentration auf den Sport",
+            effects: { fitness: 2, attributes: { physis: 1 }, logText: "hat ein Sponsoring-Angebot abgelehnt.", logKind: "info" },
+          },
+        ],
+      };
+    },
   },
   {
     id: "sponsor_grossmarke",
@@ -1125,7 +1181,11 @@ export const EVENT_TEMPLATES: EventTemplate[] = [
     maxAge: 38,
     weight: 1,
     unique: true,
-    condition: (p) => p.nationalTeamCaps >= 15 && p.traits.fuehrung >= 65,
+    // War auf caps>=15 & fuehrung>=65 gesetzt - laut Simulation (1000 Karrieren) werden
+    // beide Werte so gut wie nie gleichzeitig erreicht (max. beobachtet: 16 Caps,
+    // 91 Führung, aber praktisch nie zusammen). Schwellen gesenkt, damit das Event bei
+    // Spielern mit echter Nationalmannschaftskarriere auch tatsächlich feuern kann.
+    condition: (p) => p.nationalTeamCaps >= 8 && p.traits.fuehrung >= 60,
     build: () => ({
       category: "nationalmannschaft",
       title: "Kapitän der Nationalmannschaft",
@@ -1616,19 +1676,26 @@ export const EVENT_TEMPLATES: EventTemplate[] = [
     exclusiveGroup: "beziehung_start",
     // Setzt voraus: aktuell Single UND ein offener Handlungsstrang aus einer
     // früheren Trennung durch Auslandswechsel (siehe `beziehung_auslandswechsel_risiko`
-    // - `exPartnerName` wird NUR dort gesetzt). Da eine Trennung durch Auslandswechsel
-    // per Definition voraussetzt, dass man das Land verlassen hatte, bedeutet
-    // `p.country === p.homeCountryId` hier automatisch "wieder zurück in der Heimat" -
-    // ohne zusätzliche `recentlyTransferred`-Einschränkung, da diese das Zeitfenster
-    // (frischer Wechsel + Single + daheim, alles gleichzeitig) unrealistisch eng
-    // gemacht und das Event dadurch de facto nie zum Zug kommen ließ.
-    condition: (p) => p.relationshipStatus === "single" && !!p.exPartnerName && p.country === p.homeCountryId,
+    // - `exPartnerName` wird NUR dort gesetzt).
+    // War früher zusätzlich an `p.country === p.homeCountryId` ("erst nach Rückkehr in
+    // die Heimat") gekoppelt - laut Simulation (1500 Karrieren) hat das Event dadurch
+    // NIE gefeuert: Die "Zweiter Frühling"-Mechanik boostet nach der Trennung alle
+    // Beziehungs-Start-Events gleichermaßen (inkl. diesem hier), aber die anderen
+    // (erste_liebe, beziehung_neu, beziehung_liebe_im_alter) haben keine
+    // Heimat-Bedingung und lösen die Single-Phase meist schon auf, bevor überhaupt ein
+    // Wechsel zurück in die Heimat stattfindet. Bedingung auf "single + exPartnerName"
+    // reduziert - eine Nachricht per WhatsApp funktioniert auch aus der Ferne, der
+    // Text unterscheidet nur noch, ob man zufällig gerade daheim ist oder nicht.
+    condition: (p) => p.relationshipStatus === "single" && !!p.exPartnerName,
     build: (p) => {
       const name = p.exPartnerName ?? "der alten Liebe";
+      const isHome = p.country === p.homeCountryId;
       return {
         category: "beziehung",
         title: "Nachricht aus alten Zeiten",
-        description: `Zurück in der Heimat meldet sich unerwartet ${name} per WhatsApp - die Person, von der du dich damals wegen des Auslandswechsels getrennt hattest. Ob sich nach der Zeit und der Distanz wieder etwas anknüpfen lässt?`,
+        description: isHome
+          ? `Zurück in der Heimat meldet sich unerwartet ${name} per WhatsApp - die Person, von der du dich damals wegen des Auslandswechsels getrennt hattest. Ob sich nach der Zeit und der Distanz wieder etwas anknüpfen lässt?`
+          : `Aus heiterem Himmel meldet sich ${name} per WhatsApp - die Person, von der du dich damals wegen des Auslandswechsels getrennt hattest. Auch über die Entfernung hinweg scheint da noch etwas zu sein. Ob sich nach der Zeit wieder etwas anknüpfen lässt?`,
         choices: [
           {
             id: "antworten_treffen",
@@ -1643,7 +1710,9 @@ export const EVENT_TEMPLATES: EventTemplate[] = [
                 exPartnerName: null,
                 morale: 12,
                 reputation: 1,
-                logText: `hat sich nach der Rückkehr in die Heimat mit der alten Liebe ${name} wiedergefunden.`,
+                logText: isHome
+                  ? `hat sich nach der Rückkehr in die Heimat mit der alten Liebe ${name} wiedergefunden.`
+                  : `hat trotz der Entfernung wieder zur alten Liebe ${name} gefunden.`,
                 logKind: "positive",
               },
               failure: {
@@ -2309,10 +2378,19 @@ export const EVENT_TEMPLATES: EventTemplate[] = [
     minAge: 18,
     maxAge: 38,
     weight: 2,
-    build: (p) => ({
+    build: (p, ctx) => {
+      // Häufiges Event über die Karriere hinweg (Ø 2.3x) - Text-Varianten aus
+      // demselben Grund wie bei den anderen Events oben (siehe dort).
+      const variant = pickVariant(ctx, [
+        { title: "Neuer Trainer", description: `Bei ${club(p)} übernimmt ein neuer Cheftrainer und stellt Kader sowie eingespielte Automatismen infrage.` },
+        { title: "Trainerwechsel", description: `${club(p)} verpflichtet einen neuen Cheftrainer, der von der ersten Einheit an eigene Ideen durchsetzen will.` },
+        { title: "Neubesetzung auf der Trainerbank", description: `Nach dem Trainerwechsel bei ${club(p)} stellt der neue Chef von Beginn an alles auf den Prüfstand.` },
+        { title: "Frischer Wind an der Seitenlinie", description: `Der neue Cheftrainer von ${club(p)} bringt eigene Automatismen mit und krempelt den Trainingsalltag um.` },
+      ]);
+      return {
       category: "meilenstein",
-      title: "Neuer Trainer",
-      description: `Bei ${club(p)} übernimmt ein neuer Cheftrainer und stellt Kader sowie eingespielte Automatismen infrage.`,
+      title: variant.title,
+      description: variant.description,
       choices: [
         {
           id: "beweisen",
@@ -2330,7 +2408,8 @@ export const EVENT_TEMPLATES: EventTemplate[] = [
           effects: { clubRelation: 2, logText: "lässt sich von der neuen Trainersituation nicht aus der Ruhe bringen.", logKind: "info" },
         },
       ],
-    }),
+      };
+    },
   },
   {
     id: "formationswechsel",
@@ -3231,10 +3310,19 @@ export const EVENT_TEMPLATES: EventTemplate[] = [
     minAge: 15,
     maxAge: 40,
     weight: 1.3,
-    build: () => ({
+    build: (_p, ctx) => {
+      // Häufigstes Verletzungs-Event der Karriere (Ø 2.4x) - Text-Varianten aus
+      // demselben Grund wie bei den anderen Events oben (siehe dort).
+      const variant = pickVariant(ctx, [
+        { title: "Unglücklicher Zusammenprall", description: "Bei einem harmlos wirkenden Zweikampf prallst du unglücklich mit einem Gegenspieler zusammen." },
+        { title: "Blöder Zusammenstoß", description: "Beim Kampf um einen zweiten Ball rennst du unglücklich mit einem Gegenspieler zusammen." },
+        { title: "Kollision im Zweikampf", description: "Ein eigentlich unspektakulärer Zweikampf endet mit einem harten Zusammenstoß zweier Köpfe." },
+        { title: "Zusammenprall beim Kopfballduell", description: "Bei einem Kopfballduell triffst du unglücklich mit einem Gegenspieler zusammen." },
+      ]);
+      return {
       category: "verletzung",
-      title: "Unglücklicher Zusammenprall",
-      description: "Bei einem harmlos wirkenden Zweikampf prallst du unglücklich mit einem Gegenspieler zusammen.",
+      title: variant.title,
+      description: variant.description,
       choices: [
         {
           id: "weiterspielen",
@@ -3258,7 +3346,8 @@ export const EVENT_TEMPLATES: EventTemplate[] = [
           effects: { fitness: 2, clubRelation: 1, logText: "lässt sich nach dem Zusammenprall sofort vorsorglich behandeln.", logKind: "info" },
         },
       ],
-    }),
+      };
+    },
   },
 
   // ---------------------------------------------------------------------
@@ -3347,7 +3436,10 @@ export const EVENT_TEMPLATES: EventTemplate[] = [
     minAge: 18,
     maxAge: 36,
     weight: 2,
-    condition: (p) => p.traits.disziplin <= 25,
+    // War auf disziplin<=25 gesetzt - laut Simulation (1500 Karrieren) sinkt disziplin
+    // in der Praxis nie unter ~32, das Event konnte also nie feuern. Schwelle auf einen
+    // tatsächlich erreichbaren Wert angehoben.
+    condition: (p) => p.traits.disziplin <= 38,
     build: (p) => ({
       category: "meilenstein",
       title: "Der Verein zieht die Reißleine",
@@ -3397,7 +3489,11 @@ export const EVENT_TEMPLATES: EventTemplate[] = [
     minAge: 18,
     maxAge: 36,
     weight: 1,
-    condition: (p) => p.traits.medienimage <= 25,
+    // War auf medienimage<=25 gesetzt - laut Simulation (2000 Karrieren) wird dieser
+    // Wert praktisch nie erreicht (nur 0.006% aller Saison-Snapshots, absolutes
+    // Minimum genau 25). Schwelle auf einen tatsächlich erreichbaren Wert angehoben
+    // (P5 lag bei 43) - selbes Muster wie bei `reputationskrise`.
+    condition: (p) => p.traits.medienimage <= 40,
     build: () => ({
       category: "medien",
       title: "Vertrauenskrise mit den Medien",
@@ -6119,10 +6215,13 @@ export const EVENT_TEMPLATES: EventTemplate[] = [
     category: "taktik",
     minAge: 19,
     maxAge: 38,
-    weight: 1,
+    // War weight:1 mit zusätzlichem 50%-Würfel - die Vorbedingung (Titel als
+    // Rotationsspieler) ist schon selten genug, das Gate hat es zusätzlich fast
+    // unmöglich gemacht. Gate entfernt, Gewicht leicht erhöht.
+    weight: 1.5,
     condition: (p) => {
       const euro = lastEuropeanCup(p);
-      return !!euro && euro.champion && p.contract.squadRole !== "Stammspieler" && Math.random() < 0.5;
+      return !!euro && euro.champion && p.contract.squadRole !== "Stammspieler";
     },
     build: (p) => ({
       category: "taktik",
@@ -6238,8 +6337,11 @@ export const EVENT_TEMPLATES: EventTemplate[] = [
     category: "medien",
     minAge: 19,
     maxAge: 40,
-    weight: 1,
-    condition: (p) => !!lastEuropeanCup(p)?.champion && Math.random() < 0.4,
+    // War weight:1 mit zusätzlichem 40%-Würfel in der condition - die Vorbedingung
+    // (Europapokal-Titel in der jüngsten Saison) ist schon selten genug, das zusätzliche
+    // Gate hat das Event in der Praxis fast nie durchgelassen. Gate entfernt, Gewicht erhöht.
+    weight: 2,
+    condition: (p) => !!lastEuropeanCup(p)?.champion,
     build: (p) => {
       const euro = lastEuropeanCup(p)!;
       return {
