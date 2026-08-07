@@ -142,7 +142,7 @@ export default function App() {
     const player = current.player;
     const league = current.leagueState;
     if (!player || !league) return;
-    const stats = simulateSeason(player, current.seasonNumber, league);
+    const stats = simulateSeason(player, current.seasonNumber, league, current.foreignLeagues, current.europeanLeagueDrift);
     ageUpPlayer(player);
     const clubEntry = resolveClubSituation(player, league);
     if (clubEntry) player.log.push(clubEntry);
@@ -160,6 +160,7 @@ export default function App() {
       ...current,
       player: { ...player },
       leagueState: { ...league },
+      europeanLeagueDrift: { ...current.europeanLeagueDrift },
       lastSeasonStats: stats,
       currentEvent: null,
       pendingEventIds: [],

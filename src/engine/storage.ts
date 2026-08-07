@@ -53,6 +53,7 @@ export function loadGame(): GameState | null {
       }
     }
     state.foreignLeagues ??= {};
+    state.europeanLeagueDrift ??= {};
     return state;
   } catch {
     return null;

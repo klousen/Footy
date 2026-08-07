@@ -72,6 +72,13 @@ export function SeasonSummary({
         <div className="banner banner-success">🏆 Gewonnen: {stats.trophies.join(", ")}</div>
       )}
 
+      {stats.europeanCup && !stats.europeanCup.champion && (
+        <div className="banner banner-info">
+          🌍 {stats.europeanCup.competition === "CL" ? "Champions League" : "Europa League"}: Ausgeschieden{" "}
+          {stats.europeanCup.stageReached === "Ligaphase" ? "in der Ligaphase" : `im ${stats.europeanCup.stageReached}`}
+        </div>
+      )}
+
       {stats.promoted && (
         <div className="banner banner-success">⬆️ {stats.club} steigt auf!</div>
       )}

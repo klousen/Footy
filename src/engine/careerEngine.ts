@@ -10,7 +10,6 @@ import type {
   GameEvent,
   GameState,
   LeagueState,
-  LeagueTier,
   LogEntry,
   Player,
   Position,
@@ -27,13 +26,17 @@ import { COUNTRIES, type CountryId } from "./leagues";
 import {
   buildLeagueState,
   buildTableSnapshot,
+  clubCoefficient,
+  clubLeagueRank,
   findClub,
   leagueNameForTier,
+  leaguePrestigeRank,
   pickClubNearStrength,
   pickDistinctClubOffers,
   pickSpreadClubOffers,
   simulateLeaguePromotionRelegation,
 } from "./leagueEngine";
+import { advanceEuropeanLeagueDrift, computeSeasonEuropeanCupResult } from "./europeanCup";
 
 const ATTRIBUTE_KEYS: AttributeKey[] = [
   "technik",
@@ -626,10 +629,17 @@ function signed(n: number): string {
 // Saisonsimulation (Spiele im Hintergrund)
 // ---------------------------------------------------------------------------
 
+// "Kontinental-Pokal" ist bewusst NICHT mehr Teil dieses Zufalls-Pools - Champions-
+// und Europa-League-Titel werden jetzt über die echte, Elo-basierte Simulation in
+// `europeanCup.ts` vergeben (siehe unten in `simulateSeason`), nicht mehr blind erwürfelt.
 const TROPHY_POOL_BY_TIER: Record<number, string[]> = {
-  1: ["Meisterschale", "Landespokal", "Kontinental-Pokal"],
+  1: ["Meisterschale", "Landespokal"],
   2: ["Zweitliga-Meisterschaft", "Aufstiegs-Play-off"],
 };
+
+/** Reihenfolge der Turnierrunden (siehe `europeanCup.ts`) - fürs Gehalts-/
+ * Bekanntheits-Bonusstaffel nach Turniertiefe (Index 0 = am frühesten ausgeschieden). */
+const EUROPEAN_STAGE_ORDER = ["Ligaphase", "Achtelfinale", "Viertelfinale", "Halbfinale", "Finale", "Champion"];
 
 /** Einheitliches "Saison 2026/27"-Label für eine Saisonnummer - von `simulateSeason`
  * für die abgeschlossene Saison genutzt UND vom Dashboard für die kommende Saison
@@ -638,7 +648,13 @@ export function seasonLabelForNumber(seasonNumber: number): string {
   return `Saison ${2026 + seasonNumber}/${(2026 + seasonNumber + 1).toString().slice(-2)}`;
 }
 
-export function simulateSeason(player: Player, seasonNumber: number, league: LeagueState): SeasonStats {
+export function simulateSeason(
+  player: Player,
+  seasonNumber: number,
+  league: LeagueState,
+  foreignLeagues: Partial<Record<CountryId, LeagueState>>,
+  europeanLeagueDrift: Partial<Record<CountryId, number>>
+): SeasonStats {
   const overall = overallRating(player);
   const clubStrength = player.club.strength;
   const injuredWeeks = player.injury?.weeksOut ?? 0;
@@ -845,6 +861,40 @@ export function simulateSeason(player: Player, seasonNumber: number, league: Lea
   }
   player.cupExitThisSeason = false;
 
+  // Europäische Wettbewerbe (Champions/Europa League) - siehe europeanCup.ts. Der
+  // Struktur-Drift der 10 Ligen (siehe `advanceEuropeanLeagueDrift`) läuft JEDE Saison
+  // weiter, unabhängig davon, ob der eigene Verein sich qualifiziert - sonst würden
+  // sich Liga-Stärken nur in den Saisons verschieben, in denen der Spieler selbst in
+  // Europa mitspielt. Nur Erstligisten können sich qualifizieren (siehe `deriveSlots
+  // FromStrength`/`clubLeagueRank` - Zweitliga-Vereine sind für die europäischen
+  // Team-Koeffizienten praktisch nie relevant).
+  advanceEuropeanLeagueDrift(europeanLeagueDrift, rng);
+  const europeanCup =
+    player.club.tier === 1
+      ? computeSeasonEuropeanCupResult({
+          playerCountryId: league.countryId,
+          playerClubId: player.club.clubId,
+          playerLeaguePosition: leaguePosition,
+          playerClubCoefficient: trophyCoefficient,
+          league,
+          foreignLeagues,
+          drift: europeanLeagueDrift,
+          rng,
+        })
+      : null;
+  if (europeanCup) {
+    // Der Titel selbst läuft über denselben `trophies`-Kanal wie Meisterschaft/Pokal,
+    // damit Achievements/Karriere-Score/Sharepic ihn automatisch mitzählen (siehe
+    // Trophy-Schleife unten) - nur die Turniertiefe ohne Titel braucht einen
+    // separaten Log-Eintrag (siehe unten nach der Trophy-Schleife).
+    if (europeanCup.champion) {
+      trophies.push(europeanCup.competition === "CL" ? "Champions League" : "Europa League");
+    }
+    const stageIndex = EUROPEAN_STAGE_ORDER.indexOf(europeanCup.stageReached);
+    const europeanReputationGain = clamp(3 + stageIndex * 3, 0, 24);
+    player.reputation = clamp(player.reputation + europeanReputationGain, 0, 100);
+  }
+
   // Individuelle Auszeichnungen: eine echte Chance, sich unabhängig vom Team
   // sportlich zu beweisen und nach oben zu arbeiten.
   const isAttacker = player.position === "ST" || player.position === "FS";
@@ -869,27 +919,50 @@ export function simulateSeason(player: Player, seasonNumber: number, league: Lea
 
   for (const trophy of trophies) {
     const isIndividual = trophy === "Torschützenkönig" || trophy === "Spieler der Saison" || trophy === "Talent der Saison";
+    const isEuropean = trophy === "Champions League" || trophy === "Europa League";
     player.log.push({
       season: seasonNumber,
       age: player.age,
       text: isIndividual
         ? `${player.name} wird als "${trophy}" ausgezeichnet - eine individuelle Krönung der Saison.`
+        : isEuropean
+        ? `${player.name} gewinnt mit ${player.club.name} die ${trophy}!`
         : `${player.name} gewinnt mit ${player.club.name} die/den ${trophy}.`,
       kind: "milestone",
     });
     if (isIndividual) player.reputation = clamp(player.reputation + 8, 0, 100);
   }
+  // Europäische Teilnahme ohne Titel bekommt einen eigenen Log-Eintrag (der Titelfall
+  // ist bereits über die Trophy-Schleife oben abgedeckt).
+  if (europeanCup && !europeanCup.champion) {
+    const compName = europeanCup.competition === "CL" ? "Champions League" : "Europa League";
+    const stageText = europeanCup.stageReached === "Ligaphase" ? "in der Ligaphase" : `im ${europeanCup.stageReached}`;
+    player.log.push({
+      season: seasonNumber,
+      age: player.age,
+      text: `${player.club.name} nimmt an der ${compName} teil - ausgeschieden ${stageText}.`,
+      kind: "positive",
+    });
+  }
 
   // Gehaltssystem: Grundgehalt wird garantiert ausgezahlt, dazu leistungsabhängige
   // Prämien für Tore/Vorlagen (bzw. bei Torhütern weiße Westen/gehaltene Elfmeter),
-  // starke Bewertungen und Titel.
+  // starke Bewertungen und Titel. Europäische Teilnahme bringt zusätzlich TV-/Preisgeld
+  // gestaffelt nach Turniertiefe (siehe `EUROPEAN_STAGE_ORDER`) - real ist bereits die
+  // reine Teilnahme an der Ligaphase eine spürbare finanzielle Zäsur, nicht erst der Titel.
+  const europeanStageIndex = europeanCup ? EUROPEAN_STAGE_ORDER.indexOf(europeanCup.stageReached) : -1;
+  const europeanBonus =
+    europeanCup && europeanStageIndex >= 0
+      ? Math.round((europeanCup.competition === "CL" ? 30000 : 15000) * (europeanStageIndex + 1))
+      : 0;
   const performanceBonus = Math.round(
     goals * 400 +
       assists * 250 +
       cleanSheets * 350 +
       penaltiesSaved * 900 +
       (avgRating >= 7.2 ? 6000 : 0) +
-      trophies.length * 15000
+      trophies.length * 15000 +
+      europeanBonus
   );
   const income = player.contract.wagePerYear + performanceBonus;
   player.wealth += income;
@@ -957,6 +1030,7 @@ export function simulateSeason(player: Player, seasonNumber: number, league: Lea
     newAchievements: [],
     scoreFactors,
     tableSnapshot,
+    europeanCup,
   };
 
   player.seasonHistory.push(stats);
@@ -1183,86 +1257,9 @@ function targetStrengthForReputation(reputation: number, overall: number): numbe
   return clamp(15 + reputation * 0.2 + overall * 0.65, 30, 96);
 }
 
-/** Rang eines Landes nach echter UEFA-5-Jahreswertung (siehe `CountryDef.uefaRank` in
- * leagues.ts) - 0 = höchstes Liga-Ansehen (England), 9 = niedrigstes (Polen) innerhalb
- * dieser Zehnerauswahl. Bewusst UNABHÄNGIG von der Deklarationsreihenfolge der
- * `COUNTRIES`-Liste (die weiterhin die Anzeige-Reihenfolge auf dem
- * Länder-Auswahlbildschirm bestimmt) - Liga-Ansehen und Anzeige-Sortierung sind zwei
- * verschiedene Dinge. Dient als Proxy für "Aufstieg/Abstieg im Liga-Ranking" bei
- * internationalen Wechseln sowie als Basis fürs Gehalt (siehe `leaguePrestigeMultiplier`). */
-function leaguePrestigeRank(countryId: CountryId): number {
-  const def = COUNTRIES.find((c) => c.id === countryId);
-  return def ? def.uefaRank - 1 : COUNTRIES.length;
-}
-
-/** Ligaansehen als Multiplikator: die bestplatzierte Liga der Auswahl zahlt spürbar
- * mehr, die am niedrigsten platzierte spürbar weniger - dieselbe Vereinsstärke ist in
- * einer Topliga schlicht mehr wert als in einer schwächeren (reale Transfermarkt-Logik). */
-function leaguePrestigeMultiplier(countryId: CountryId): number {
-  const rank = leaguePrestigeRank(countryId);
-  return clamp(1.3 - rank * 0.06, 0.7, 1.3);
-}
-
-/**
- * 1-indexierter Rang eines Vereins innerhalb der ERSTEN Liga seines Landes nach
- * Stärke (1 = stärkster Erstligist) - dient als Näherung dafür, ob ein Verein nicht
- * nur "eine hohe Zahl" hat, sondern tatsächlich die klare Tabellenspitze seiner Liga
- * ist (siehe `internationalFlairBonus`). Zweitligisten sind hierfür nie relevant
- * (liefert dann `undefined`) - laut echten UEFA-Team-Koeffizienten sind praktisch
- * ausschließlich Erstligisten unter den international prägenden Topklubs.
- */
-function clubLeagueRank(clubId: string, tier: LeagueTier, league: LeagueState): number | undefined {
-  if (tier !== 1) return undefined;
-  const sorted = [...league.tier1].sort((a, b) => b.strength - a.strength);
-  const idx = sorted.findIndex((c) => c.id === clubId);
-  return idx === -1 ? undefined : idx + 1;
-}
-
-/**
- * "Internationaler Flair"-Bonus: ein wirklich absoluter Topklub (Champions-League-
- * Format-Niveau) IN einer der großen Ligen bringt kommerziell mehr mit, als die reine
- * Stärkezahl hergibt - globale Sponsoren, TV-Vermarktung, CL-Prämien. Bewusst als
- * Überschneidung aus BEIDEM modelliert (hohe Vereinsstärke UND hohes Liga-Ansehen),
- * nicht als Summe: ein starker Verein in einer kleinen Liga (z.B. Legia Warschau) hat
- * dieses globale Scheinwerferlicht nicht in demselben Maß, und selbst ein mittelmäßiger
- * Verein in einer Topliga bekommt keinen Flair-Aufschlag nur fürs Liga-Ansehen (das
- * deckt bereits `leaguePrestigeMultiplier` ab). Wirkt daher nur ganz oben - ab Stärke
- * 80 aufwärts und nur in den (grob) fünf angesehensten Ligen dieser Auswahl.
- *
- * Zusätzlich ein spürbarer Aufschlag für die absolute Tabellenspitze der eigenen Liga
- * (siehe `clubLeagueRank`, optionaler `leagueRank`-Parameter): laut den echten UEFA-
- * Team-Koeffizienten (siehe `CountryDef.uefaRank`) sind die WELTWEIT prägenden
- * Topklubs nicht gleichmäßig über eine Topliga verteilt, sondern konzentrieren sich
- * auf deren Tabellenspitze (Bayern klar vor dem Rest der Bundesliga, PSG klar vor dem
- * Rest der Ligue 1, während England/Spanien gleich mehrere Vereine ganz oben stellen)
- * - ein Rang-1-Verein bekommt daher den größten Aufschlag, Rang 2/3 einen kleineren,
- * gestaffelt nach demselben Liga-Ansehen wie der Basis-Flair.
- */
-function internationalFlairBonus(clubStrength: number, countryId: CountryId, leagueRank?: number): number {
-  const strengthFactor = clamp((clubStrength - 80) / 19, 0, 1); // 0 unter 80, 1 ab Stärke 99
-  const prestigeFactor = clamp((leaguePrestigeMultiplier(countryId) - 1) / 0.3, 0, 1); // 0 ab Rang 5, 1 bei Rang 0
-  let bonus = strengthFactor * prestigeFactor;
-  const rankBonus = leagueRank === 1 ? 1 : leagueRank === 2 ? 0.55 : leagueRank === 3 ? 0.3 : 0;
-  bonus += rankBonus * prestigeFactor * strengthFactor * 0.6;
-  return bonus;
-}
-
-/**
- * ELO-artiger Vereins-Koeffizient: kombiniert die sportliche Stärke des Klubs
- * (0-99, innerhalb der eigenen Liga-Pyramide) mit dem Ansehen der Liga selbst
- * zu einem einzigen Wert - und obendrauf einen Flair-Aufschlag für echte
- * Topklubs in Topligen (siehe `internationalFlairBonus`). Ein "92" in einer
- * Topliga ist damit spürbar mehr wert als ein "92" in einer schwächeren, und
- * ein "92" beim internationalen Aushängeschild nochmal mehr als ein "92" beim
- * soliden Mittelständler derselben Liga - dient als einheitliche Basis fürs
- * Gehalt (und ließe sich künftig für weitere vereinsbezogene Berechnungen
- * wiederverwenden). `leagueRank` (optional, siehe `clubLeagueRank`) verstärkt
- * das für die tatsächliche Tabellenspitze der eigenen Liga zusätzlich.
- */
-function clubCoefficient(club: { strength: number }, countryId: CountryId, leagueRank?: number): number {
-  const flair = internationalFlairBonus(club.strength, countryId, leagueRank);
-  return club.strength * leaguePrestigeMultiplier(countryId) * (1 + flair * 0.5);
-}
+// leaguePrestigeRank/leaguePrestigeMultiplier/clubLeagueRank/internationalFlairBonus/
+// clubCoefficient sind nach leagueEngine.ts umgezogen (siehe dort) - sie werden auch
+// von europeanCup.ts gebraucht, das careerEngine.ts nicht importieren darf (Zirkularität).
 
 /** Geschätztes Jahresgehalt bei einem Verein - richtet sich nach der eigenen
  * Gesamtstärke UND Bekanntheit (beide multiplikativ, nicht nur addiert - ein
@@ -2717,6 +2714,7 @@ export function computeAchievements(player: Player): Achievement[] {
     { id: "kapitaen", label: "Führungsspieler", description: "Wurde zum Mannschaftskapitän ernannt.", positive: true, condition: wasCaptain },
     { id: "nationalkapitaen", label: "Nationalmannschaftskapitän", description: "Führte die Nationalmannschaft aufs Feld.", positive: true, condition: player.nationalTeamCaptain },
     { id: "individuelle_krone", label: "Individuelle Krönung", description: "Mindestens einmal als Torschützenkönig oder Spieler der Saison ausgezeichnet.", positive: true, condition: t.trophies.some((tr) => tr === "Torschützenkönig" || tr === "Spieler der Saison") },
+    { id: "europapokalsieger", label: "Europapokalsieger", description: "Champions League oder Europa League gewonnen.", positive: true, condition: t.trophies.some((tr) => tr === "Champions League" || tr === "Europa League") },
     { id: "geschichtenerzaehler", label: "Bewegte Karriere", description: "Mindestens drei mehrjährige Geschichten bis zum Ende durchlebt.", positive: true, condition: player.completedStorylines.length >= 3 },
     { id: "verletzungsanfaellig", label: "Verletzungsanfällig", description: "Über 60 Wochen der Karriere verletzt ausgefallen.", positive: false, condition: player.totalInjuryWeeks >= 60 },
     { id: "vielwechsler", label: "Vielwechsler", description: "Sechs oder mehr Vereinswechsel - nie richtig sesshaft geworden.", positive: false, condition: player.clubChangesCount >= 6 },

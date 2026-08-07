@@ -742,6 +742,14 @@ input:focus {
   color: var(--green);
 }
 
+/* Bewusst keine eigene Info-Farbe (siehe Design-Tokens oben: Gold deckt Warnung UND
+   Info ab) - unterscheidet sich von .banner-warning nur durch geringere Deckkraft. */
+.banner-info {
+  background: rgba(201, 162, 39, 0.07);
+  border-color: rgba(201, 162, 39, 0.25);
+  color: var(--info);
+}
+
 /* ---------------- Event card ---------------- */
 
 .event-meta {

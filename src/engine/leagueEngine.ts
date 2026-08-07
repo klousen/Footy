@@ -2,6 +2,87 @@ import type { ClubState, LeagueState, LeagueTier, TableRow } from "./types";
 import { clamp } from "./data";
 import { COUNTRIES, disambiguateCities, type CountryId } from "./leagues";
 
+/** Rang eines Landes nach echter UEFA-5-Jahreswertung (siehe `CountryDef.uefaRank` in
+ * leagues.ts) - 0 = höchstes Liga-Ansehen (England), 9 = niedrigstes (Polen) innerhalb
+ * dieser Zehnerauswahl. Bewusst UNABHÄNGIG von der Deklarationsreihenfolge der
+ * `COUNTRIES`-Liste (die weiterhin die Anzeige-Reihenfolge auf dem
+ * Länder-Auswahlbildschirm bestimmt) - Liga-Ansehen und Anzeige-Sortierung sind zwei
+ * verschiedene Dinge. Dient als Proxy für "Aufstieg/Abstieg im Liga-Ranking" bei
+ * internationalen Wechseln sowie als Basis fürs Gehalt (siehe `leaguePrestigeMultiplier`). */
+export function leaguePrestigeRank(countryId: CountryId): number {
+  const def = COUNTRIES.find((c) => c.id === countryId);
+  return def ? def.uefaRank - 1 : COUNTRIES.length;
+}
+
+/** Ligaansehen als Multiplikator: die bestplatzierte Liga der Auswahl zahlt spürbar
+ * mehr, die am niedrigsten platzierte spürbar weniger - dieselbe Vereinsstärke ist in
+ * einer Topliga schlicht mehr wert als in einer schwächeren (reale Transfermarkt-Logik). */
+export function leaguePrestigeMultiplier(countryId: CountryId): number {
+  const rank = leaguePrestigeRank(countryId);
+  return clamp(1.3 - rank * 0.06, 0.7, 1.3);
+}
+
+/**
+ * 1-indexierter Rang eines Vereins innerhalb der ERSTEN Liga seines Landes nach
+ * Stärke (1 = stärkster Erstligist) - dient als Näherung dafür, ob ein Verein nicht
+ * nur "eine hohe Zahl" hat, sondern tatsächlich die klare Tabellenspitze seiner Liga
+ * ist (siehe `internationalFlairBonus`). Zweitligisten sind hierfür nie relevant
+ * (liefert dann `undefined`) - laut echten UEFA-Team-Koeffizienten sind praktisch
+ * ausschließlich Erstligisten unter den international prägenden Topklubs.
+ */
+export function clubLeagueRank(clubId: string, tier: LeagueTier, league: LeagueState): number | undefined {
+  if (tier !== 1) return undefined;
+  const sorted = [...league.tier1].sort((a, b) => b.strength - a.strength);
+  const idx = sorted.findIndex((c) => c.id === clubId);
+  return idx === -1 ? undefined : idx + 1;
+}
+
+/**
+ * "Internationaler Flair"-Bonus: ein wirklich absoluter Topklub (Champions-League-
+ * Format-Niveau) IN einer der großen Ligen bringt kommerziell mehr mit, als die reine
+ * Stärkezahl hergibt - globale Sponsoren, TV-Vermarktung, CL-Prämien. Bewusst als
+ * Überschneidung aus BEIDEM modelliert (hohe Vereinsstärke UND hohes Liga-Ansehen),
+ * nicht als Summe: ein starker Verein in einer kleinen Liga (z.B. Legia Warschau) hat
+ * dieses globale Scheinwerferlicht nicht in demselben Maß, und selbst ein mittelmäßiger
+ * Verein in einer Topliga bekommt keinen Flair-Aufschlag nur fürs Liga-Ansehen (das
+ * deckt bereits `leaguePrestigeMultiplier` ab). Wirkt daher nur ganz oben - ab Stärke
+ * 80 aufwärts und nur in den (grob) fünf angesehensten Ligen dieser Auswahl.
+ *
+ * Zusätzlich ein spürbarer Aufschlag für die absolute Tabellenspitze der eigenen Liga
+ * (siehe `clubLeagueRank`, optionaler `leagueRank`-Parameter): laut den echten UEFA-
+ * Team-Koeffizienten (siehe `CountryDef.uefaRank`) sind die WELTWEIT prägenden
+ * Topklubs nicht gleichmäßig über eine Topliga verteilt, sondern konzentrieren sich
+ * auf deren Tabellenspitze (Bayern klar vor dem Rest der Bundesliga, PSG klar vor dem
+ * Rest der Ligue 1, während England/Spanien gleich mehrere Vereine ganz oben stellen)
+ * - ein Rang-1-Verein bekommt daher den größten Aufschlag, Rang 2/3 einen kleineren,
+ * gestaffelt nach demselben Liga-Ansehen wie der Basis-Flair.
+ */
+export function internationalFlairBonus(clubStrength: number, countryId: CountryId, leagueRank?: number): number {
+  const strengthFactor = clamp((clubStrength - 80) / 19, 0, 1); // 0 unter 80, 1 ab Stärke 99
+  const prestigeFactor = clamp((leaguePrestigeMultiplier(countryId) - 1) / 0.3, 0, 1); // 0 ab Rang 5, 1 bei Rang 0
+  let bonus = strengthFactor * prestigeFactor;
+  const rankBonus = leagueRank === 1 ? 1 : leagueRank === 2 ? 0.55 : leagueRank === 3 ? 0.3 : 0;
+  bonus += rankBonus * prestigeFactor * strengthFactor * 0.6;
+  return bonus;
+}
+
+/**
+ * ELO-artiger Vereins-Koeffizient: kombiniert die sportliche Stärke des Klubs
+ * (0-99, innerhalb der eigenen Liga-Pyramide) mit dem Ansehen der Liga selbst
+ * zu einem einzigen Wert - und obendrauf einen Flair-Aufschlag für echte
+ * Topklubs in Topligen (siehe `internationalFlairBonus`). Ein "92" in einer
+ * Topliga ist damit spürbar mehr wert als ein "92" in einer schwächeren, und
+ * ein "92" beim internationalen Aushängeschild nochmal mehr als ein "92" beim
+ * soliden Mittelständler derselben Liga - dient als einheitliche Basis fürs
+ * Gehalt (und ließe sich künftig für weitere vereinsbezogene Berechnungen
+ * wiederverwenden). `leagueRank` (optional, siehe `clubLeagueRank`) verstärkt
+ * das für die tatsächliche Tabellenspitze der eigenen Liga zusätzlich.
+ */
+export function clubCoefficient(club: { strength: number }, countryId: CountryId, leagueRank?: number): number {
+  const flair = internationalFlairBonus(club.strength, countryId, leagueRank);
+  return club.strength * leaguePrestigeMultiplier(countryId) * (1 + flair * 0.5);
+}
+
 /** Baut die initiale Liga-Pyramide (Liga 1 + Liga 2) für ein gewähltes Land auf. */
 export function buildLeagueState(countryId: CountryId, rng: () => number): LeagueState {
   const def = COUNTRIES.find((c) => c.id === countryId);

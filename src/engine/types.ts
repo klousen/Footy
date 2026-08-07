@@ -155,6 +155,18 @@ export interface ClubTenure {
   relegated: boolean;
 }
 
+/** Ergebnis der europäischen Wettbewerbsteilnahme einer Saison (siehe `europeanCup.ts`)
+ * - nur gesetzt, wenn sich der (Erstliga-)Verein sportlich qualifiziert hat. `champion`
+ * ist zusätzlich redundant in `SeasonStats.trophies` enthalten, damit Achievements/
+ * Score/Sharepic den Titel automatisch mitzählen, ohne jede Stelle einzeln anzupassen. */
+export interface EuropeanCupResult {
+  competition: "CL" | "EL";
+  /** "Ligaphase" | "Achtelfinale" | "Viertelfinale" | "Halbfinale" | "Finale" | "Champion" -
+   * die letzte Runde, die erreicht (bei "Champion": gewonnen) wurde. */
+  stageReached: string;
+  champion: boolean;
+}
+
 /** Eine Zeile im Tabellen-Ausschnitt am Saisonende (siehe `buildTableSnapshot` in
  * leagueEngine.ts) - keine echte Spiel-für-Spiel-Simulation, sondern eine
  * rang-basierte Annäherung, die um `leaguePosition` herum plausible Werte liefert. */
@@ -219,6 +231,9 @@ export interface SeasonStats {
   newAchievements: Achievement[];
   /** Tabellen-Ausschnitt (3 Vereine über/unter dem eigenen) für den Saisonrückblick. */
   tableSnapshot: TableRow[];
+  /** Champions-/Europa-League-Teilnahme dieser Saison, `null` wenn nicht qualifiziert
+   * (siehe `europeanCup.ts`). */
+  europeanCup: EuropeanCupResult | null;
 }
 
 export interface LogEntry {
@@ -512,6 +527,17 @@ export interface GameState {
    * die bisherige Heimatliga hier hinein und die neue wird aktiv (`leagueState`).
    */
   foreignLeagues: Partial<Record<CountryId, LeagueState>>;
+  /**
+   * Leichter, dauerhaft persistierter Struktur-Drift je Land (siehe `europeanCup.ts`,
+   * `advanceEuropeanLeagueDrift`) - EIN Fließkommawert pro Land (nicht pro Verein),
+   * der sich jede Saison für alle 10 Länder minimal verschiebt (Investoren-Geld,
+   * Substanzverlust etc.), damit sich die aus den Vereinsstärken abgeleiteten
+   * Liga-Stärken (`deriveLeagueStrengths`) über viele Saisons langsam verschieben
+   * können, statt Saison für Saison unabhängig neu zu würfeln. Bewusst kein
+   * persistentes Elo pro Einzelverein aller 10 Ligen (das würde ~300 Vereine über
+   * die gesamte Karriere simulieren, die der Spieler nie zu Gesicht bekommt).
+   */
+  europeanLeagueDrift: Partial<Record<CountryId, number>>;
   seasonNumber: number; // 1 = erste Saison
   screen: Screen;
   /**
