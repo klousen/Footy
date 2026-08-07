@@ -75,6 +75,10 @@ export interface LeagueState {
   tier1Name: string;
   tier2Name: string;
   swapCount: number;
+  /** Land mit echtem Relegationsspiel (siehe `CountryDef.hasRelegationPlayoff` in
+   * leagues.ts und `simulateLeaguePromotionRelegation`) - von `swapCount` Plätzen ist
+   * dann nur `swapCount - 1` direkt sicher, der letzte wird ausgespielt. */
+  hasRelegationPlayoff: boolean;
   tier1: ClubState[];
   tier2: ClubState[];
 }
@@ -230,6 +234,10 @@ export interface SeasonStats {
   redCards: number;
   promoted: boolean;
   relegated: boolean;
+  /** Nur gesetzt, wenn der Verein an einem echten Relegationsspiel beteiligt war
+   * (siehe `CountryDef.hasRelegationPlayoff`/`simulateLeaguePromotionRelegation`) -
+   * unabhängig davon, ob sich dadurch die Liga-Zugehörigkeit geändert hat. */
+  relegationPlayoff?: "gehalten" | "verpasst" | "aufgestiegen" | "abgestiegen";
   /** Gehalt + Leistungsboni, die in dieser Saison ausgezahlt wurden. */
   income: number;
   /** Bekanntheits-Zuwachs in dieser Saison (für die Saison-Bilanz). */

@@ -111,6 +111,7 @@ export function buildLeagueState(countryId: CountryId, rng: () => number): Leagu
     tier1Name: def.tier1Name,
     tier2Name: def.tier2Name,
     swapCount: def.swapCount,
+    hasRelegationPlayoff: def.hasRelegationPlayoff ?? false,
     tier1,
     tier2,
   };
@@ -260,6 +261,29 @@ export interface PromotionRelegationResult {
   relegated: ClubState[]; // von Liga 1 in Liga 2
   tier1Order: (ClubState & { rank: number })[];
   tier2Order: (ClubState & { rank: number })[];
+  /** Nur gesetzt, wenn `league.hasRelegationPlayoff` gilt UND der letzte Swap-Platz
+   * über ein echtes Relegationsspiel statt direktem Auf-/Abstieg entschieden wurde
+   * (siehe `simulateLeaguePromotionRelegation`). `tier2ClubWon` sagt, ob der Liga-2-
+   * Verein das Duell für sich entschied (→ Aufstieg/Abstieg findet statt) oder der
+   * Liga-1-Verein die Klasse hielt. */
+  playoff?: { tier1Club: ClubState; tier2Club: ClubState; tier2ClubWon: boolean };
+}
+
+/**
+ * Gewinnwahrscheinlichkeit des ERSTEN Vereins in einem Relegationsspiel (Liga-1- vs.
+ * Liga-2-Verein, Hin-/Rückspiel-Prinzip), auf Basis desselben ELO-artigen
+ * Vereinskoeffizienten wie Europapokal/Nationalpokal (`clubCoefficient`). Bewusst mit
+ * demselben geglätteten Nenner (600 statt der üblichen 400) wie beim Nationalpokal
+ * (`underdogFriendlyExpectedScore` in nationalCup.ts) - ein Relegationsspiel ist ein
+ * enges Einzelduell unter Höchstdruck, kein Saison-Durchschnitt. Der Liga-2-
+ * Außenseiter bekommt damit eine reale, aber weiterhin klar unterlegene Chance -
+ * genau das reale Bild echter Relegationsspiele (der Erstligist verliert, aber
+ * längst nicht immer).
+ */
+function relegationPlayoffExpectedScore(clubA: ClubState, clubB: ClubState, countryId: CountryId): number {
+  const coeffA = clubCoefficient(clubA, countryId);
+  const coeffB = clubCoefficient(clubB, countryId);
+  return 1 / (1 + Math.pow(10, (coeffB - coeffA) / 600));
 }
 
 /**
@@ -296,12 +320,39 @@ export function simulateLeaguePromotionRelegation(
     ? simulateTableAnchored(league.tier2, anchor!.clubId, anchor!.leaguePosition, rng)
     : simulateTable(league.tier2, rng);
 
-  const n = Math.min(league.swapCount, league.tier1.length - 1, league.tier2.length - 1);
+  const swapCap = Math.min(league.swapCount, league.tier1.length - 1, league.tier2.length - 1);
+  // Länder mit Relegationsspiel (siehe `CountryDef.hasRelegationPlayoff`): von den
+  // `swapCap` möglichen Plätzen ist nur `swapCap - 1` direkt sicher, der letzte wird
+  // zwischen dem knapp-noch-erstligisten und dem knapp-noch-zweitligisten Verein
+  // ausgespielt (siehe `relegationPlayoffExpectedScore`).
+  const usePlayoff = league.hasRelegationPlayoff && swapCap >= 1;
+  const guaranteedSwaps = usePlayoff ? swapCap - 1 : swapCap;
+
+  let playoff: PromotionRelegationResult["playoff"];
+  let n = guaranteedSwaps;
+
+  if (usePlayoff) {
+    const tier1PlayoffClub = tier1Order[tier1Order.length - swapCap];
+    const tier2PlayoffClub = tier2Order[swapCap - 1];
+    if (tier1PlayoffClub && tier2PlayoffClub) {
+      const tier1WinProb = clamp(
+        relegationPlayoffExpectedScore(tier1PlayoffClub, tier2PlayoffClub, league.countryId),
+        0.3,
+        0.85
+      );
+      const tier2ClubWon = rng() >= tier1WinProb;
+      const { rank: _r1, ...tier1PlayoffClubClean } = tier1PlayoffClub;
+      const { rank: _r2, ...tier2PlayoffClubClean } = tier2PlayoffClub;
+      playoff = { tier1Club: tier1PlayoffClubClean, tier2Club: tier2PlayoffClubClean, tier2ClubWon };
+      if (tier2ClubWon) n = swapCap;
+    }
+  }
+
   // Abstieg NUR aus Liga 1 (die schwächsten n Vereine) ...
-  const relegated = tier1Order.slice(-n).map(({ rank: _rank, ...c }) => c);
+  const relegated = n > 0 ? tier1Order.slice(-n).map(({ rank: _rank, ...c }) => c) : [];
   // ... Aufstieg NUR aus Liga 2 (die stärksten n Vereine) - Liga 2 selbst hat
   // keine "Abstiegszone", da es keine dritte Liga gibt.
-  const promoted = tier2Order.slice(0, n).map(({ rank: _rank, ...c }) => c);
+  const promoted = n > 0 ? tier2Order.slice(0, n).map(({ rank: _rank, ...c }) => c) : [];
 
   const relegatedIds = new Set(relegated.map((c) => c.id));
   const promotedIds = new Set(promoted.map((c) => c.id));
@@ -318,7 +369,7 @@ export function simulateLeaguePromotionRelegation(
   league.tier1 = newTier1;
   league.tier2 = newTier2;
 
-  return { promoted, relegated, tier1Order, tier2Order };
+  return { promoted, relegated, tier1Order, tier2Order, playoff };
 }
 
 /**

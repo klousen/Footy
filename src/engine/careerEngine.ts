@@ -836,17 +836,16 @@ export function simulateSeason(
 
   const trophies: string[] = [];
   const trophyPool = TROPHY_POOL_BY_TIER[player.club.tier];
-  // Meisterschaft: NUR die tatsächliche Tabellenführung (Platz 1) kann den Titel
-  // bringen - alles andere widerspräche der im Saisonrückblick gezeigten Tabelle
-  // (Bugreport: Meisterschale trotz Tabellenplatz 2). OB Platz 1 dann tatsächlich
-  // zum Titel wird, hängt weiterhin vom Vereinskoeffizienten und dem eigenen Anteil
-  // ab - ein Übermacht-Klub wandelt eine Tabellenführung öfter in echte Meisterschaft
-  // um als ein knapper Erstplatzierter (der die Führung z.B. am letzten Spieltag noch
-  // hergeben könnte - das drückt die Chance, verhindert die Meisterschaft aber nicht
-  // grundsätzlich, solange `leaguePosition` am Saisonende Platz 1 zeigt).
+  // Meisterschaft: geht ausschließlich nach Punkten (bei Punktgleichheit Tordifferenz,
+  // danach Anzahl Siege absolut) - genau wie im echten Ligabetrieb. Zeigt der
+  // Saisonrückblick `leaguePosition === 1`, STEHT der Verein damit schon
+  // definitionsgemäß als Punktbester (bzw. nach diesen Tiebreakern) fest - es gibt
+  // danach keine weitere Zufallschance mehr, die den Titel trotz Tabellenführung
+  // verhindern könnte (frühere `titleChance`-Warscheinlichkeit entfernt: Bugreport
+  // "Meisterschale trotz Tabellenplatz 2" zeigte, dass Tabellenplatz und Trophäe nie
+  // auseinanderfallen dürfen - das gilt in beide Richtungen, nicht nur gegen Platz 2).
   if (leaguePosition === 1) {
-    const titleChance = clamp(0.45 + coeffDominance * 0.45 + trophyContribution, 0.25, 0.95);
-    if (rng() < titleChance) trophies.push(trophyPool[0]);
+    trophies.push(trophyPool[0]);
   }
   // Aufstiegs-Play-off (nur Liga 2): eigener, von der Pokal-Simulation unabhängiger
   // Zufalls-Slot - eine Aufstiegschance ist ein anderes Konzept als eine Pokal-
@@ -1563,13 +1562,43 @@ export function applyLeaguePromotionRelegation(player: Player, league: LeagueSta
   const wasRelegated = result.relegated.some((c) => c.id === player.club.clubId);
   const wasPromoted = result.promoted.some((c) => c.id === player.club.clubId);
 
-  if (!wasRelegated && !wasPromoted) return null;
+  // Echtes Relegationsspiel (siehe `CountryDef.hasRelegationPlayoff`): der eigene
+  // Verein kann hier auch OHNE Auf-/Abstieg beteiligt gewesen sein (das Duell
+  // gewonnen/verloren, aber die Liga-Zugehörigkeit blieb dieselbe) - das braucht
+  // eigene Log-Einträge, sonst bliebe so ein Saisonhöhepunkt (bzw. -tiefpunkt)
+  // völlig unerwähnt (vorher: `return null` ohne jede Reaktion).
+  const playoff = result.playoff;
+  const playerInPlayoff =
+    playoff && (playoff.tier1Club.id === player.club.clubId || playoff.tier2Club.id === player.club.clubId);
+  const playerWasTier1InPlayoff = playerInPlayoff && playoff!.tier1Club.id === player.club.clubId;
+  const opponentCity = playerInPlayoff
+    ? (playerWasTier1InPlayoff ? playoff!.tier2Club.city : playoff!.tier1Club.city)
+    : "";
+
+  if (!wasRelegated && !wasPromoted) {
+    if (!playerInPlayoff) return null;
+    // Relegationsspiel gewonnen, aber die eigene Liga-Zugehörigkeit bleibt gleich:
+    // als Liga-1-Verein die Klasse gehalten, oder als Liga-2-Verein den Aufstieg
+    // knapp verpasst (der jeweils andere Fall - Liga wechselt sich - läuft über
+    // `wasRelegated`/`wasPromoted` unten, inklusive Score/Moral-Effekten).
+    const survived = playerWasTier1InPlayoff;
+    if (lastStats) lastStats.relegationPlayoff = survived ? "gehalten" : "verpasst";
+    player.morale = clamp(player.morale + (survived ? 5 : -6), 0, 100);
+    const leagueName = leagueNameForTier(league, player.club.tier);
+    const text = survived
+      ? `${player.club.name} übersteht das Relegationsspiel gegen ${opponentCity} in letzter Sekunde und bleibt in der ${leagueName}.`
+      : `${player.club.name} verliert das Relegationsspiel gegen ${opponentCity} und verpasst den Aufstieg in die ${
+          league.tier1Name
+        } denkbar knapp.`;
+    return { season: 0, age: player.age, text, kind: survived ? "positive" : "negative" };
+  }
 
   player.club.tier = wasRelegated ? 2 : 1;
   const personalFormGreat = !!lastStats && lastStats.avgRating >= 6.8;
   if (lastStats) {
     lastStats.relegated = wasRelegated;
     lastStats.promoted = wasPromoted;
+    if (playerInPlayoff) lastStats.relegationPlayoff = wasRelegated ? "abgestiegen" : "aufgestiegen";
     const points = wasRelegated ? -40 : 40;
     lastStats.scoreFactors.push({ label: wasRelegated ? "Abstieg" : "Aufstieg", points });
     lastStats.score += points;
@@ -1592,11 +1621,15 @@ export function applyLeaguePromotionRelegation(player: Player, league: LeagueSta
   }
 
   const leagueName = leagueNameForTier(league, player.club.tier);
-  const text = wasRelegated
-    ? personalFormGreat
-      ? `${player.club.name} steigt trotz einer starken Saison von ${player.name} ab und spielt künftig in der ${leagueName}.`
-      : `${player.club.name} steigt ab und spielt künftig in der ${leagueName}.`
-    : `${player.club.name} steigt auf und spielt künftig in der ${leagueName} - ${player.name} hat maßgeblich dazu beigetragen.`;
+  const text = playerInPlayoff
+    ? wasRelegated
+      ? `${player.club.name} verliert das Relegationsspiel gegen ${opponentCity} und steigt ab - künftig in der ${leagueName}.`
+      : `${player.club.name} gewinnt das Relegationsspiel gegen ${opponentCity} und steigt auf in die ${leagueName} - ${player.name} hat maßgeblich dazu beigetragen.`
+    : wasRelegated
+      ? personalFormGreat
+        ? `${player.club.name} steigt trotz einer starken Saison von ${player.name} ab und spielt künftig in der ${leagueName}.`
+        : `${player.club.name} steigt ab und spielt künftig in der ${leagueName}.`
+      : `${player.club.name} steigt auf und spielt künftig in der ${leagueName} - ${player.name} hat maßgeblich dazu beigetragen.`;
 
   return { season: 0, age: player.age, text, kind: wasRelegated ? "negative" : "positive" };
 }

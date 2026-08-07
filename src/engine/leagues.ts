@@ -37,8 +37,18 @@ export interface CountryDef {
   flag: string;
   tier1Name: string;
   tier2Name: string;
-  /** Anzahl Vereine, die je Saison zwischen Liga 1 und Liga 2 den Platz tauschen. */
+  /** Höchstzahl Vereine, die je Saison zwischen Liga 1 und Liga 2 den Platz tauschen
+   * (bei `hasRelegationPlayoff` die Obergrenze inkl. Relegationsspiel, siehe dort -
+   * sonst die feste, garantierte Zahl). */
   swapCount: number;
+  /** Länder mit echtem Relegationsspiel (Liga-1- gegen Liga-2-Verein, Hin-/Rückspiel-
+   * Prinzip, siehe `simulateLeaguePromotionRelegation`) - DE/FR/PT/BE/NL nach echtem
+   * Vorbild. Von den `swapCount` Plätzen sind dann nur `swapCount - 1` direkt sicher;
+   * der letzte Platz wird zwischen dem knapp-noch-sicheren Liga-1-Verein und dem
+   * knapp-nicht-aufgestiegenen Liga-2-Verein ausgespielt (kann also je Saison zwischen
+   * `swapCount - 1` und `swapCount` Vereinen insgesamt schwanken) - bei den übrigen
+   * Ligen (England/Italien/Spanien/Türkei/Polen) bleibt es beim festen, direkten Swap. */
+  hasRelegationPlayoff?: boolean;
   /** Rang (1 = höchstes Ansehen) nach der echten UEFA-Team-Koeffizienten-Rangliste der
    * Saison 2026/27 (siehe `leaguePrestigeRank` in careerEngine.ts) - bestimmt das
    * Liga-Ansehen fürs Gehalt/Vereins-Prestige, unabhängig von der Reihenfolge dieser
@@ -128,7 +138,8 @@ export const COUNTRIES: CountryDef[] = [
     flag: "🇩🇪",
     tier1Name: "Bundesliga",
     tier2Name: "2. Bundesliga",
-    swapCount: 2,
+    swapCount: 3,
+    hasRelegationPlayoff: true,
     uefaRank: 4,
     tier1Cities: [
       "München", "Leverkusen", "Leipzig", "Dortmund", "Frankfurt", "Stuttgart",
@@ -148,6 +159,7 @@ export const COUNTRIES: CountryDef[] = [
     tier1Name: "Ligue 1",
     tier2Name: "Ligue 2",
     swapCount: 2,
+    hasRelegationPlayoff: true,
     uefaRank: 5,
     tier1Cities: [
       "Paris-Auteuil", "Marseille", "Monaco", "Lyon", "Lille", "Nizza", "Lens",
@@ -166,7 +178,8 @@ export const COUNTRIES: CountryDef[] = [
     flag: "🇵🇹",
     tier1Name: "Primeira Liga",
     tier2Name: "Liga Portugal 2",
-    swapCount: 2,
+    swapCount: 3,
+    hasRelegationPlayoff: true,
     uefaRank: 6,
     tier1Cities: [
       "Porto", "Lissabon-Benfica", "Lissabon-Alvalade", "Braga", "Guimarães",
@@ -187,6 +200,7 @@ export const COUNTRIES: CountryDef[] = [
     tier1Name: "Pro League",
     tier2Name: "Challenger Pro League",
     swapCount: 2,
+    hasRelegationPlayoff: true,
     uefaRank: 7,
     tier1Cities: [
       "Brügge-Sint-Andries", "Brüssel-Anderlecht", "Genk", "Antwerpen", "Gent",
@@ -206,6 +220,7 @@ export const COUNTRIES: CountryDef[] = [
     tier1Name: "Eredivisie",
     tier2Name: "Eerste Divisie",
     swapCount: 3,
+    hasRelegationPlayoff: true,
     uefaRank: 8,
     tier1Cities: [
       "Amsterdam", "Eindhoven", "Rotterdam-Feijenoord", "Alkmaar", "Enschede", "Utrecht",
