@@ -85,7 +85,30 @@ im höheren Alter.
   einen Moral-/Bekanntheitsschub, und wer dabei eine starke individuelle
   Saison zeigt, wird für größere Vereine interessant. Steigt der Verein trotz
   starker eigener Leistung ab, bleibt das nicht unbemerkt - Vereine bieten
-  dann gezielt einen "Rettungsanker" weg vom sinkenden Schiff an.
+  dann gezielt einen "Rettungsanker" weg vom sinkenden Schiff an. In
+  Deutschland, Frankreich, Portugal, Belgien und den Niederlanden entscheidet
+  der letzte Auf-/Abstiegsplatz ein echtes **Relegationsspiel** zwischen dem
+  knapp-noch-erstligistischen und dem knapp-noch-zweitligistischen Verein -
+  auch das trägt der Spieler live mit, inklusive eigenem Log-Eintrag für
+  Sieg oder Niederlage.
+- **Champions Cup, Europa Cup & Landespokal**: Neben der Meisterschaft (nur
+  Tabellenplatz 1 holt die Meisterschale) nehmen alle Liga-1- und
+  Liga-2-Vereine automatisch am nationalen Pokal teil, mit realistischer
+  Außenseiterchance und eigenem Event bei einem echten Überraschungscoup.
+  Erstligisten qualifizieren sich zusätzlich für Champions Cup oder Europa
+  Cup - die Qualifikationsplätze sind je Land fest an den tatsächlichen
+  Tabellenplatz gekoppelt (in den Top-Ligen z. B. Platz 1-4 Champions Cup,
+  Platz 5 + Pokalsieger Europa Cup; kleinere Ligen bekommen einen
+  zusätzlichen Qualifikationsplatz, der sich erst über ein simuliertes
+  Play-off den Champions-Cup-Platz erspielen muss). Der Turnierlauf selbst
+  wird auf Basis des ELO-artigen Vereinskoeffizienten simuliert, inklusive
+  Fortschritt bis zum möglichen Titel.
+- **Torwart als echte eigene Rolle**: Torhüter haben eine binäre Kaderrolle
+  (Nummer 1 oder Nummer 2, keine abgestufte Rotation) sowie eigene
+  Saison-Statistiken - Weiße Westen (zu-null gespielte Spiele) und
+  Paradenquote statt Tore/Vorlagen - plus eigene Events (Elfmeter-Boost,
+  Glanzparade). Feldspieler-spezifische Events sind für Torhüter
+  ausgeschlossen oder passend umgeschrieben.
 - **Sofortiges Feedback**: Jede Entscheidung zeigt direkt im Anschluss, was
   sie bewirkt hat - Ergebnistext, die Gesamtstärke vorher/nachher (der
   direkte fußballerische Impact) sowie alle Attribut-, Charakter- und
