@@ -1553,8 +1553,16 @@ export function resolveClubSituation(player: Player, league: LeagueState): LogEn
  * aufsteigen.
  */
 export function applyLeaguePromotionRelegation(player: Player, league: LeagueState): LogEntry | null {
-  const result = simulateLeaguePromotionRelegation(league, rng);
+  // lastStats VOR der Simulation holen (nicht danach), damit deren leaguePosition als
+  // Anker für den Spielerverein dient - sonst könnte diese Simulation dem Spieler
+  // einen Tabellenplatz zuweisen, der der bereits im Saisonrückblick gezeigten
+  // Platzierung widerspricht (siehe simulateTableAnchored in leagueEngine.ts).
   const lastStats = player.seasonHistory[player.seasonHistory.length - 1];
+  const result = simulateLeaguePromotionRelegation(
+    league,
+    rng,
+    lastStats ? { clubId: player.club.clubId, leaguePosition: lastStats.leaguePosition } : undefined
+  );
 
   const wasRelegated = result.relegated.some((c) => c.id === player.club.clubId);
   const wasPromoted = result.promoted.some((c) => c.id === player.club.clubId);

@@ -218,6 +218,43 @@ function simulateTable(clubs: ClubState[], rng: () => number): (ClubState & { ra
   return scored.map((s, i) => ({ ...s.club, rank: i + 1 }));
 }
 
+/**
+ * Wie `simulateTable`, aber mit dem Spielerverein EXAKT auf `anchorPosition`
+ * verankert (analog zu `buildLeagueTable`, das dieselbe Anker-Logik für die im
+ * Saisonrückblick angezeigte Tabelle nutzt) - alle übrigen Vereine werden weiterhin
+ * per Stärke + Zufallsrauschen sortiert und um den Anker herum eingefügt.
+ *
+ * Ohne diese Verankerung würfelte die Auf-/Abstiegs-Simulation den Spielerverein
+ * komplett unabhängig von der angezeigten Tabellenplatzierung neu (nur aus der
+ * rohen `ClubState.strength`, ohne jeden Bezug zur persönlichen Saisonleistung) -
+ * das konnte dazu führen, dass die Tabelle z.B. Platz 6 zeigte, der Verein laut
+ * dieser zweiten, unabhängigen Simulation aber trotzdem abstieg (Bugreport).
+ */
+function simulateTableAnchored(
+  clubs: ClubState[],
+  anchorClubId: string,
+  anchorPosition: number,
+  rng: () => number
+): (ClubState & { rank: number })[] {
+  const total = clubs.length;
+  const anchorClub = clubs.find((c) => c.id === anchorClubId);
+  if (!anchorClub) return simulateTable(clubs, rng);
+
+  const position = clamp(Math.round(anchorPosition), 1, total);
+  const others = clubs
+    .filter((c) => c.id !== anchorClubId)
+    .map((c) => ({ club: c, score: c.strength + (rng() - 0.5) * 30 }))
+    .sort((a, b) => b.score - a.score)
+    .map((s) => s.club);
+
+  const ordered: ClubState[] = [];
+  let otherIdx = 0;
+  for (let pos = 1; pos <= total; pos++) {
+    ordered.push(pos === position ? anchorClub : others[otherIdx++]);
+  }
+  return ordered.map((c, i) => ({ ...c, rank: i + 1 }));
+}
+
 export interface PromotionRelegationResult {
   promoted: ClubState[]; // von Liga 2 in Liga 1
   relegated: ClubState[]; // von Liga 1 in Liga 2
@@ -241,10 +278,23 @@ export interface PromotionRelegationResult {
  */
 export function simulateLeaguePromotionRelegation(
   league: LeagueState,
-  rng: () => number
+  rng: () => number,
+  /** Vereins-ID + Tabellenplatz (aus `SeasonStats.leaguePosition`) des Spielers -
+   * verankert den Spielerverein in SEINER Liga-Ebene an genau der Position, die ihm
+   * im Saisonrückblick bereits gezeigt wurde (siehe `simulateTableAnchored`). Ohne
+   * Angabe (z.B. für die reine Debug-/Test-Nutzung) läuft die Simulation wie zuvor
+   * komplett unabhängig für beide Ebenen. */
+  anchor?: { clubId: string; leaguePosition: number }
 ): PromotionRelegationResult {
-  const tier1Order = simulateTable(league.tier1, rng);
-  const tier2Order = simulateTable(league.tier2, rng);
+  const anchorInTier1 = anchor && league.tier1.some((c) => c.id === anchor.clubId);
+  const anchorInTier2 = anchor && league.tier2.some((c) => c.id === anchor.clubId);
+
+  const tier1Order = anchorInTier1
+    ? simulateTableAnchored(league.tier1, anchor!.clubId, anchor!.leaguePosition, rng)
+    : simulateTable(league.tier1, rng);
+  const tier2Order = anchorInTier2
+    ? simulateTableAnchored(league.tier2, anchor!.clubId, anchor!.leaguePosition, rng)
+    : simulateTable(league.tier2, rng);
 
   const n = Math.min(league.swapCount, league.tier1.length - 1, league.tier2.length - 1);
   // Abstieg NUR aus Liga 1 (die schwächsten n Vereine) ...
