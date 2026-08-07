@@ -24,11 +24,13 @@ import {
   pickPostCareerPath,
   pickSeasonTemplateIds,
   resolveClubSituation,
+  rng,
   shouldOfferRetirement,
   simulateSeason,
   STALE_AFTER_TRANSFER_TEMPLATE_IDS,
   summarizeEffects,
 } from "./engine/careerEngine";
+import { pickSpreadClubOffers } from "./engine/leagueEngine";
 import { StartScreen } from "./ui/StartScreen";
 import { SelectCountry } from "./ui/SelectCountry";
 import { CreatePlayer } from "./ui/CreatePlayer";
@@ -53,6 +55,29 @@ export default function App() {
   useEffect(() => {
     saveGame(game);
   }, [game]);
+
+  // Einmalig beim Mount: `pendingCountry`/`youthOffers` leben bewusst NUR als
+  // Component-State, nicht in `GameState` (siehe Kommentare dort) - das persistierte
+  // `game.screen` kann nach einem Reload aber trotzdem noch auf "create" oder
+  // "youthOffer" zeigen, während der dafür nötige Component-State (Länderwahl bzw.
+  // Angebotsliste) mit dem Reload verloren ging. Ohne diese Absicherung tut der
+  // "Karriere beginnen"-Button dann buchstäblich nichts mehr (`handleCreatePlayer`
+  // bricht wegen fehlendem `pendingCountry` still ab, Bugreport) bzw. zeigt
+  // "youthOffer" eine leere, unwählbare Angebotsliste. Holt den Spieler in beiden
+  // Fällen in einen benutzbaren Zustand zurück, statt ihn auf einem toten Screen
+  // stehen zu lassen.
+  useEffect(() => {
+    if (game.screen === "create" && !pendingCountry) {
+      setGame({ ...emptyState(), screen: "country" });
+      return;
+    }
+    if (game.screen === "youthOffer" && youthOffers.length === 0 && game.leagueState) {
+      setYouthOffers(pickSpreadClubOffers(game.leagueState.tier2, rng, 3));
+    }
+    // Nur beim allerersten Mount relevant (Reload-Wiederherstellung) - läuft
+    // absichtlich nicht bei jedem Screen-Wechsel erneut.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Bei jedem Screen-Wechsel (z.B. Saison-Rückblick, neues Event) ganz oben
   // starten - sonst bleibt teils die Scroll-Position der vorherigen, längeren
