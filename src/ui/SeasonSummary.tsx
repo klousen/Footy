@@ -33,38 +33,61 @@ export function SeasonSummary({
         {player.name} bei {stats.club} ({stats.leagueName})
       </p>
 
-      <div className="stat-strip">
-        <SummaryStat
-          label={`Gesamtstärke · ${tier.label}`}
-          value={`${currentOverall}${overallDelta !== 0 ? ` (${overallDelta > 0 ? "+" : ""}${overallDelta})` : ""}`}
-        />
-        <SummaryStat label="Spiele" value={String(stats.matches)} />
+      {/* Hero-Box für die Gesamtstärke (mit Trend-Pfeil + Tier), getrennt von den
+          übrigen Werten - siehe footy-karriere-mockup.html ".hero-rating". */}
+      <div className="hero-rating">
+        <div className="num-block">
+          <span className="num">{currentOverall}</span>
+          {overallDelta !== 0 && (
+            <span className={`trend ${overallDelta > 0 ? "up" : "down"}`}>
+              {overallDelta > 0 ? "▲" : "▼"} {Math.abs(overallDelta)}
+            </span>
+          )}
+        </div>
+        <div className="tier-label">
+          <div className="tier-name">{tier.label}</div>
+          <div className="tier-sub">Gesamtstärke</div>
+        </div>
+      </div>
+
+      {/* Primäre Reihe: die "Kopfzahlen" der Saison (Spiele + Torbeteiligung bzw. bei
+          Torhütern die torwartspezifischen Pendants Weiße Westen/Gehaltene Bälle -
+          siehe simulateSeason, dieselbe Ausnahme wie zuvor). */}
+      <div className="stat-row-primary">
+        <StatBox label="Spiele" value={String(stats.matches)} />
         {isGoalkeeper ? (
           <>
-            <SummaryStat label="Weiße Westen" value={String(stats.cleanSheets)} />
-            <SummaryStat label="Gehaltene Bälle" value={`${stats.savePercentage}%`} />
-            {stats.penaltiesSaved > 0 && (
-              <SummaryStat label="Elfmeter gehalten" value={String(stats.penaltiesSaved)} />
-            )}
+            <StatBox label="Weiße Westen" value={String(stats.cleanSheets)} />
+            <StatBox label="Gehaltene Bälle" value={`${stats.savePercentage}%`} />
           </>
         ) : (
           <>
-            <SummaryStat label="Tore" value={String(stats.goals)} />
-            <SummaryStat label="Vorlagen" value={String(stats.assists)} />
+            <StatBox label="Tore" value={String(stats.goals)} />
+            <StatBox label="Vorlagen" value={String(stats.assists)} />
           </>
         )}
-        <SummaryStat label="Ø Bewertung" value={String(stats.avgRating)} />
-        <SummaryStat label="Tabelle" value={`${stats.leaguePosition}.`} />
-        <SummaryStat label="Einkommen" value={formatMoney(stats.income)} />
+      </div>
+
+      {/* Sekundäre Reihe: unterstützende Werte, kleiner dargestellt - dieselben
+          Bedingungen wie zuvor (Einsatzquote nur mit possibleMinutes, Länderspiele nur
+          bei Einsätzen, Elfmeter gehalten nur bei Torhütern mit Wert > 0). Das Grid
+          bricht bei mehr als 3 Kindern automatisch in weitere Zeilen um. */}
+      <div className="stat-row-secondary">
+        <StatBox label="Ø Bewertung" value={String(stats.avgRating)} />
+        <StatBox label="Tabelle" value={`${stats.leaguePosition}.`} />
         {stats.possibleMinutes > 0 && (
-          <SummaryStat
+          <StatBox
             label="Einsatzquote"
             value={`${Math.round((stats.minutesPlayed / stats.possibleMinutes) * 100)}%`}
             detail={`${stats.minutesPlayed}/${stats.possibleMinutes} Min.`}
           />
         )}
+        <StatBox label="Einkommen" value={formatMoney(stats.income)} />
+        {isGoalkeeper && stats.penaltiesSaved > 0 && (
+          <StatBox label="Elfmeter gehalten" value={String(stats.penaltiesSaved)} />
+        )}
         {stats.capsThisSeason > 0 && (
-          <SummaryStat label="Länderspiele" value={String(stats.capsThisSeason)} />
+          <StatBox label="Länderspiele" value={String(stats.capsThisSeason)} />
         )}
       </div>
 
@@ -147,16 +170,16 @@ export function SeasonSummary({
   );
 }
 
-function SummaryStat({ label, value, detail }: { label: string; value: string; detail?: string }) {
+function StatBox({ label, value, detail }: { label: string; value: string; detail?: string }) {
   return (
-    <div className="stat-chip">
-      <span className="stat-value">{value}</span>
+    <div className="stat-box">
+      <span className="v">{value}</span>
       {/* Optionale kleine Detailzeile (z.B. die rohen Einsatzminuten hinter der
           Prozentzahl) - bewusst getrennt vom Hauptwert, statt beides in einen
           langen String zu packen: ein langer String wie "93/1980 Min. (5%)"
-          brach in der schmalen Chip-Box auf drei Zeilen um und wirkte kaputt. */}
+          brach in der schmalen Box auf drei Zeilen um und wirkte kaputt. */}
       {detail && <span className="stat-detail">{detail}</span>}
-      <span className="stat-label">{label}</span>
+      <span className="l">{label}</span>
     </div>
   );
 }

@@ -614,6 +614,140 @@ input:focus {
   text-align: center;
 }
 
+/* ---------------- Saisonrückblick: "Matchday Dossier"-Hierarchie ----------------
+   Aus footy-karriere-mockup.html übernommen - ersetzt im Saisonrückblick (nicht im
+   Dashboard, siehe .stat-strip/.stat-chip oben) das bisherige einheitliche Grid durch
+   eine echte Hierarchie: Gesamtstärke bekommt eine eigene, prominente Hero-Box, die
+   restlichen Werte trennen sich in eine große "primäre" Reihe (Spiele/Tore/Vorlagen
+   bzw. bei Torhütern Weiße Westen/Gehaltene Bälle) und eine kleinere "sekundäre" Reihe
+   (Ø Bewertung, Tabelle, Einsatzquote, Einkommen, ggf. Länderspiele/Elfmeter gehalten -
+   das CSS-Grid bricht bei mehr als 3 Kindern automatisch in weitere Zeilen um, die
+   Datenlogik/Bedingungen bleiben exakt wie zuvor). */
+.hero-rating {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: linear-gradient(135deg, rgba(201, 162, 39, 0.14), var(--bg-panel) 65%);
+  border: 1px solid var(--gold);
+  border-radius: var(--radius);
+  padding: 16px 18px;
+  margin-bottom: 14px;
+}
+
+.hero-rating .num-block {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+
+.hero-rating .num {
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 44px;
+  color: var(--gold-bright);
+  line-height: 1;
+  text-shadow: 0 0 16px rgba(230, 193, 88, 0.3);
+}
+
+.hero-rating .trend {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  font-family: var(--font-mono);
+  font-weight: 600;
+  font-size: 15px;
+}
+
+.hero-rating .trend.up {
+  color: var(--green);
+}
+
+.hero-rating .trend.down {
+  color: var(--red);
+}
+
+.hero-rating .tier-label {
+  text-align: right;
+}
+
+.hero-rating .tier-name {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 15px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--chalk);
+}
+
+.hero-rating .tier-sub {
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-top: 2px;
+}
+
+.stat-row-primary,
+.stat-row-secondary {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+
+.stat-row-primary {
+  margin-bottom: 8px;
+}
+
+.stat-row-secondary {
+  margin-bottom: 16px;
+}
+
+.stat-box {
+  background: var(--bg-panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 11px 8px;
+  text-align: center;
+  /* Grid-Item-Falle wie bei .stat-chip (siehe oben) - ohne min-width:0 könnte ein
+     langer Wert/Label die Spalte über ihre Breite hinaus aufzwingen und damit die
+     text-overflow:ellipsis unten wirkungslos machen. */
+  min-width: 0;
+}
+
+.stat-row-primary .stat-box .v {
+  font-size: 21px;
+}
+
+.stat-row-secondary .stat-box .v {
+  font-size: 15px;
+}
+
+.stat-box .v {
+  /* .stat-box ist (wie im Mockup) kein Flex-Container - .v/.l/.stat-detail müssen
+     daher selbst als Block untereinander stehen statt als Inline-Spans in einer Zeile. */
+  display: block;
+  font-family: var(--font-mono);
+  font-weight: 600;
+  color: var(--chalk);
+  white-space: nowrap;
+}
+
+.stat-box .stat-detail {
+  display: block;
+}
+
+.stat-box .l {
+  display: block;
+  font-size: 9px;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-top: 3px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .panel {
   background: var(--bg-panel);
   border: 1px solid var(--line);
