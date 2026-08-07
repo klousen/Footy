@@ -250,11 +250,18 @@ export interface SeasonTableResult {
   order: (ClubState & { rank: number })[];
 }
 
-/** Simuliert eine komplette Saison-Tabelle für eine Liga-Ebene (Stärke + Zufall). */
-function simulateTable(clubs: ClubState[], rng: () => number): (ClubState & { rank: number })[] {
-  const scored = clubs.map((c) => ({ club: c, score: c.strength + (rng() - 0.5) * 30 }));
+/** Simuliert eine komplette Saison-Tabelle für eine Liga-Ebene (Stärke + Zufall).
+ * `formSurprise` (das reine Zufalls-/Formrauschen dieser Saison, also `score -
+ * strength`) wird mitgeliefert - dient `computeClubResultDrift` als direktes,
+ * unverzerrtes "über-/unterdurchschnittlich performt"-Signal (siehe dort, warum ein
+ * reiner Rang-Vergleich dafür ungeeignet wäre). */
+function simulateTable(clubs: ClubState[], rng: () => number): (ClubState & { rank: number; formSurprise: number })[] {
+  const scored = clubs.map((c) => {
+    const formSurprise = (rng() - 0.5) * 30;
+    return { club: c, score: c.strength + formSurprise, formSurprise };
+  });
   scored.sort((a, b) => b.score - a.score);
-  return scored.map((s, i) => ({ ...s.club, rank: i + 1 }));
+  return scored.map((s, i) => ({ ...s.club, rank: i + 1, formSurprise: s.formSurprise }));
 }
 
 /**
@@ -274,7 +281,7 @@ function simulateTableAnchored(
   anchorClubId: string,
   anchorPosition: number,
   rng: () => number
-): (ClubState & { rank: number })[] {
+): (ClubState & { rank: number; formSurprise: number })[] {
   const total = clubs.length;
   const anchorClub = clubs.find((c) => c.id === anchorClubId);
   if (!anchorClub) return simulateTable(clubs, rng);
@@ -282,16 +289,37 @@ function simulateTableAnchored(
   const position = clamp(Math.round(anchorPosition), 1, total);
   const others = clubs
     .filter((c) => c.id !== anchorClubId)
-    .map((c) => ({ club: c, score: c.strength + (rng() - 0.5) * 30 }))
-    .sort((a, b) => b.score - a.score)
-    .map((s) => s.club);
+    .map((c) => {
+      const formSurprise = (rng() - 0.5) * 30;
+      return { club: c, score: c.strength + formSurprise, formSurprise };
+    })
+    .sort((a, b) => b.score - a.score);
 
-  const ordered: ClubState[] = [];
+  // Der verankerte Verein selbst hat keinen eigenen Zufalls-Rauschterm (seine Position
+  // steht fest) - sein `formSurprise` wird stattdessen aus dem Vergleich der
+  // tatsächlichen (verankerten) Platzierung mit der reinen Stärke-Rangfolge
+  // hergeleitet, umgerechnet auf dieselbe Rauschskala wie die übrigen Vereine (Ø
+  // Stärke-Abstand zwischen benachbarten Tabellenplätzen × Rang-Differenz). Bewusst
+  // NUR für diesen einen Verein rang-basiert statt für das ganze Feld (siehe
+  // `computeClubResultDrift`) - ein einzelner Datenpunkt hat nicht den systematischen
+  // Verzerrungseffekt, den ein Rang-Vergleich über ALLE Vereine hätte.
+  const byStrength = [...clubs].sort((a, b) => b.strength - a.strength);
+  const strengthRank = byStrength.findIndex((c) => c.id === anchorClubId) + 1;
+  const strengthSpread = byStrength[0].strength - byStrength[byStrength.length - 1].strength;
+  const avgGap = total > 1 ? strengthSpread / (total - 1) : 0;
+  const anchorFormSurprise = (strengthRank - position) * avgGap;
+
+  const ordered: (ClubState & { rank: number; formSurprise: number })[] = [];
   let otherIdx = 0;
   for (let pos = 1; pos <= total; pos++) {
-    ordered.push(pos === position ? anchorClub : others[otherIdx++]);
+    if (pos === position) {
+      ordered.push({ ...anchorClub, rank: pos, formSurprise: anchorFormSurprise });
+    } else {
+      const o = others[otherIdx++];
+      ordered.push({ ...o.club, rank: pos, formSurprise: o.formSurprise });
+    }
   }
-  return ordered.map((c, i) => ({ ...c, rank: i + 1 }));
+  return ordered;
 }
 
 export interface PromotionRelegationResult {
@@ -322,6 +350,44 @@ function relegationPlayoffExpectedScore(clubA: ClubState, clubB: ClubState, coun
   const coeffA = clubCoefficient(clubA, countryId);
   const coeffB = clubCoefficient(clubB, countryId);
   return 1 / (1 + Math.pow(10, (coeffB - coeffA) / 600));
+}
+
+/**
+ * Vereinsstärke entwickelt sich jetzt tatsächlich mit dem Saisonergebnis weiter -
+ * bisher war `ClubState.strength` für die gesamte Karriere komplett statisch, Auf-/
+ * Abstieg verschob einen Verein nur zwischen den festen Stärke-Bändern der beiden
+ * Liga-Ebenen, ohne dass eigene Ergebnisse je etwas veränderten (Bugreport:
+ * "Progression über die Jahre" fehlte komplett). Bewusst NUR für die aktive Liga des
+ * Spielers (hier aufgerufen) statt für alle 10 Länder jede Saison - die übrigen Länder
+ * werden ohnehin nie wirklich simuliert (nur `foreignLeagues`-Cache bei Angeboten bzw.
+ * der leichte länderweite `europeanLeagueDrift`, siehe europeanCup.ts), ein
+ * Tabellen-Rechnen dort wäre reiner Overhead für Ligen, die der Spieler nie betritt.
+ * Kostet hier praktisch nichts extra: `tier1Order`/`tier2Order` (inkl. `formSurprise`,
+ * siehe `simulateTable`) sind für Auf-/Abstieg ohnehin schon berechnet.
+ *
+ * Nutzt bewusst `formSurprise` (das rohe Zufalls-/Formrauschen dieser Saison, `score -
+ * strength`) statt eines Rang-Vergleichs (Ø Stärke-implizierter Rang vs. tatsächlicher
+ * Rang): bei eng beieinanderliegenden Vereinen (typische Stärke-Abstände von 1-2
+ * Punkten) UND deutlich größerem Zufallsrauschen (±15) verzerrt ein reiner
+ * Rang-Vergleich systematisch - der jeweils stärkste Verein einer Liga kann per
+ * Definition nie "besser als Rang 1" abschneiden, nur schlechter (garantierter
+ * Abwärts-Drift), der schwächste analog nie schlechter als der letzte Platz
+ * (garantierter Aufwärts-Drift) - unabhängig von echter Leistung. Das rohe
+ * Rauschsignal selbst ist dagegen für jeden Verein symmetrisch um 0 verteilt, ganz
+ * gleich wie stark er ist.
+ */
+function computeClubResultDrift(order: (ClubState & { rank: number; formSurprise: number })[], rng: () => number): Map<string, number> {
+  const deltas = new Map<string, number>();
+  for (const c of order) {
+    deltas.set(c.id, clamp(c.formSurprise * 0.12, -2.5, 2.5) + (rng() - 0.5) * 0.6);
+  }
+  return deltas;
+}
+
+function applyClubResultDrift(club: ClubState, deltas: Map<string, number>): ClubState {
+  const delta = deltas.get(club.id) ?? 0;
+  if (delta === 0) return club;
+  return { ...club, strength: clamp(Math.round(club.strength + delta), 10, 99) };
 }
 
 /**
@@ -395,13 +461,20 @@ export function simulateLeaguePromotionRelegation(
   const relegatedIds = new Set(relegated.map((c) => c.id));
   const promotedIds = new Set(promoted.map((c) => c.id));
 
+  // Stärke-Drift aus dem tatsächlichen Saisonergebnis (siehe `computeClubResultDrift`) -
+  // für BEIDE Ebenen, unabhängig von Auf-/Abstieg (auch ein Verein, der einfach in
+  // seiner Liga bleibt, hat diese Saison besser oder schlechter abgeschnitten als
+  // erwartet).
+  const tier1Deltas = computeClubResultDrift(tier1Order, rng);
+  const tier2Deltas = computeClubResultDrift(tier2Order, rng);
+
   const newTier1 = [
-    ...league.tier1.filter((c) => !relegatedIds.has(c.id)),
-    ...promoted.map((c) => ({ ...c, tier: 1 as LeagueTier })),
+    ...league.tier1.filter((c) => !relegatedIds.has(c.id)).map((c) => applyClubResultDrift(c, tier1Deltas)),
+    ...promoted.map((c) => ({ ...applyClubResultDrift(c, tier2Deltas), tier: 1 as LeagueTier })),
   ];
   const newTier2 = [
-    ...league.tier2.filter((c) => !promotedIds.has(c.id)),
-    ...relegated.map((c) => ({ ...c, tier: 2 as LeagueTier })),
+    ...league.tier2.filter((c) => !promotedIds.has(c.id)).map((c) => applyClubResultDrift(c, tier2Deltas)),
+    ...relegated.map((c) => ({ ...applyClubResultDrift(c, tier1Deltas), tier: 2 as LeagueTier })),
   ];
 
   league.tier1 = newTier1;
