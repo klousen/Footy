@@ -75,6 +75,19 @@ function recentlyTransferred(p: Player): boolean {
   return seasonsAtCurrentClub <= 1;
 }
 
+// Hilfsfunktion: Europapokal-Ergebnis der zuletzt abgeschlossenen Saison (siehe
+// `europeanCup.ts`/`SeasonStats.europeanCup`) - `null`, wenn nicht qualifiziert
+// oder noch keine Saison gespielt. Basis für alle "europapokal_*"-Events unten:
+// die Qualifikation selbst (unabhängig vom Ausgang) UND ein tatsächlicher Titel
+// sind zwei unterschiedliche, klar getrennte Auslöser.
+function lastEuropeanCup(p: Player) {
+  return p.seasonHistory[p.seasonHistory.length - 1]?.europeanCup ?? null;
+}
+
+function europeanCompetitionName(competition: "CL" | "EL"): string {
+  return competition === "CL" ? "Champions League" : "Europa League";
+}
+
 export const EVENT_TEMPLATES: EventTemplate[] = [
   // ---------------------------------------------------------------------
   // JUGEND (14-17)
@@ -5642,6 +5655,588 @@ export const EVENT_TEMPLATES: EventTemplate[] = [
               traitDeltas: { arbeitsmoral: 1 },
               logText: "legt nach dem Erfolgshöhepunkt bewusst eine mentale Auszeit ein, um die Delle möglichst kurz zu halten.",
               logKind: "info",
+            },
+          },
+        ],
+      };
+    },
+  },
+
+  // ---------------------------------------------------------------------
+  // EUROPAPOKAL (Champions/Europa League) - siehe europeanCup.ts. Die
+  // Qualifikations-Events (moderate Wahrscheinlichkeit) feuern für jede Saison,
+  // in der der Verein sich sportlich qualifiziert hat (unabhängig vom späteren
+  // Turnierausgang) - die Titel-Events dagegen NUR nach einem tatsächlichen
+  // Champion-Ausgang der VORSAISON.
+  // ---------------------------------------------------------------------
+
+  {
+    id: "europapokal_grosse_buehne_stamm",
+    category: "taktik",
+    minAge: 18,
+    maxAge: 39,
+    weight: 2.8,
+    condition: (p) => {
+      const euro = lastEuropeanCup(p);
+      return !!euro && p.contract.squadRole === "Stammspieler" && Math.random() < 0.4;
+    },
+    build: (p) => {
+      const euro = lastEuropeanCup(p)!;
+      return {
+        category: "taktik",
+        title: "Große Bühne, große Chance",
+        description: `${club(p)} hat sich für die ${europeanCompetitionName(euro.competition)} qualifiziert - als gesetzter Stammspieler steigt das Interesse an dir spürbar.`,
+        choices: [
+          {
+            id: "annehmen",
+            label: "Die Bühne annehmen",
+            effects: {
+              morale: 6,
+              reputation: 6,
+              logText: `spürt vor der ${europeanCompetitionName(euro.competition)}-Saison von ${club(p)} deutlich gestiegenes Interesse.`,
+              logKind: "positive",
+            },
+          },
+        ],
+      };
+    },
+  },
+  {
+    id: "europapokal_grosse_buehne_ersatz",
+    category: "taktik",
+    minAge: 18,
+    maxAge: 39,
+    weight: 2.8,
+    condition: (p) => {
+      const euro = lastEuropeanCup(p);
+      return (
+        !!euro &&
+        (p.contract.squadRole === "Rotation" || p.contract.squadRole === "Ergänzungsspieler" || p.contract.squadRole === "Ersatzbank") &&
+        Math.random() < 0.4
+      );
+    },
+    build: (p) => {
+      const euro = lastEuropeanCup(p)!;
+      return {
+        category: "taktik",
+        title: "Große Bühne, große Chance",
+        description: `${club(p)} hat sich für die ${europeanCompetitionName(euro.competition)} qualifiziert - das Interesse an dir bleibt allerdings verhalten, weil du kein gesetzter Stammspieler bist.`,
+        choices: [
+          {
+            id: "hinnehmen",
+            label: "Zur Kenntnis nehmen",
+            effects: {
+              morale: -4,
+              reputation: 3,
+              logText: `bleibt vor der ${europeanCompetitionName(euro.competition)}-Saison von ${club(p)} trotz gestiegener Aufmerksamkeit im Schatten der Stammelf.`,
+              logKind: "info",
+            },
+          },
+        ],
+      };
+    },
+  },
+  {
+    id: "europapokal_erwartungsdruck",
+    category: "taktik",
+    minAge: 18,
+    maxAge: 39,
+    weight: 2.6,
+    condition: (p) => !!lastEuropeanCup(p) && Math.random() < 0.35,
+    build: (p) => ({
+      category: "taktik",
+      title: "Erhöhter Erwartungsdruck",
+      description: `Weil ${club(p)} international spielt, erwarten Trainer und Presse in dieser Saison spürbar mehr als in einer normalen Ligawoche.`,
+      choices: [
+        {
+          id: "hinnehmen",
+          label: "Den Druck hinnehmen",
+          effects: {
+            morale: -4,
+            fitness: -4,
+            logText: "spürt durch die zusätzliche internationale Belastung deutlich erhöhten Erwartungsdruck.",
+            logKind: "negative",
+          },
+        },
+      ],
+    }),
+  },
+  {
+    id: "europapokal_scout_aufmerksamkeit",
+    category: "medien",
+    minAge: 18,
+    maxAge: 37,
+    weight: 2.4,
+    condition: (p) => !!lastEuropeanCup(p) && Math.random() < 0.35,
+    build: (p) => ({
+      category: "medien",
+      title: "Scout-Aufmerksamkeit steigt",
+      description: `Aufgrund deiner internationalen Präsenz mit ${club(p)} beobachten große Vereine deine Auftritte genauer als sonst.`,
+      choices: [
+        {
+          id: "annehmen",
+          label: "Zur Kenntnis nehmen",
+          effects: {
+            reputation: 6,
+            logText: "gerät durch die internationale Bühne stärker ins Blickfeld großer Scouting-Abteilungen.",
+            logKind: "positive",
+          },
+        },
+      ],
+    }),
+  },
+  {
+    id: "europapokal_rotationsrisiko",
+    category: "taktik",
+    minAge: 18,
+    maxAge: 37,
+    weight: 2.6,
+    condition: (p) => {
+      const euro = lastEuropeanCup(p);
+      return !!euro && p.contract.squadRole !== "Ausbildungsspieler" && Math.random() < 0.4;
+    },
+    build: (p) => ({
+      category: "taktik",
+      title: "Rotationsrisiko",
+      description: `Der Trainer von ${club(p)} stellt dich in den intensiven englischen Wochen zwischen Liga und Europapokal vor die Wahl.`,
+      choices: [
+        {
+          id: "rotation",
+          label: "Rotation akzeptieren",
+          effects: {
+            fitness: 5,
+            morale: -3,
+            logText: "akzeptiert in den intensiven internationalen Wochen bereitwillig Rotation.",
+            logKind: "info",
+          },
+        },
+        {
+          id: "einsatzzeit",
+          label: "Auf Einsatzzeit pochen",
+          effects: {
+            fitness: -5,
+            clubRelation: -4,
+            traitDeltas: { arbeitsmoral: 3 },
+            logText: "pocht in den intensiven internationalen Wochen konsequent auf seine/ihre Einsatzzeit.",
+            logKind: "info",
+          },
+        },
+      ],
+    }),
+  },
+
+  // --- Titelgewinn: Boost (nur nach einem tatsächlichen Champion-Ausgang) ---
+  {
+    id: "europapokal_karrierehoehepunkt_stamm",
+    category: "meilenstein",
+    minAge: 18,
+    maxAge: 40,
+    weight: 30,
+    condition: (p) => {
+      const euro = lastEuropeanCup(p);
+      return !!euro && euro.champion && p.contract.squadRole === "Stammspieler";
+    },
+    build: (p) => {
+      const euro = lastEuropeanCup(p)!;
+      return {
+        category: "meilenstein",
+        title: "Karrierehöhepunkt",
+        description: `Der Gewinn der ${europeanCompetitionName(euro.competition)} mit ${club(p)} gilt als einer der größten Erfolge deiner bisherigen Laufbahn - als gesetzter Stammspieler hast du ihn hautnah miterlebt.`,
+        choices: [
+          {
+            id: "geniessen",
+            label: "Den Moment genießen",
+            effects: {
+              reputation: 14,
+              attributes: { mentalitaet: 2 },
+              logText: `feiert den Gewinn der ${europeanCompetitionName(euro.competition)} als echten Karrierehöhepunkt.`,
+              logKind: "milestone",
+            },
+          },
+        ],
+      };
+    },
+  },
+  {
+    id: "europapokal_karrierehoehepunkt_ersatz",
+    category: "meilenstein",
+    minAge: 18,
+    maxAge: 40,
+    weight: 30,
+    condition: (p) => {
+      const euro = lastEuropeanCup(p);
+      return !!euro && euro.champion && p.contract.squadRole !== "Stammspieler";
+    },
+    build: (p) => {
+      const euro = lastEuropeanCup(p)!;
+      return {
+        category: "meilenstein",
+        title: "Karrierehöhepunkt",
+        description: `Der Gewinn der ${europeanCompetitionName(euro.competition)} mit ${club(p)} gilt als einer der größten Erfolge deiner bisherigen Laufbahn - aber weil du kaum Spielzeit hattest, fällt es dir schwer, den Ruhm ganz zu genießen.`,
+        choices: [
+          {
+            id: "geniessen",
+            label: "Trotzdem mitfeiern",
+            effects: {
+              reputation: 10,
+              morale: -3,
+              logText: `feiert den Gewinn der ${europeanCompetitionName(euro.competition)} - mit gemischten Gefühlen wegen der eigenen geringen Spielzeit.`,
+              logKind: "milestone",
+            },
+          },
+        ],
+      };
+    },
+  },
+  {
+    id: "europapokal_selbstvertrauen",
+    category: "taktik",
+    minAge: 18,
+    maxAge: 40,
+    weight: 10,
+    condition: (p) => {
+      const euro = lastEuropeanCup(p);
+      return !!euro && euro.champion && Math.random() < 0.7;
+    },
+    build: (p) => ({
+      category: "taktik",
+      title: "Gestärktes Selbstvertrauen",
+      description: `Der internationale Titel gibt dir spürbaren Auftrieb für die kommende Saison bei ${club(p)}.`,
+      choices: [
+        {
+          id: "annehmen",
+          label: "Mit Rückenwind weitermachen",
+          effects: {
+            morale: 8,
+            logText: "geht mit spürbar gestärktem Selbstvertrauen in die neue Saison.",
+            logKind: "positive",
+          },
+        },
+      ],
+    }),
+  },
+  {
+    id: "europapokal_grosse_vereine_aufmerksam",
+    category: "transfer",
+    minAge: 19,
+    maxAge: 36,
+    weight: 9,
+    condition: (p) => {
+      const euro = lastEuropeanCup(p);
+      return !!euro && euro.champion && Math.random() < 0.65;
+    },
+    build: (p) => {
+      const euro = lastEuropeanCup(p)!;
+      return {
+        category: "transfer",
+        title: "Große Vereine werden aufmerksam",
+        description: `Nach dem Gewinn der ${europeanCompetitionName(euro.competition)} erreichen erste Anfragen von Spitzenklubs dich oder deinen Berater.`,
+        choices: [
+          {
+            id: "anhoeren",
+            label: "Angebote anhören",
+            effects: {
+              wantsTransfer: true,
+              clubRelation: -4,
+              reputation: 5,
+              logText: "lässt sich nach dem internationalen Titel erste Anfragen von Spitzenklubs durch den Berater vorlegen.",
+              logKind: "info",
+            },
+          },
+          {
+            id: "loyalitaet",
+            label: "Loyalität demonstrieren",
+            effects: {
+              clubRelation: 6,
+              traitDeltas: { medienimage: 3 },
+              logText: "weist die ersten Anfragen von Spitzenklubs zurück und demonstriert Loyalität zum Titel-Verein.",
+              logKind: "positive",
+            },
+          },
+        ],
+      };
+    },
+  },
+
+  // --- Titelgewinn: "Flausen im Kopf" - exklusiv, nur EINES dieser vier Events
+  // kann in derselben Saison gezogen werden (siehe `exclusiveGroup` in
+  // `pickSeasonTemplateIds`). "Bodenständig geblieben" ist durch das höhere
+  // Gewicht das mit Abstand häufigste Ergebnis.
+  {
+    id: "europapokal_flausen_bodenstaendig",
+    category: "taktik",
+    minAge: 18,
+    maxAge: 40,
+    weight: 3,
+    exclusiveGroup: "europapokal_flausen",
+    condition: (p) => !!lastEuropeanCup(p)?.champion,
+    build: (p) => ({
+      category: "taktik",
+      title: "Bodenständig geblieben",
+      description: `Der Titel ändert nichts an deiner Einstellung bei ${club(p)} - er ist ein Ansporn, in der neuen Saison alles zu geben.`,
+      choices: [
+        {
+          id: "weiter",
+          label: "Bodenständig bleiben",
+          effects: {
+            logText: "bleibt nach dem internationalen Titel bemerkenswert bodenständig.",
+            logKind: "info",
+          },
+        },
+      ],
+    }),
+  },
+  {
+    id: "europapokal_flausen_wechselgedanken",
+    category: "transfer",
+    minAge: 19,
+    maxAge: 38,
+    weight: 1,
+    exclusiveGroup: "europapokal_flausen",
+    condition: (p) => !!lastEuropeanCup(p)?.champion,
+    build: (p) => ({
+      category: "transfer",
+      title: "Wechselgedanken",
+      description: `Nach dem internationalen Titel fragst du dich, ob bei ${club(p)} noch mehr für dich zu erreichen ist.`,
+      choices: [
+        {
+          id: "fordern",
+          label: "Wechsel fordern",
+          effects: {
+            wantsTransfer: true,
+            clubRelation: -6,
+            logText: "fordert nach dem internationalen Titel offen einen Wechsel.",
+            logKind: "negative",
+          },
+        },
+        {
+          id: "bleiben",
+          label: "Beim Verein bleiben",
+          effects: {
+            morale: -3,
+            clubRelation: 5,
+            logText: "verwirft die Wechselgedanken nach dem internationalen Titel und bleibt.",
+            logKind: "info",
+          },
+        },
+      ],
+    }),
+  },
+  {
+    id: "europapokal_flausen_ehrgeiz",
+    category: "taktik",
+    minAge: 18,
+    maxAge: 40,
+    weight: 1,
+    exclusiveGroup: "europapokal_flausen",
+    condition: (p) => !!lastEuropeanCup(p)?.champion,
+    build: (p) => ({
+      category: "taktik",
+      title: "Nachlassender Ehrgeiz",
+      description: `Du hast das Gefühl, mit dem internationalen Titel bei ${club(p)} alles erreicht zu haben. Wieso dich noch quälen?`,
+      choices: [
+        {
+          id: "hinnehmen",
+          label: "Den Gedanken zulassen",
+          effects: {
+            traitDeltas: { arbeitsmoral: -5 },
+            logText: "lässt nach dem internationalen Titel spürbar im Ehrgeiz nach.",
+            logKind: "negative",
+          },
+        },
+      ],
+    }),
+  },
+  {
+    id: "europapokal_flausen_gehalt",
+    category: "vertrag",
+    minAge: 19,
+    maxAge: 38,
+    weight: 1,
+    exclusiveGroup: "europapokal_flausen",
+    condition: (p) => !!lastEuropeanCup(p)?.champion && p.contract.yearsLeft >= 1,
+    build: (p) => ({
+      category: "vertrag",
+      title: "Gehaltsforderungen",
+      description: `Als frischgebackener internationaler Titelträger fühlst du dich bei ${club(p)} nicht mehr angemessen bezahlt.`,
+      choices: [
+        {
+          id: "fordern",
+          label: "Erhöhung fordern",
+          effects: {
+            wageMultiplier: 1.15,
+            clubRelation: -3,
+            logText: "fordert nach dem internationalen Titel selbstbewusst eine Gehaltserhöhung.",
+            logKind: "positive",
+          },
+        },
+        {
+          id: "schweigen",
+          label: "Schweigen",
+          effects: {
+            morale: -4,
+            logText: "schluckt nach dem internationalen Titel den Ärger über das ausbleibende bessere Gehalt herunter.",
+            logKind: "negative",
+          },
+        },
+      ],
+    }),
+  },
+
+  // --- Weitere Europapokal-Events ---
+  {
+    id: "europapokal_rolle_trotz_wenig_einsatz",
+    category: "taktik",
+    minAge: 19,
+    maxAge: 38,
+    weight: 1,
+    condition: (p) => {
+      const euro = lastEuropeanCup(p);
+      return !!euro && euro.champion && p.contract.squadRole !== "Stammspieler" && Math.random() < 0.5;
+    },
+    build: (p) => ({
+      category: "taktik",
+      title: "Rolle im Erfolg trotz wenig Einsatzzeit",
+      description: `Auch als Rotationsspieler bist du Teil des internationalen Titels von ${club(p)} - aber was folgt daraus?`,
+      choices: [
+        {
+          id: "kaempfen",
+          label: "Um mehr Einsatzzeit kämpfen",
+          effects: {
+            traitDeltas: { arbeitsmoral: 3 },
+            clubRelation: 4,
+            logText: "kämpft nach dem Titelgewinn trotz geringer Einsatzzeit entschlossen um mehr Spielanteile.",
+            logKind: "positive",
+          },
+        },
+        {
+          id: "absprung",
+          label: "Titel als Absprungpunkt nutzen",
+          effects: {
+            wantsTransfer: true,
+            logText: "will den internationalen Titel als Absprungpunkt für mehr Spielzeit anderswo nutzen.",
+            logKind: "info",
+          },
+        },
+      ],
+    }),
+  },
+  {
+    id: "europapokal_kultstatus",
+    category: "meilenstein",
+    minAge: 18,
+    maxAge: 39,
+    weight: 0.6,
+    condition: (p) => !!lastEuropeanCup(p) && Math.random() < 0.12,
+    build: (p) => ({
+      category: "meilenstein",
+      title: "Kult-Status durch entscheidende Aktion",
+      description: `Du hast im letzten Drittel eines internationalen Spiels von ${club(p)} entscheidend zum Siegtor beigetragen - herzlichen Glückwunsch, du gehörst immer mehr zu den Vereinslegenden.`,
+      choices: [
+        {
+          id: "annehmen",
+          label: "Den Moment feiern",
+          effects: {
+            reputation: 9,
+            morale: 7,
+            logText: "trägt international entscheidend zu einem Siegtor bei und nähert sich dem Kult-Status bei seinem/ihrem Verein.",
+            logKind: "positive",
+          },
+        },
+      ],
+    }),
+  },
+  {
+    id: "europapokal_nationaltrainer_aufmerksam",
+    category: "nationalmannschaft",
+    minAge: 18,
+    maxAge: 35,
+    weight: 2.2,
+    condition: (p) => !!lastEuropeanCup(p) && Math.random() < 0.3,
+    build: () => ({
+      category: "nationalmannschaft",
+      title: "Nationaltrainer wird aufmerksam",
+      description: "Deine internationalen Auftritte bleiben auch beim Nationaltrainer nicht unbemerkt.",
+      choices: [
+        {
+          id: "annehmen",
+          label: "Zur Kenntnis nehmen",
+          effects: {
+            reputation: 5,
+            logText: "gerät durch starke internationale Auftritte stärker ins Blickfeld des Nationaltrainers.",
+            logKind: "positive",
+          },
+        },
+      ],
+    }),
+  },
+  {
+    id: "europapokal_sponsoren_ansturm",
+    category: "sponsoring",
+    minAge: 19,
+    maxAge: 38,
+    weight: 2.2,
+    condition: (p) => !!lastEuropeanCup(p) && Math.random() < 0.35,
+    build: (p) => ({
+      category: "sponsoring",
+      title: "Sponsoren-Anfragen häufen sich",
+      description: `Durch die internationale Bühne mit ${club(p)} melden sich Werbepartner, die vorher nie angefragt haben.`,
+      choices: [
+        {
+          id: "annehmen",
+          label: "Deal annehmen",
+          effects: {
+            wealth: 35000,
+            fitness: -2,
+            logText: "nimmt nach der internationalen Bühne ein neues Sponsoren-Angebot an.",
+            logKind: "positive",
+          },
+        },
+        {
+          id: "ablehnen",
+          label: "Ablehnen",
+          effects: {
+            logText: "lehnt die neuen Sponsoren-Anfragen nach der internationalen Bühne ab.",
+            logKind: "info",
+          },
+        },
+      ],
+    }),
+  },
+  {
+    id: "europapokal_medien_doku",
+    category: "medien",
+    minAge: 19,
+    maxAge: 40,
+    weight: 1,
+    condition: (p) => !!lastEuropeanCup(p)?.champion && Math.random() < 0.4,
+    build: (p) => {
+      const euro = lastEuropeanCup(p)!;
+      return {
+        category: "medien",
+        title: "Medien-Doku-Anfrage",
+        description: `Ein Sender will dich für ein Porträt über den Gewinn der ${europeanCompetitionName(euro.competition)} mit ${club(p)} gewinnen.`,
+        choices: [
+          {
+            id: "mitmachen",
+            label: "Mitmachen",
+            effects: {
+              traitDeltas: { medienimage: 5 },
+              reputation: 6,
+              fitness: -2,
+              wealth: 15000,
+              logText: "wirkt bei einer Medien-Doku über den internationalen Titel mit.",
+              logKind: "positive",
+            },
+          },
+          {
+            id: "ablehnen",
+            label: "Ablehnen",
+            effects: {
+              reputation: -3,
+              traitDeltas: { medienimage: -3 },
+              logText: "lehnt die Medien-Doku-Anfrage über den internationalen Titel ab.",
+              logKind: "negative",
             },
           },
         ],
