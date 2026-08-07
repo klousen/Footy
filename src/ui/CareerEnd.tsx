@@ -80,6 +80,12 @@ export function CareerEnd({
                   <span>{t.bigChancesPrevented}</span>
                 </>
               )}
+              {player.position === "ZM" && t.progressiveActions > 0 && (
+                <>
+                  <span>Ballgewinne & Pässe</span>
+                  <span>{t.progressiveActions}</span>
+                </>
+              )}
             </>
           )}
           <span>Titel</span>

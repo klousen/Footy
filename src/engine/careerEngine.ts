@@ -170,6 +170,7 @@ export function createPlayer(
         cleanSheets: 0,
         penaltiesSaved: 0,
         bigChancesPrevented: 0,
+        progressiveActions: 0,
       },
       nationalTeamCaps: 0,
       nationalTeamGoals: 0,
@@ -816,9 +817,26 @@ export function simulateSeason(
   let bigChancesPrevented = 0;
   const isDefender = player.position === "IV" || player.position === "AV";
   if (isDefender && matches > 0) {
-    const positionFactor = player.position === "IV" ? 1 : 0.55;
+    const positionFactor = player.position === "IV" ? 1 : 0.75;
     const rateBase = clamp(0.35 + (overall - clubStrength) * 0.012 + form * 0.15, 0.1, 1.1) * positionFactor;
     bigChancesPrevented = Math.max(0, Math.round(matches * rateBase * (0.7 + rng() * 0.6)));
+  }
+
+  // Mittelfeld-Statistik: "Ballgewinne & Schlüsselpässe" ist das Mittelfeld-Gegenstück
+  // zu `bigChancesPrevented` bei Verteidigern bzw. der TW-Paradenquote - ein zentrales
+  // Mittelfeld OHNE Torbeteiligung kann trotzdem eine spielentscheidende Saison
+  // abliefern (Bugreport: Mittelfeld strukturell benachteiligt, hatte als einzige
+  // Position keinen eigenen Ersatzstat neben der - wegen mittlerem `attackWeight` von
+  // Natur aus schwächeren - Torbeteiligung). Aus Technik + Intelligenz abgeleitet (die
+  // beiden am stärksten gewichteten ZM-Attribute, siehe `POSITION_WEIGHTS.ZM`) statt aus
+  // der allgemeinen Gesamtstärke, damit gezielt spielgestalterische Qualität statt roher
+  // Physis/Athletik belohnt wird. Fließt unten in `productionFactor` genauso wie
+  // `bigChancesPrevented` ein (siehe dort).
+  let progressiveActions = 0;
+  if (player.position === "ZM" && matches > 0) {
+    const skillFactor = (player.attributes.technik + player.attributes.intelligenz) / 2 / 100;
+    const rateBase = clamp(0.16 + (skillFactor - 0.5) * 1.0 + form * 0.15, 0.05, 0.9);
+    progressiveActions = Math.max(0, Math.round(matches * rateBase * (0.7 + rng() * 0.6)));
   }
   // Disziplin wirkt sich leicht auf die Konstanz der Leistungen aus (professionelle
   // Lebensführung vs. Party-Image) - ein spürbarer, aber kein dominanter Faktor.
@@ -839,14 +857,21 @@ export function simulateSeason(
   // weniger als Tore (0.7x), reine Nullen (v.a. Verteidiger) bekommen dadurch
   // keinen Abzug - nur echte Scorer werden zusätzlich belohnt. Torhüter haben ihr
   // eigenes Pendant (weiße Weste pro Spiel + Paradenquote statt Torbeteiligung),
-  // Verteidiger zusätzlich verhinderte Großchancen (siehe `bigChancesPrevented`
-  // oben) - eine Innenverteidiger-Saison ohne ein einziges Tor kann trotzdem
-  // spürbar zur Durchschnittsnote beitragen, wenn defensiv viel geklärt wurde.
+  // Verteidiger verhinderte Großchancen, Mittelfeld Ballgewinne/Schlüsselpässe
+  // (siehe `bigChancesPrevented`/`progressiveActions` oben, für die jeweilige
+  // Position ist immer nur EINE der beiden ungleich 0) - eine Innenverteidiger-
+  // oder Mittelfeld-Saison ohne ein einziges Tor kann trotzdem spürbar zur
+  // Durchschnittsnote beitragen, wenn die eigene Kernrolle stark ausgefüllt wurde.
+  // GLEICHES Gewicht wie `productionPerMatch` (nicht mehr abgeschwächt wie zuvor,
+  // Bugreport: Verteidiger/Mittelfeld erreichten die Bewertungs-Obergrenze selbst
+  // bei Bestleistung nie annähernd, Angreifer schon bei normaler Form) - eine
+  // Bestleistung in der eigenen Rolle soll unabhängig von der Position ungefähr
+  // gleich viel wert sein.
   const productionPerMatch = matches > 0 ? (goals + assists * 0.7) / matches : 0;
-  const defensiveActionsPerMatch = matches > 0 ? bigChancesPrevented / matches : 0;
+  const secondaryActionsPerMatch = matches > 0 ? (bigChancesPrevented + progressiveActions) / matches : 0;
   const productionFactor = isGoalkeeper
-    ? clamp((matches > 0 ? cleanSheets / matches : 0) * 1.6 + (savePercentage - 63) / 90 + penaltiesSaved * 0.05, 0, 1.1)
-    : clamp(productionPerMatch * 1.3 + defensiveActionsPerMatch * 0.5, 0, 1.1);
+    ? clamp((matches > 0 ? cleanSheets / matches : 0) * 2.1 + (savePercentage - 63) / 55 + penaltiesSaved * 0.05, 0, 1.1)
+    : clamp(productionPerMatch * 1.3 + secondaryActionsPerMatch * 1.1, 0, 1.1);
   // "Sommermärchen-Delle" (siehe "sommermaerchen_delle_1"): ein spürbarer, aber
   // vorübergehender Leistungsdämpfer nach einem großen Erfolgshöhepunkt - klingt
   // über die Saisons ab (siehe `ageUpPlayer`), statt die Karriere dauerhaft zu prägen.
@@ -1007,6 +1032,7 @@ export function simulateSeason(
   player.careerTotals.cleanSheets += cleanSheets;
   player.careerTotals.penaltiesSaved += penaltiesSaved;
   player.careerTotals.bigChancesPrevented += bigChancesPrevented;
+  player.careerTotals.progressiveActions += progressiveActions;
   player.careerTotals.trophies.push(...trophies);
 
   for (const trophy of trophies) {
@@ -1079,14 +1105,6 @@ export function simulateSeason(
 
   const { score, tier: scoreTier, factors: scoreFactors } = computeSeasonScore({
     avgRating,
-    goals,
-    assists,
-    position: player.position,
-    isGoalkeeper,
-    cleanSheets,
-    savePercentage,
-    penaltiesSaved,
-    bigChancesPrevented,
     trophies,
     minutesPlayed,
     possibleMinutes,
@@ -1113,6 +1131,7 @@ export function simulateSeason(
     savePercentage,
     penaltiesSaved,
     bigChancesPrevented,
+    progressiveActions,
     capsThisSeason,
     avgRating: Math.round(avgRating * 10) / 10,
     leaguePosition,
@@ -1140,20 +1159,20 @@ export function simulateSeason(
 /**
  * Punkt-Schwellen für die fünf Saison-Bilanz-Stufen - EINZIGE Quelle der Wahrheit,
  * verwendet von `computeSeasonScore` UND `applyLeaguePromotionRelegation` (die nach
- * Auf-/Abstieg nachträglich neu einordnet). Ursprünglich 20/70/120/180, mit einer
- * `avgRating*12`-Basis, die (bei avgRating>=3.5 laut clamp) NIE unter 42 Punkte fallen
- * konnte - praktisch jede Saison landete dadurch mindestens bei "Solide", "Schwierige
- * Saison" war rechnerisch unerreichbar (Bugreport: Grade-Inflation, ~67% aller Saisons
- * "Stark"/"Überragend", 0% "Schwierig"). Mit der jetzt um den Durchschnitt (6.0)
- * ZENTRIERTEN Bewertung (siehe `computeSeasonScore`) liegt eine durchschnittliche
- * Saison rechnerisch nahe 0 - die Schwellen sind entsprechend niedriger angesetzt und
- * per Simulation (mehrere hundert Karrieren) gegengeprüft.
+ * Auf-/Abstieg nachträglich neu einordnet). Zweite Kalibrierung, nachdem
+ * `computeSeasonScore` den separaten (positionsungleich gewichteten)
+ * Torbeteiligungs-Faktor verloren hat (siehe Kommentar dort) - der Score fällt seither
+ * spürbar kleiner aus (Median-Saison ~20-40 statt vorher ~80-150 Punkte), die
+ * Schwellen sind entsprechend niedriger angesetzt und per Simulation (400 Karrieren,
+ * ~9.800 Saisons, `sim_tier_distribution.ts`) gegengeprüft - insbesondere darauf, dass
+ * sich die Verteilung jetzt über alle Positionen ähnlich anfühlt statt wie zuvor
+ * IV/AV/ZM strukturell zu benachteiligen.
  */
 const SCORE_TIER_THRESHOLDS = {
-  ueberragend: 190,
-  stark: 130,
-  solide: 20,
-  schwierig: -20,
+  ueberragend: 85,
+  stark: 40,
+  solide: -5,
+  schwierig: -30,
 };
 
 function scoreTierForScore(score: number): string {
@@ -1164,31 +1183,25 @@ function scoreTierForScore(score: number): string {
   return "Durchwachsene Saison";
 }
 
-/** Torbeteiligungen zählen für Abwehrspieler spürbar mehr als für Mittelfeld/Angriff -
- * ein Tor oder eine Vorlage ist für einen Verteidiger ein viel selteneres, auffälligeres
- * Ereignis als für einen Stürmer, der ohnehin nach Torbeteiligung bezahlt wird
- * (Bugreport: Verteidiger bei identischer Ø-Bewertung strukturell klar niedrigerer
- * Score als Angreifer/Torhüter). Torhüter tauchen hier nicht auf - für sie gilt die
- * eigene Weiße-Westen/Paraden-Formel. */
-const PRODUCTION_MULTIPLIER: Partial<Record<Position, number>> = {
-  IV: 1.35,
-  AV: 1.2,
-  ZM: 1.1,
-  FS: 1.0,
-  ST: 1.0,
-};
-
-/** Mehrfaktorielle Saison-Bilanz. Auf-/Abstieg wird separat nachgetragen (siehe `applyLeaguePromotionRelegation`). */
+/**
+ * Mehrfaktorielle Saison-Bilanz. Auf-/Abstieg wird separat nachgetragen (siehe
+ * `applyLeaguePromotionRelegation`).
+ *
+ * Bewusst OHNE eigenen "Torbeteiligungen"-Faktor (frühere Version hatte hier eine
+ * zweite, komplett separate Positions-Gewichtungstabelle - `PRODUCTION_MULTIPLIER` -
+ * die parallel zu `attackWeight`/`productionFactor` in `simulateSeason` existierte und
+ * nie synchron gehalten wurde: Verteidiger/Mittelfeld wurden dadurch faktisch ZWEIMAL
+ * unterschiedlich für dieselbe Leistung bewertet, siehe Bugreport). Tore, Vorlagen,
+ * verhinderte Großchancen und Ballgewinne/Schlüsselpässe fließen bereits VOLLSTÄNDIG
+ * und je Position gleichwertig in `avgRating` ein (siehe `productionFactor` in
+ * `simulateSeason`) - `ratingFactor` unten übernimmt diese Bewertung direkt, statt sie
+ * ein zweites Mal mit eigenen Gewichten nachzurechnen. Einziges Ergebnis: eine
+ * Bestleistung in der eigenen Rolle ist jetzt für JEDE Position ungefähr gleich viel
+ * Score wert, und es gibt nur noch EINE Stelle (`productionFactor`), die bei künftigen
+ * Balance-Anpassungen gepflegt werden muss statt zwei auseinanderlaufenden.
+ */
 function computeSeasonScore(input: {
   avgRating: number;
-  goals: number;
-  assists: number;
-  position: Position;
-  isGoalkeeper: boolean;
-  cleanSheets: number;
-  savePercentage: number;
-  penaltiesSaved: number;
-  bigChancesPrevented: number;
   trophies: string[];
   minutesPlayed: number;
   possibleMinutes: number;
@@ -1196,51 +1209,30 @@ function computeSeasonScore(input: {
   redCards: number;
   capsThisSeason: number;
 }): { score: number; tier: string; factors: ScoreFactor[] } {
-  const isDefender = input.position === "IV" || input.position === "AV";
-
-  // Torhüter: weiße Westen + überdurchschnittliche Paradenquote + gehaltene Elfmeter.
-  // Abwehrspieler: Torbeteiligungen (positionsgewichtet, siehe `PRODUCTION_MULTIPLIER`)
-  // PLUS verhinderte Großchancen - ein Verteidiger ohne ein einziges Tor kann trotzdem
-  // eine spielentscheidende Saison abliefern (siehe `bigChancesPrevented` in
-  // `simulateSeason`, das defensive Gegenstück zur TW-Paradenquote). Mittelfeld/Angriff:
-  // reine (leicht gewichtete) Torbeteiligungen.
-  const productionFactorScore = input.isGoalkeeper
-    ? {
-        label: "Weiße Westen & Paraden",
-        points: Math.round(input.cleanSheets * 8 + Math.max(0, input.savePercentage - 60) * 1.5 + input.penaltiesSaved * 12),
-      }
-    : {
-        label: isDefender ? "Torbeteiligung & Abwehrarbeit" : "Torbeteiligungen",
-        points: Math.round(
-          (input.goals * 6 + input.assists * 4) * (PRODUCTION_MULTIPLIER[input.position] ?? 1) +
-            input.bigChancesPrevented * 3.5
-        ),
-      };
-
   // Sportliche Leistung: bewusst UM DEN DURCHSCHNITT (6.0) ZENTRIERT statt einer
   // reinen Multiplikation - eine Ø-Bewertung von genau 6.0 (Mittelmaß) trägt damit
   // NICHTS zum Score bei, eine schwache Bewertung zieht ihn spürbar nach unten, eine
-  // starke hebt ihn spürbar an. Vorher (avgRating*12, avgRating>=3.5 laut clamp) konnte
-  // dieser Faktor NIE unter 42 Punkte fallen - siehe `SCORE_TIER_THRESHOLDS` oben.
-  const ratingFactor = { label: "Sportliche Leistung (Ø Bewertung)", points: Math.round((input.avgRating - 6) * 18) };
+  // starke hebt ihn spürbar an. Trägt jetzt (siehe Kommentar oben) das gesamte
+  // Gewicht der individuellen Leistung inkl. Torbeteiligung/Abwehrarbeit, da diese
+  // bereits vollständig in `avgRating` steckt.
+  const ratingFactor = { label: "Sportliche Leistung (Ø Bewertung)", points: Math.round((input.avgRating - 6) * 26) };
 
-  // Einsatzzeit: NEU - wer kaum spielt, kann keine erfolgreiche Saison haben, egal wie
-  // gut die Bewertung in den wenigen Einsätzen war (Bugreport: eine Saison mit z.B.
-  // einem Kreuzbandriss und praktisch 0 Spielminuten wertete bislang wie eine normale
+  // Einsatzzeit: wer kaum spielt, kann keine erfolgreiche Saison haben, egal wie gut
+  // die Bewertung in den wenigen Einsätzen war (Bugreport: eine Saison mit z.B. einem
+  // Kreuzbandriss und praktisch 0 Spielminuten wertete bislang wie eine normale
   // Saison, weil `avgRating` unabhängig von der Einsatzzeit berechnet wird). Zentriert
   // auf eine übliche Rotationsquote (~55%): eine annähernd volle Stammspieler-Saison
   // gibt einen kleinen Bonus, ein verletzungs- oder bankbedingter Totalausfall
   // (Einsatzquote nahe 0%) zieht den Score deutlich Richtung "Schwierige Saison" - OHNE
   // eine gleichzeitig starke Bewertung in den tatsächlich bestrittenen Spielen (siehe
-  // `ratingFactor`/`productionFactorScore` oben, die davon unberührt bleiben) komplett
-  // zunichtezumachen: eine gelungene Rückkehr nach Verletzung mit starken Kurzeinsätzen
-  // bleibt erkennbar positiv, nur die verlorene Zeit selbst wird nicht mehr ignoriert.
+  // `ratingFactor` oben, der davon unberührt bleibt) komplett zunichtezumachen: eine
+  // gelungene Rückkehr nach Verletzung mit starken Kurzeinsätzen bleibt erkennbar
+  // positiv, nur die verlorene Zeit selbst wird nicht mehr ignoriert.
   const playTimeRatio = input.possibleMinutes > 0 ? input.minutesPlayed / input.possibleMinutes : 1;
   const playTimeFactor = { label: "Einsatzzeit", points: clamp(Math.round((playTimeRatio - 0.55) * 110), -70, 15) };
 
   const factors: ScoreFactor[] = [
     ratingFactor,
-    productionFactorScore,
     playTimeFactor,
     { label: "Titel", points: input.trophies.length * 50 },
     { label: "Disziplin", points: -Math.round(input.yellowCards * 2 + input.redCards * 15) },

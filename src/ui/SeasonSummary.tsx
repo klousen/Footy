@@ -34,6 +34,7 @@ export function SeasonSummary({
   const tier = overallTier(currentOverall);
   const isGoalkeeper = player.position === "TW";
   const isDefender = player.position === "IV" || player.position === "AV";
+  const isMidfielder = player.position === "ZM";
 
   return (
     <div className="screen summary-screen">
@@ -97,6 +98,9 @@ export function SeasonSummary({
         )}
         {isDefender && stats.bigChancesPrevented > 0 && (
           <StatBox label="Großchancen verhindert" value={String(stats.bigChancesPrevented)} />
+        )}
+        {isMidfielder && stats.progressiveActions > 0 && (
+          <StatBox label="Ballgewinne & Pässe" value={String(stats.progressiveActions)} />
         )}
         {stats.capsThisSeason > 0 && (
           <StatBox label="Länderspiele" value={String(stats.capsThisSeason)} />

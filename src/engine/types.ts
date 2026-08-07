@@ -258,6 +258,11 @@ export interface SeasonStats {
    * Zweikampf) - das defensive Gegenstück zu Toren/Vorlagen bzw. der TW-Paradenquote, siehe
    * `simulateSeason`/`computeSeasonScore`. */
   bigChancesPrevented: number;
+  /** NUR für zentrales Mittelfeld relevant, sonst 0: spielentscheidende Ballgewinne +
+   * Schlüsselpässe diese Saison (aus Technik + Intelligenz abgeleitet) - das
+   * Mittelfeld-Gegenstück zu `bigChancesPrevented` bei Innen-/Außenverteidigern bzw.
+   * der TW-Paradenquote, siehe `simulateSeason`. */
+  progressiveActions: number;
   /** Länderspiel-Einsätze in dieser Saison (Differenz zu `Player.capsAtSeasonStart`). */
   capsThisSeason: number;
   avgRating: number; // 1-10
@@ -498,6 +503,8 @@ export interface Player {
     penaltiesSaved: number;
     /** NUR für Innen-/Außenverteidiger relevant, sonst 0: siehe `SeasonStats.bigChancesPrevented`. */
     bigChancesPrevented: number;
+    /** NUR für zentrales Mittelfeld relevant, sonst 0: siehe `SeasonStats.progressiveActions`. */
+    progressiveActions: number;
   };
   nationalTeamCaps: number;
   /** Tore für die Nationalmannschaft - separat von den Vereinstoren getrackt. */
