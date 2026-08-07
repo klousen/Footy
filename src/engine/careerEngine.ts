@@ -449,6 +449,24 @@ export function applyChoice(state: GameState, choice: EventChoice): EventChoice[
   return effects;
 }
 
+/**
+ * Fitness darf nie höher liegen, als es eine noch laufende Verletzung zulässt - eine
+ * "100% Fitness"-Anzeige direkt neben "Verletzt: Kreuzbandriss, noch 38 Wochen
+ * Ausfallzeit" ist ein offensichtlicher Widerspruch (Bugreport). Je mehr Wochen
+ * Ausfallzeit noch anstehen, desto tiefer die Obergrenze - eine frische schwere
+ * Verletzung (30+ Wochen) drückt sie auf knapp über 10%, eine fast auskurierte
+ * Blessur (wenige Wochen) kaum merklich. Wird nach JEDER Änderung an Fitness/
+ * Verletzung angewendet (`applyEffects`, `ageUpPlayer`), nicht nur direkt beim
+ * Verletzungs-Event selbst - sonst könnte z.B. die pauschale Sommerpausen-Erholung
+ * oder ein unabhängiger Fitness-Bonus die Obergrenze wieder aushebeln, während die
+ * Verletzung noch längst nicht auskuriert ist.
+ */
+function applyInjuryFitnessCeiling(player: Player) {
+  if (!player.injury || player.injury.weeksOut <= 0) return;
+  const ceiling = clamp(Math.round(100 - player.injury.weeksOut * 2.2), 10, 100);
+  player.fitness = Math.min(player.fitness, ceiling);
+}
+
 function applyEffects(player: Player, effects: EventChoice["effects"], season: number) {
   if (effects.attributes) {
     for (const key of Object.keys(effects.attributes) as AttributeKey[]) {
@@ -563,6 +581,7 @@ function applyEffects(player: Player, effects: EventChoice["effects"], season: n
       kind: effects.logKind ?? "info",
     });
   }
+  applyInjuryFitnessCeiling(player);
 }
 
 /** Übersetzt die angewendeten Effekte einer Entscheidung in lesbare Feedback-Zeilen.
@@ -663,7 +682,13 @@ export function simulateSeason(
   const overall = overallRating(player);
   const clubStrength = player.club.strength;
   const injuredWeeks = player.injury?.weeksOut ?? 0;
-  const availabilityFactor = clamp(1 - injuredWeeks / 38, 0.15, 1);
+  // Untergrenze bewusst 0, nicht z.B. 0.15: bei einer Ausfallzeit, die (annähernd)
+  // eine ganze Saison überspannt (Kreuzbandriss: 32-44 Wochen, siehe events.ts) darf
+  // NICHTS an Spielminuten mehr anfallen - eine feste Mindestquote hätte selbst bei
+  // laufender monatelanger Verletzung noch ~15% der Saisonspiele gutgeschrieben
+  // (Bugreport: Spielminuten dürfen während einer laufenden Ausfallzeit nicht
+  // akkumulieren). Für kürzere Ausfälle bleibt die Reduktion weiterhin proportional.
+  const availabilityFactor = clamp(1 - injuredWeeks / 38, 0, 1);
 
   const isYouth = player.stage === "jugend";
   const baseMatches = isYouth ? 22 : player.club.tier === 1 ? 34 : 30;
@@ -1249,6 +1274,11 @@ export function ageUpPlayer(player: Player): void {
     const remaining = player.injury.weeksOut - 16; // Sommerpause heilt viel
     player.injury = remaining <= 0 ? null : { ...player.injury, weeksOut: remaining };
   }
+  // Die pauschale Sommerpausen-Erholung (+12 oben) darf die Fitness NICHT über das
+  // hinaus heben, was eine noch nicht auskurierte Verletzung zulässt - sonst könnte
+  // ein Spieler mit frischem Kreuzbandriss nach zwei, drei Sommerpausen schon wieder
+  // fast 100% Fitness zeigen, obwohl real noch Monate Ausfallzeit anstehen.
+  applyInjuryFitnessCeiling(player);
 
   player.contract.yearsLeft = Math.max(0, player.contract.yearsLeft - 1);
 
