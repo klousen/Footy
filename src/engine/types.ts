@@ -167,6 +167,17 @@ export interface EuropeanCupResult {
   champion: boolean;
 }
 
+/** Ergebnis der nationalen Pokal-Teilnahme einer Saison (siehe `nationalCup.ts`) - anders
+ * als bei CL/EL gibt es hier KEINE Qualifikation: JEDER Liga-1- und Liga-2-Verein des
+ * Landes nimmt automatisch teil, daher (anders als `EuropeanCupResult`) nie `null`.
+ * `underdog` markiert, ob der Sieg (falls `champion`) gegen die eigentliche Favoritenrolle
+ * gelang - nur DANN gibt es das zugehörige Event (siehe `events.ts`). */
+export interface NationalCupResult {
+  stageReached: string;
+  champion: boolean;
+  underdog: boolean;
+}
+
 /** Eine Zeile im Tabellen-Ausschnitt am Saisonende (siehe `buildTableSnapshot` in
  * leagueEngine.ts) - keine echte Spiel-für-Spiel-Simulation, sondern eine
  * rang-basierte Annäherung, die um `leaguePosition` herum plausible Werte liefert. */
@@ -234,6 +245,9 @@ export interface SeasonStats {
   /** Champions-/Europa-League-Teilnahme dieser Saison, `null` wenn nicht qualifiziert
    * (siehe `europeanCup.ts`). */
   europeanCup: EuropeanCupResult | null;
+  /** Nationaler Pokal dieser Saison (siehe `nationalCup.ts`) - nie `null`, jeder Liga-1-/
+   * Liga-2-Verein nimmt automatisch teil. */
+  nationalCup: NationalCupResult;
 }
 
 export interface LogEntry {

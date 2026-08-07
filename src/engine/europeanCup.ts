@@ -1,9 +1,9 @@
 // Europäische Wettbewerbe (Champions-/Europa-League-Äquivalent) - Elo-artige
 // Qualifikations- und Turniersimulation, adaptiert aus den vom Nutzer bereitgestellten
-// Referenzmodulen (european-cup-elo.js, liga-elo-drift.js) auf die tatsächliche Footy-
+// Referenzmodulen (european-cup-elo.js, liga-elo-drift.js) auf die tatsächliche Footca-
 // Architektur:
 //
-// - Footy simuliert nur die Liga-Pyramide EINES Landes wirklich vollständig (die des
+// - Footca simuliert nur die Liga-Pyramide EINES Landes wirklich vollständig (die des
 //   Spielers, siehe `leagueEngine.ts`/`GameState.leagueState`). Die übrigen 9 Länder
 //   existieren nur als Metadaten (`COUNTRIES`) oder werden lazy für konkrete
 //   Auslandsangebote gecacht (`GameState.foreignLeagues`) - es gibt kein persistentes

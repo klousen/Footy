@@ -39,7 +39,7 @@ export function ShareCard({
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = `footy-karriere-${player.name.replace(/\s+/g, "-").toLowerCase()}.png`;
+      a.download = `footca-${player.name.replace(/\s+/g, "-").toLowerCase()}.png`;
       document.body.appendChild(a);
       a.click();
       a.remove();
@@ -54,7 +54,7 @@ export function ShareCard({
     const win = window.open();
     if (win) {
       win.document.write(
-        `<title>Footy Karriere - ${player.name}</title><body style="margin:0;background:#0d1117;display:flex;align-items:center;justify-content:center;min-height:100vh;"><img src="${dataUrl}" style="max-width:100%;height:auto;" /></body>`
+        `<title>Footca - ${player.name}</title><body style="margin:0;background:#0d1117;display:flex;align-items:center;justify-content:center;min-height:100vh;"><img src="${dataUrl}" style="max-width:100%;height:auto;" /></body>`
       );
     }
   }
@@ -75,14 +75,14 @@ export function ShareCard({
     if (!canvas || !navigator.share) return;
     canvas.toBlob(async (blob) => {
       if (!blob) return;
-      const file = new File([blob], `footy-karriere-${player.name}.png`, { type: "image/png" });
-      const shareData = { files: [file], title: "Footy Karriere", text: buildShareCaption(data) };
+      const file = new File([blob], `footca-${player.name}.png`, { type: "image/png" });
+      const shareData = { files: [file], title: "Footca", text: buildShareCaption(data) };
       const canShareFiles = "canShare" in navigator && navigator.canShare?.({ files: [file] });
       try {
         if (canShareFiles) {
           await navigator.share(shareData);
         } else {
-          await navigator.share({ title: "Footy Karriere", text: buildShareCaption(data) });
+          await navigator.share({ title: "Footca", text: buildShareCaption(data) });
         }
       } catch {
         // Nutzer hat den Teilen-Dialog abgebrochen - kein Fehler, einfach ignorieren.

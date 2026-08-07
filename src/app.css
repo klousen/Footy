@@ -229,6 +229,16 @@ p {
 
 .hero h1 {
   font-size: clamp(2rem, 6vw, 2.7rem);
+  margin-bottom: 0;
+}
+
+.hero-tagline {
+  color: var(--gold-bright);
+  font-family: var(--font-display);
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  font-size: 0.85rem;
+  margin: 0;
 }
 
 .hero-sub {
@@ -566,6 +576,11 @@ input:focus {
   flex-direction: column;
   align-items: center;
   gap: 2px;
+  /* Als Grid-Item hat dieser Container sonst ein implizites min-width: auto -
+     ein einzelnes langes, ungetrenntes Label-Wort (z.B. "VEREINSBEZIEHUNG")
+     würde dann verhindern, dass die Spalte unter dessen Eigenbreite schrumpft,
+     und dadurch Nachbar-Chips in derselben Zeile stauchen/überlappen lassen. */
+  min-width: 0;
 }
 
 .stat-value {
@@ -589,6 +604,14 @@ input:focus {
   color: var(--muted);
   text-transform: uppercase;
   letter-spacing: 0.05em;
+  /* Lange, ungetrennte Labels (z.B. "Vereinsbeziehung") sollen in der schmalen
+     Chip-Box sauber umbrechen/trennen statt drüberzustehen (siehe min-width:0
+     oben) - line-height sorgt für lesbaren Abstand zwischen zwei Zeilen. */
+  overflow-wrap: break-word;
+  word-break: break-word;
+  hyphens: auto;
+  line-height: 1.3;
+  text-align: center;
 }
 
 .panel {

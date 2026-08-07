@@ -11,6 +11,7 @@ import type {
   GameState,
   LeagueState,
   LogEntry,
+  NationalCupResult,
   Player,
   Position,
   ScoreFactor,
@@ -37,6 +38,7 @@ import {
   simulateLeaguePromotionRelegation,
 } from "./leagueEngine";
 import { advanceEuropeanLeagueDrift, computeSeasonEuropeanCupResult } from "./europeanCup";
+import { computeSeasonNationalCupResult } from "./nationalCup";
 
 const ATTRIBUTE_KEYS: AttributeKey[] = [
   "technik",
@@ -629,12 +631,15 @@ function signed(n: number): string {
 // Saisonsimulation (Spiele im Hintergrund)
 // ---------------------------------------------------------------------------
 
-// "Kontinental-Pokal" ist bewusst NICHT mehr Teil dieses Zufalls-Pools - Champions-
-// und Europa-League-Titel werden jetzt über die echte, Elo-basierte Simulation in
-// `europeanCup.ts` vergeben (siehe unten in `simulateSeason`), nicht mehr blind erwürfelt.
+// Weder "Kontinental-Pokal" noch "Landespokal" sind mehr Teil dieses Zufalls-Pools -
+// Champions-/Europa-League (europeanCup.ts) UND der nationale Pokal (nationalCup.ts)
+// werden jetzt über echte, Elo-basierte Simulationen vergeben, nicht mehr blind
+// erwürfelt (siehe unten in `simulateSeason`). "Aufstiegs-Play-off" bleibt für Liga-2
+// ein eigener, unabhängiger Zufalls-Slot (siehe unten) - ein separates Konzept
+// (Aufstiegschance), keine Pokal-Teilnahme.
 const TROPHY_POOL_BY_TIER: Record<number, string[]> = {
-  1: ["Meisterschale", "Landespokal"],
-  2: ["Zweitliga-Meisterschaft", "Aufstiegs-Play-off"],
+  1: ["Meisterschale"],
+  2: ["Zweitliga-Meisterschaft"],
 };
 
 /** Reihenfolge der Turnierrunden (siehe `europeanCup.ts`) - fürs Gehalts-/
@@ -847,19 +852,33 @@ export function simulateSeason(
     const closeTitleChance = clamp(0.06 + coeffDominance * 0.14 + Math.max(0, trophyContribution) * 0.3, 0.03, 0.25);
     if (rng() < closeTitleChance) trophies.push(trophyPool[0]);
   }
-  // Pokal: ein K.o.-Wettbewerb bleibt grundsätzlich auch für schwächere Vereine
-  // gewinnbar (Überraschungscoup), aber deutlich seltener als eine reine
-  // Münzwurf-Chance pro Saison - UND NIE, wenn dieselbe Saison bereits ein
-  // entscheidendes Pokal-Aus erlebt hat (siehe `cupExitThisSeason`/`pokal_kraftakt`) -
-  // sonst würde der Rückblick sich selbst widersprechen.
-  if (!player.cupExitThisSeason) {
-    const cupChance = clamp(0.05 + coeffDominance * 0.12 + Math.max(0, trophyContribution) * 0.5, 0.03, 0.35);
-    if (rng() < cupChance) {
-      const extra = trophyPool[randInt(1, trophyPool.length - 1)];
-      if (extra && !trophies.includes(extra)) trophies.push(extra);
-    }
+  // Aufstiegs-Play-off (nur Liga 2): eigener, von der Pokal-Simulation unabhängiger
+  // Zufalls-Slot - eine Aufstiegschance ist ein anderes Konzept als eine Pokal-
+  // Teilnahme, auch wenn beide früher denselben generischen "zweiten Trophäen-Slot"
+  // teilten.
+  if (player.club.tier === 2) {
+    const playoffChance = clamp(0.05 + coeffDominance * 0.12 + Math.max(0, trophyContribution) * 0.5, 0.03, 0.35);
+    if (rng() < playoffChance) trophies.push("Aufstiegs-Play-off");
   }
+
+  // Nationaler Pokal (siehe nationalCup.ts) - ALLE Liga-1- UND Liga-2-Vereine des
+  // Landes nehmen automatisch teil (kein Qualifikations-Schwellenwert wie bei CL/EL,
+  // reale nationale Pokale schließen Zweitligisten ein), daher hier immer berechnet,
+  // nicht nur für Erstligisten. Löst die frühere blinde Zufalls-Chance auf
+  // "Landespokal" ab (analog zum Ersatz von "Kontinental-Pokal" durch europeanCup.ts).
+  // NIE ein Sieg, wenn dieselbe Saison bereits ein entscheidendes Pokal-Aus erlebt hat
+  // (siehe `cupExitThisSeason`/`pokal_kraftakt`) - dann direkt "Runde 1" ohne
+  // Simulation, sonst würde der Rückblick sich selbst widersprechen.
+  const nationalCup: NationalCupResult = player.cupExitThisSeason
+    ? { stageReached: "Runde 1", champion: false, underdog: false }
+    : computeSeasonNationalCupResult({
+        league,
+        playerClubId: player.club.clubId,
+        playerClubCoefficient: trophyCoefficient,
+        rng,
+      });
   player.cupExitThisSeason = false;
+  if (nationalCup.champion) trophies.push("Landespokal");
 
   // Europäische Wettbewerbe (Champions/Europa League) - siehe europeanCup.ts. Der
   // Struktur-Drift der 10 Ligen (siehe `advanceEuropeanLeagueDrift`) läuft JEDE Saison
@@ -1031,6 +1050,7 @@ export function simulateSeason(
     scoreFactors,
     tableSnapshot,
     europeanCup,
+    nationalCup,
   };
 
   player.seasonHistory.push(stats);

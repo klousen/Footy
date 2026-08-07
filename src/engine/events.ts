@@ -84,6 +84,14 @@ function lastEuropeanCup(p: Player) {
   return p.seasonHistory[p.seasonHistory.length - 1]?.europeanCup ?? null;
 }
 
+// Hilfsfunktion: nationales Pokal-Ergebnis der zuletzt abgeschlossenen Saison (siehe
+// `nationalCup.ts`/`SeasonStats.nationalCup`) - anders als `lastEuropeanCup` nie
+// `null` (jeder Liga-1-/Liga-2-Verein nimmt automatisch teil), daher direkt das
+// Ergebnisobjekt statt eines nullable Wrappers.
+function lastNationalCup(p: Player) {
+  return p.seasonHistory[p.seasonHistory.length - 1]?.nationalCup ?? null;
+}
+
 function europeanCompetitionName(competition: "CL" | "EL"): string {
   return competition === "CL" ? "Champions League" : "Europa League";
 }
@@ -6242,6 +6250,43 @@ export const EVENT_TEMPLATES: EventTemplate[] = [
         ],
       };
     },
+  },
+
+  // ---------------------------------------------------------------------
+  // NATIONALER POKAL (siehe nationalCup.ts) - anders als beim Europapokal gibt es
+  // hier nur EIN Event, und zwar bewusst nur für den echten Außenseiter-Coup (siehe
+  // `NationalCupResult.underdog`) - ein Titel als ohnehin favorisierter Topklub ist
+  // bereits durch den Trophäen-Eintrag "Landespokal" selbst abgedeckt (Score/
+  // Achievements/Sharepic), ohne dass es dafür noch ein eigenes Ereignis bräuchte.
+  // ---------------------------------------------------------------------
+  {
+    id: "landespokal_aussenseitersieg",
+    category: "meilenstein",
+    minAge: 17,
+    maxAge: 40,
+    weight: 14,
+    condition: (p) => {
+      const cup = lastNationalCup(p);
+      return !!cup?.champion && cup.underdog;
+    },
+    build: (p) => ({
+      category: "meilenstein",
+      title: "Außenseiter-Sensation im Landespokal",
+      description: `Niemand hatte ${club(p)} auf der Rechnung - und doch steht der Pokal am Ende der Saison in der Vereinsvitrine. Eine echte Außenseiter-Sensation.`,
+      choices: [
+        {
+          id: "geniessen",
+          label: "Den Coup feiern",
+          effects: {
+            reputation: 8,
+            morale: 6,
+            attributes: { mentalitaet: 1 },
+            logText: "krönt eine echte Außenseiter-Saison mit dem Gewinn des Landespokals.",
+            logKind: "milestone",
+          },
+        },
+      ],
+    }),
   },
 ];
 

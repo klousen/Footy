@@ -11,7 +11,8 @@ export function StartScreen({
     <div className="screen start-screen">
       <div className="hero">
         <div className="hero-badge">⚽</div>
-        <h1>Footy Karriere</h1>
+        <h1>Footca</h1>
+        <p className="hero-tagline">Football Career</p>
         <p className="hero-sub">
           Erlebe eine komplette Fußballkarriere - vom 14-jährigen Talent in der Jugendakademie bis zum
           Karriereende. Triff echte Entscheidungen: Training, Alltag, Verträge, Transfers, Sponsoren und

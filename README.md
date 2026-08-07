@@ -1,4 +1,4 @@
-# Footy Karriere ⚽
+# Footca - Football Career ⚽
 
 Eine textbasierte Fußball-Karriere-Simulation im Browser. Du übernimmst einen
 Spieler mit 14 Jahren in der Jugendakademie eines fiktiven Vereins und triffst

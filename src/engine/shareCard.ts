@@ -161,7 +161,7 @@ export function drawShareCard(canvas: HTMLCanvasElement, data: ShareCardData): v
   ctx.textAlign = "center";
   ctx.fillStyle = CHALK_DIM;
   ctx.font = '600 26px "Segoe UI", system-ui, sans-serif';
-  ctx.fillText("⚽ FOOTY KARRIERE", W / 2, 74);
+  ctx.fillText("⚽ FOOTCA", W / 2, 74);
 
   // OVR-Badge
   const badgeY = 130;
@@ -343,7 +343,7 @@ export function drawShareCard(canvas: HTMLCanvasElement, data: ShareCardData): v
   ctx.stroke();
   ctx.fillStyle = "rgba(159,179,168,0.7)";
   ctx.font = '500 22px "Segoe UI", system-ui, sans-serif';
-  ctx.fillText("Erstellt mit Footy Karriere", W / 2, H - 26);
+  ctx.fillText("Erstellt mit Footca", W / 2, H - 26);
 }
 
 /** Kurzer Beschreibungstext zum Mitkopieren beim Teilen (Caption für Social Media). */
@@ -352,5 +352,5 @@ export function buildShareCaption(data: ShareCardData): string {
   const productionPart = data.isGoalkeeper
     ? `${data.cleanSheets} weiße Westen, ${data.savePercentage}% gehaltene Bälle`
     : `${data.goals} Tore, ${data.assists} Vorlagen`;
-  return `⚽ Meine Fußball-Karriere als ${data.name}: ${data.legacyTier} mit ${data.overall} Gesamtstärke (Karriere-Bestwert)! ${data.matches} Spiele, ${productionPart}, ${data.trophies} Titel.${achievementsPart} Gespielt mit Footy Karriere.`;
+  return `⚽ Meine Fußball-Karriere als ${data.name}: ${data.legacyTier} mit ${data.overall} Gesamtstärke (Karriere-Bestwert)! ${data.matches} Spiele, ${productionPart}, ${data.trophies} Titel.${achievementsPart} Gespielt mit Footca.`;
 }
