@@ -167,6 +167,7 @@ export function createPlayer(
         caps: 0,
         cleanSheets: 0,
         penaltiesSaved: 0,
+        bigChancesPrevented: 0,
       },
       nationalTeamCaps: 0,
       nationalTeamGoals: 0,
@@ -786,6 +787,23 @@ export function simulateSeason(
       if (rng() < penaltySaveChance) penaltiesSaved++;
     }
   }
+
+  // Verteidiger-Statistik: "verhinderte Großchancen" (Grätsche auf der Linie, Klärung
+  // im eigenen Strafraum, entscheidender letzter Zweikampf) ist das defensive
+  // Gegenstück zu Toren/Vorlagen bzw. der TW-Paradenquote - ein Innen-/Außenverteidiger
+  // OHNE Torbeteiligung kann trotzdem eine spielentscheidende Saison abliefern, was die
+  // reine "Torbeteiligungen"-Metrik bislang komplett ignorierte (Bugreport: Verteidiger
+  // strukturell benachteiligt). Innenverteidiger klären spürbar mehr als Außenverteidiger
+  // (näher an der eigenen Box, mehr direkte Zweikämpfe im Strafraum). Fließt unten in
+  // `productionFactor`/`computeSeasonScore` als eigener Bonus ein, analog zu Toren bzw.
+  // Paraden.
+  let bigChancesPrevented = 0;
+  const isDefender = player.position === "IV" || player.position === "AV";
+  if (isDefender && matches > 0) {
+    const positionFactor = player.position === "IV" ? 1 : 0.55;
+    const rateBase = clamp(0.35 + (overall - clubStrength) * 0.012 + form * 0.15, 0.1, 1.1) * positionFactor;
+    bigChancesPrevented = Math.max(0, Math.round(matches * rateBase * (0.7 + rng() * 0.6)));
+  }
   // Disziplin wirkt sich leicht auf die Konstanz der Leistungen aus (professionelle
   // Lebensführung vs. Party-Image) - ein spürbarer, aber kein dominanter Faktor.
   const disziplinFactor = (player.traits.disziplin - 50) / 250; // -0.2 .. +0.2
@@ -803,12 +821,16 @@ export function simulateSeason(
   // spürbar zum Torerfolg beiträgt, bekommt das auch in der Bewertung honoriert,
   // nicht nur in der separaten Tore/Vorlagen-Statistik. Vorlagen zählen etwas
   // weniger als Tore (0.7x), reine Nullen (v.a. Verteidiger) bekommen dadurch
-  // keinen Abzug - nur echte Scorer werden zusätzlich belohnt. Torhüter haben
-  // ihr eigenes Pendant: weiße Weste pro Spiel + Paradenquote statt Torbeteiligung.
+  // keinen Abzug - nur echte Scorer werden zusätzlich belohnt. Torhüter haben ihr
+  // eigenes Pendant (weiße Weste pro Spiel + Paradenquote statt Torbeteiligung),
+  // Verteidiger zusätzlich verhinderte Großchancen (siehe `bigChancesPrevented`
+  // oben) - eine Innenverteidiger-Saison ohne ein einziges Tor kann trotzdem
+  // spürbar zur Durchschnittsnote beitragen, wenn defensiv viel geklärt wurde.
   const productionPerMatch = matches > 0 ? (goals + assists * 0.7) / matches : 0;
+  const defensiveActionsPerMatch = matches > 0 ? bigChancesPrevented / matches : 0;
   const productionFactor = isGoalkeeper
     ? clamp((matches > 0 ? cleanSheets / matches : 0) * 1.6 + (savePercentage - 63) / 90 + penaltiesSaved * 0.05, 0, 1.1)
-    : clamp(productionPerMatch * 1.3, 0, 1.1);
+    : clamp(productionPerMatch * 1.3 + defensiveActionsPerMatch * 0.5, 0, 1.1);
   // "Sommermärchen-Delle" (siehe "sommermaerchen_delle_1"): ein spürbarer, aber
   // vorübergehender Leistungsdämpfer nach einem großen Erfolgshöhepunkt - klingt
   // über die Saisons ab (siehe `ageUpPlayer`), statt die Karriere dauerhaft zu prägen.
@@ -875,10 +897,22 @@ export function simulateSeason(
   // Aufstiegs-Play-off (nur Liga 2): eigener, von der Pokal-Simulation unabhängiger
   // Zufalls-Slot - eine Aufstiegschance ist ein anderes Konzept als eine Pokal-
   // Teilnahme, auch wenn beide früher denselben generischen "zweiten Trophäen-Slot"
-  // teilten.
+  // teilten. Bewusst NICHT mehr in `trophies` (siehe Bugreport-Review): eine
+  // Play-off-CHANCE ist kein tatsächlich gewonnener Titel - landete sie im selben
+  // Array wie Meisterschale/Landespokal, zählte sie in `computeSeasonScore` mit
+  // vollem Titel-Bonus UND erschien im "🏆 Gewonnen"-Banner, obwohl nichts
+  // gewonnen wurde (mit Abstand häufigster "Titel"-Eintrag in der Simulation).
+  // Eigener, klar als Chance formulierter Log-Eintrag statt Trophäen-Eintrag.
   if (player.club.tier === 2) {
     const playoffChance = clamp(0.05 + coeffDominance * 0.12 + Math.max(0, trophyContribution) * 0.5, 0.03, 0.35);
-    if (rng() < playoffChance) trophies.push("Aufstiegs-Play-off");
+    if (rng() < playoffChance) {
+      player.log.push({
+        season: seasonNumber,
+        age: player.age,
+        text: `${player.club.name} sichert sich dank ${player.name}s starker Saison einen Platz im Aufstiegs-Play-off - noch kein Titel, aber eine echte Chance auf den Aufstieg.`,
+        kind: "positive",
+      });
+    }
   }
 
   // Nationaler Pokal (siehe nationalCup.ts) - ALLE Liga-1- UND Liga-2-Vereine des
@@ -956,6 +990,7 @@ export function simulateSeason(
   player.careerTotals.redCards += redCards;
   player.careerTotals.cleanSheets += cleanSheets;
   player.careerTotals.penaltiesSaved += penaltiesSaved;
+  player.careerTotals.bigChancesPrevented += bigChancesPrevented;
   player.careerTotals.trophies.push(...trophies);
 
   for (const trophy of trophies) {
@@ -1030,12 +1065,15 @@ export function simulateSeason(
     avgRating,
     goals,
     assists,
+    position: player.position,
     isGoalkeeper,
     cleanSheets,
     savePercentage,
     penaltiesSaved,
+    bigChancesPrevented,
     trophies,
-    repGain,
+    minutesPlayed,
+    possibleMinutes,
     yellowCards,
     redCards,
     capsThisSeason,
@@ -1056,6 +1094,7 @@ export function simulateSeason(
     cleanSheets,
     savePercentage,
     penaltiesSaved,
+    bigChancesPrevented,
     capsThisSeason,
     avgRating: Math.round(avgRating * 10) / 10,
     leaguePosition,
@@ -1080,35 +1119,112 @@ export function simulateSeason(
   return stats;
 }
 
+/**
+ * Punkt-Schwellen für die fünf Saison-Bilanz-Stufen - EINZIGE Quelle der Wahrheit,
+ * verwendet von `computeSeasonScore` UND `applyLeaguePromotionRelegation` (die nach
+ * Auf-/Abstieg nachträglich neu einordnet). Ursprünglich 20/70/120/180, mit einer
+ * `avgRating*12`-Basis, die (bei avgRating>=3.5 laut clamp) NIE unter 42 Punkte fallen
+ * konnte - praktisch jede Saison landete dadurch mindestens bei "Solide", "Schwierige
+ * Saison" war rechnerisch unerreichbar (Bugreport: Grade-Inflation, ~67% aller Saisons
+ * "Stark"/"Überragend", 0% "Schwierig"). Mit der jetzt um den Durchschnitt (6.0)
+ * ZENTRIERTEN Bewertung (siehe `computeSeasonScore`) liegt eine durchschnittliche
+ * Saison rechnerisch nahe 0 - die Schwellen sind entsprechend niedriger angesetzt und
+ * per Simulation (mehrere hundert Karrieren) gegengeprüft.
+ */
+const SCORE_TIER_THRESHOLDS = {
+  ueberragend: 190,
+  stark: 130,
+  solide: 20,
+  schwierig: -20,
+};
+
+function scoreTierForScore(score: number): string {
+  if (score >= SCORE_TIER_THRESHOLDS.ueberragend) return "Überragende Saison";
+  if (score >= SCORE_TIER_THRESHOLDS.stark) return "Starke Saison";
+  if (score >= SCORE_TIER_THRESHOLDS.solide) return "Solide Saison";
+  if (score < SCORE_TIER_THRESHOLDS.schwierig) return "Schwierige Saison";
+  return "Durchwachsene Saison";
+}
+
+/** Torbeteiligungen zählen für Abwehrspieler spürbar mehr als für Mittelfeld/Angriff -
+ * ein Tor oder eine Vorlage ist für einen Verteidiger ein viel selteneres, auffälligeres
+ * Ereignis als für einen Stürmer, der ohnehin nach Torbeteiligung bezahlt wird
+ * (Bugreport: Verteidiger bei identischer Ø-Bewertung strukturell klar niedrigerer
+ * Score als Angreifer/Torhüter). Torhüter tauchen hier nicht auf - für sie gilt die
+ * eigene Weiße-Westen/Paraden-Formel. */
+const PRODUCTION_MULTIPLIER: Partial<Record<Position, number>> = {
+  IV: 1.35,
+  AV: 1.2,
+  ZM: 1.1,
+  FS: 1.0,
+  ST: 1.0,
+};
+
 /** Mehrfaktorielle Saison-Bilanz. Auf-/Abstieg wird separat nachgetragen (siehe `applyLeaguePromotionRelegation`). */
 function computeSeasonScore(input: {
   avgRating: number;
   goals: number;
   assists: number;
+  position: Position;
   isGoalkeeper: boolean;
   cleanSheets: number;
   savePercentage: number;
   penaltiesSaved: number;
+  bigChancesPrevented: number;
   trophies: string[];
-  repGain: number;
+  minutesPlayed: number;
+  possibleMinutes: number;
   yellowCards: number;
   redCards: number;
   capsThisSeason: number;
 }): { score: number; tier: string; factors: ScoreFactor[] } {
-  // Torhüter haben ihr eigenes Leistungsmerkmal statt "Torbeteiligungen" (die bei
-  // ihnen dank `attackWeight.TW` ohnehin praktisch immer 0 wären): weiße Westen +
-  // eine über dem Durchschnitt liegende Paradenquote + gehaltene Elfmeter.
+  const isDefender = input.position === "IV" || input.position === "AV";
+
+  // Torhüter: weiße Westen + überdurchschnittliche Paradenquote + gehaltene Elfmeter.
+  // Abwehrspieler: Torbeteiligungen (positionsgewichtet, siehe `PRODUCTION_MULTIPLIER`)
+  // PLUS verhinderte Großchancen - ein Verteidiger ohne ein einziges Tor kann trotzdem
+  // eine spielentscheidende Saison abliefern (siehe `bigChancesPrevented` in
+  // `simulateSeason`, das defensive Gegenstück zur TW-Paradenquote). Mittelfeld/Angriff:
+  // reine (leicht gewichtete) Torbeteiligungen.
   const productionFactorScore = input.isGoalkeeper
     ? {
         label: "Weiße Westen & Paraden",
         points: Math.round(input.cleanSheets * 8 + Math.max(0, input.savePercentage - 60) * 1.5 + input.penaltiesSaved * 12),
       }
-    : { label: "Torbeteiligungen", points: Math.round(input.goals * 6 + input.assists * 4) };
+    : {
+        label: isDefender ? "Torbeteiligung & Abwehrarbeit" : "Torbeteiligungen",
+        points: Math.round(
+          (input.goals * 6 + input.assists * 4) * (PRODUCTION_MULTIPLIER[input.position] ?? 1) +
+            input.bigChancesPrevented * 3.5
+        ),
+      };
+
+  // Sportliche Leistung: bewusst UM DEN DURCHSCHNITT (6.0) ZENTRIERT statt einer
+  // reinen Multiplikation - eine Ø-Bewertung von genau 6.0 (Mittelmaß) trägt damit
+  // NICHTS zum Score bei, eine schwache Bewertung zieht ihn spürbar nach unten, eine
+  // starke hebt ihn spürbar an. Vorher (avgRating*12, avgRating>=3.5 laut clamp) konnte
+  // dieser Faktor NIE unter 42 Punkte fallen - siehe `SCORE_TIER_THRESHOLDS` oben.
+  const ratingFactor = { label: "Sportliche Leistung (Ø Bewertung)", points: Math.round((input.avgRating - 6) * 18) };
+
+  // Einsatzzeit: NEU - wer kaum spielt, kann keine erfolgreiche Saison haben, egal wie
+  // gut die Bewertung in den wenigen Einsätzen war (Bugreport: eine Saison mit z.B.
+  // einem Kreuzbandriss und praktisch 0 Spielminuten wertete bislang wie eine normale
+  // Saison, weil `avgRating` unabhängig von der Einsatzzeit berechnet wird). Zentriert
+  // auf eine übliche Rotationsquote (~55%): eine annähernd volle Stammspieler-Saison
+  // gibt einen kleinen Bonus, ein verletzungs- oder bankbedingter Totalausfall
+  // (Einsatzquote nahe 0%) zieht den Score deutlich Richtung "Schwierige Saison" - OHNE
+  // eine gleichzeitig starke Bewertung in den tatsächlich bestrittenen Spielen (siehe
+  // `ratingFactor`/`productionFactorScore` oben, die davon unberührt bleiben) komplett
+  // zunichtezumachen: eine gelungene Rückkehr nach Verletzung mit starken Kurzeinsätzen
+  // bleibt erkennbar positiv, nur die verlorene Zeit selbst wird nicht mehr ignoriert.
+  const playTimeRatio = input.possibleMinutes > 0 ? input.minutesPlayed / input.possibleMinutes : 1;
+  const playTimeFactor = { label: "Einsatzzeit", points: clamp(Math.round((playTimeRatio - 0.55) * 110), -70, 15) };
+
   const factors: ScoreFactor[] = [
-    { label: "Sportliche Leistung (Ø Bewertung)", points: Math.round(input.avgRating * 12) },
+    ratingFactor,
     productionFactorScore,
+    playTimeFactor,
     { label: "Titel", points: input.trophies.length * 50 },
-    { label: "Entwicklung (Bekanntheit)", points: input.repGain * 3 },
     { label: "Disziplin", points: -Math.round(input.yellowCards * 2 + input.redCards * 15) },
   ];
   if (input.capsThisSeason > 0) {
@@ -1116,13 +1232,7 @@ function computeSeasonScore(input: {
   }
 
   const score = factors.reduce((s, f) => s + f.points, 0);
-  let tier = "Durchwachsene Saison";
-  if (score >= 180) tier = "Überragende Saison";
-  else if (score >= 120) tier = "Starke Saison";
-  else if (score >= 70) tier = "Solide Saison";
-  else if (score < 20) tier = "Schwierige Saison";
-
-  return { score, tier, factors };
+  return { score, tier: scoreTierForScore(score), factors };
 }
 
 // ---------------------------------------------------------------------------
@@ -1614,7 +1724,16 @@ export function applyLeaguePromotionRelegation(player: Player, league: LeagueSta
     // knapp verpasst (der jeweils andere Fall - Liga wechselt sich - läuft über
     // `wasRelegated`/`wasPromoted` unten, inklusive Score/Moral-Effekten).
     const survived = playerWasTier1InPlayoff;
-    if (lastStats) lastStats.relegationPlayoff = survived ? "gehalten" : "verpasst";
+    if (lastStats) {
+      lastStats.relegationPlayoff = survived ? "gehalten" : "verpasst";
+      // Kleinerer Score-Ausschlag als ein vollständiger Auf-/Abstieg (±40, siehe unten) -
+      // ein überstandenes bzw. verlorenes Relegationsspiel ist ein echter, aber
+      // schmalerer Erfolg/Rückschlag als der komplette Liga-Wechsel.
+      const points = survived ? 15 : -12;
+      lastStats.scoreFactors.push({ label: survived ? "Relegationsspiel gehalten" : "Relegationsspiel verloren", points });
+      lastStats.score += points;
+      lastStats.scoreTier = scoreTierForScore(lastStats.score);
+    }
     player.morale = clamp(player.morale + (survived ? 5 : -6), 0, 100);
     const leagueName = leagueNameForTier(league, player.club.tier);
     const text = survived
@@ -1634,11 +1753,7 @@ export function applyLeaguePromotionRelegation(player: Player, league: LeagueSta
     const points = wasRelegated ? -40 : 40;
     lastStats.scoreFactors.push({ label: wasRelegated ? "Abstieg" : "Aufstieg", points });
     lastStats.score += points;
-    if (lastStats.score >= 180) lastStats.scoreTier = "Überragende Saison";
-    else if (lastStats.score >= 120) lastStats.scoreTier = "Starke Saison";
-    else if (lastStats.score >= 70) lastStats.scoreTier = "Solide Saison";
-    else if (lastStats.score < 20) lastStats.scoreTier = "Schwierige Saison";
-    else lastStats.scoreTier = "Durchwachsene Saison";
+    lastStats.scoreTier = scoreTierForScore(lastStats.score);
   }
 
   // Auf-/Abstieg bleibt nicht folgenlos für den Spieler selbst - beim Abstieg

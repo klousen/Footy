@@ -74,6 +74,12 @@ export function CareerEnd({
               <span>{t.goals}</span>
               <span>Vorlagen</span>
               <span>{t.assists}</span>
+              {(player.position === "IV" || player.position === "AV") && t.bigChancesPrevented > 0 && (
+                <>
+                  <span>Großchancen verhindert</span>
+                  <span>{t.bigChancesPrevented}</span>
+                </>
+              )}
             </>
           )}
           <span>Titel</span>

@@ -225,6 +225,11 @@ export interface SeasonStats {
    * (separat vom Elfmeterschießen-Event "torwart_elfmeterheld") - seltener Bonusmoment,
    * der die Bewertung/Bekanntheit zusätzlich anhebt. */
   penaltiesSaved: number;
+  /** NUR für Innen-/Außenverteidiger relevant, sonst 0: im letzten Moment verhinderte
+   * Großchancen diese Saison (Grätsche auf der Linie, Klärung im Strafraum, entscheidender
+   * Zweikampf) - das defensive Gegenstück zu Toren/Vorlagen bzw. der TW-Paradenquote, siehe
+   * `simulateSeason`/`computeSeasonScore`. */
+  bigChancesPrevented: number;
   /** Länderspiel-Einsätze in dieser Saison (Differenz zu `Player.capsAtSeasonStart`). */
   capsThisSeason: number;
   avgRating: number; // 1-10
@@ -455,6 +460,8 @@ export interface Player {
     cleanSheets: number;
     /** NUR für Torhüter relevant, sonst 0: siehe `SeasonStats.penaltiesSaved`. */
     penaltiesSaved: number;
+    /** NUR für Innen-/Außenverteidiger relevant, sonst 0: siehe `SeasonStats.bigChancesPrevented`. */
+    bigChancesPrevented: number;
   };
   nationalTeamCaps: number;
   /** Tore für die Nationalmannschaft - separat von den Vereinstoren getrackt. */

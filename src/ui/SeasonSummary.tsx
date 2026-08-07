@@ -25,6 +25,7 @@ export function SeasonSummary({
   const overallDelta = currentOverall - stats.overallRating;
   const tier = overallTier(currentOverall);
   const isGoalkeeper = player.position === "TW";
+  const isDefender = player.position === "IV" || player.position === "AV";
 
   return (
     <div className="screen summary-screen">
@@ -85,6 +86,9 @@ export function SeasonSummary({
         <StatBox label="Einkommen" value={formatMoney(stats.income)} />
         {isGoalkeeper && stats.penaltiesSaved > 0 && (
           <StatBox label="Elfmeter gehalten" value={String(stats.penaltiesSaved)} />
+        )}
+        {isDefender && stats.bigChancesPrevented > 0 && (
+          <StatBox label="Großchancen verhindert" value={String(stats.bigChancesPrevented)} />
         )}
         {stats.capsThisSeason > 0 && (
           <StatBox label="Länderspiele" value={String(stats.capsThisSeason)} />
