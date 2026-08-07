@@ -7,6 +7,7 @@ import { AttributeBars } from "./AttributeBars";
 import { TraitBars } from "./TraitBars";
 import { StoryThreads } from "./StoryThreads";
 import { formatMoney, overallTier, RELATIONSHIP_LABEL } from "./labels";
+import { StatBox } from "./StatBox";
 import { Timeline } from "./Timeline";
 
 export function Dashboard({
@@ -47,15 +48,6 @@ export function Dashboard({
             {league.flag} {league.countryName})
           </p>
         </div>
-        <div className={`overall-badge tier-${tier.className}`}>
-          <span className="overall-number">{overall}</span>
-          <span className="overall-caption">{tier.label}</span>
-          {trend !== null && trend !== 0 && (
-            <span className={`overall-trend ${trend > 0 ? "up" : "down"}`}>
-              {trend > 0 ? "▲" : "▼"} {Math.abs(trend)}
-            </span>
-          )}
-        </div>
       </div>
 
       {player.injury && (
@@ -64,29 +56,58 @@ export function Dashboard({
         </div>
       )}
 
-      <div className="stat-strip">
-        <Stat label="Moral" value={`${player.morale}%`} />
-        <Stat label="Fitness" value={`${player.fitness}%`} />
-        <Stat label="Bekanntheit" value={`${player.reputation}%`} />
-        <Stat label="Vereinsbeziehung" value={`${player.clubRelation}%`} />
-        <Stat label="Vermögen" value={formatMoney(player.wealth)} />
-        <Stat
-          label="Privatleben"
-          value={
-            RELATIONSHIP_LABEL[player.relationshipStatus] + (player.children > 0 ? ` · ${player.children} Kind(er)` : "")
-          }
+      {/* Hero-Box für die Gesamtstärke (mit Trend-Pfeil + Tier) - dasselbe Muster wie
+          im Saisonrückblick (SeasonSummary), statt in einem uniformen 8er-Grid
+          untergehen zu lassen (siehe footy-karriere-mockup.html .hero-rating). */}
+      <div className="hero-rating">
+        <div className="num-block">
+          <span className="num">{overall}</span>
+          {trend !== null && trend !== 0 && (
+            <span className={`trend ${trend > 0 ? "up" : "down"}`}>
+              {trend > 0 ? "▲" : "▼"} {Math.abs(trend)}
+            </span>
+          )}
+        </div>
+        <div className="tier-label">
+          <div className="tier-name">{tier.label}</div>
+          <div className="tier-sub">Gesamtstärke</div>
+        </div>
+      </div>
+
+      {/* Zwei gestaffelte 3er-Reihen statt eines uniformen 6er-Grids - kurze Labels
+          ohne Zeilenumbruch (siehe footy-karriere-mockup.html .presseason-primary/
+          -secondary), dieselben Stat-Kacheln wie im Saisonrückblick. */}
+      <div className="stat-row-primary">
+        <StatBox label="Moral" value={`${player.morale}%`} />
+        <StatBox label="Fitness" value={`${player.fitness}%`} />
+        <StatBox label="Bekannt." value={`${player.reputation}%`} />
+      </div>
+      <div className="stat-row-secondary">
+        <StatBox label="Verein" value={`${player.clubRelation}%`} />
+        <StatBox label="Vermögen" value={formatMoney(player.wealth)} />
+        <StatBox
+          label="Privat"
+          value={RELATIONSHIP_LABEL[player.relationshipStatus]}
+          detail={player.children > 0 ? `${player.children} Kind(er)` : undefined}
         />
       </div>
 
+      {/* Investitionen-Feature folgt in einem späteren Schritt (Kategorien, Preise,
+          Tier-Gating) - hier bewusst nur der Platzhalter-Button an der richtigen
+          Stelle im Design, noch ohne Funktion. */}
+      <button type="button" className="btn btn-outline-gold" onClick={() => {}}>
+        💼 Investitionen
+      </button>
+
       <div className="panel">
         <h3>Attribute</h3>
-        <AttributeBars attributes={player.attributes} />
+        <AttributeBars attributes={player.attributes} compare={lastStats?.attributesAtSeasonStart} />
       </div>
 
       <div className="panel">
         <h3>Charakter & Ruf</h3>
         <p className="muted trait-hint">Prägt sich durch deine Entscheidungen und beeinflusst Wachstum, Leistung und welche Ereignisse künftig auftauchen.</p>
-        <TraitBars traits={player.traits} />
+        <TraitBars traits={player.traits} compare={lastStats?.traitsAtSeasonStart} />
       </div>
 
       <StoryThreads threads={player.activeStorylines} seasonNumber={seasonNumber} />
@@ -117,15 +138,6 @@ export function Dashboard({
       </div>
 
       {showTimeline && <Timeline player={player} onClose={() => setShowTimeline(false)} />}
-    </div>
-  );
-}
-
-function Stat({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="stat-chip">
-      <span className="stat-value">{value}</span>
-      <span className="stat-label">{label}</span>
     </div>
   );
 }

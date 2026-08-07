@@ -120,6 +120,12 @@ export default function App() {
 
   function handleStartSeason() {
     if (!game.player || !game.leagueState) return;
+    // Reiner Anzeige-Snapshot für die Attribut-/Charakter-Delta-Balken (siehe
+    // `Player.attributesAtSeasonStart`) - VOR den Events dieser Saison, damit die
+    // später gezeigte Delta-Kennzeichnung die komplette Saison (Entscheidungen +
+    // Alterswachstum) abdeckt, nicht nur einen Teil davon. Berührt keine Spiellogik.
+    game.player.attributesAtSeasonStart = { ...game.player.attributes };
+    game.player.traitsAtSeasonStart = { ...game.player.traits };
     const nextSeasonNumber = game.seasonNumber + 1;
     const used = new Set(game.usedTemplateIds);
     const recentTemplateSeasons = { ...game.recentTemplateSeasons };

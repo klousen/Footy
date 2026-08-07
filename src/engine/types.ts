@@ -206,6 +206,10 @@ export interface SeasonStats {
   club: string;
   /** Gesamtstärke während dieser Saison (vor dem Wachstum am Saisonende). */
   overallRating: number;
+  /** Attribut-/Charakterwerte zu Saisonbeginn (vor den Events dieser Saison) - reiner
+   * Anzeige-Snapshot für die Delta-Balken (siehe `Player.attributesAtSeasonStart`). */
+  attributesAtSeasonStart: Attributes;
+  traitsAtSeasonStart: Traits;
   leagueTier: LeagueTier;
   leagueName: string;
   matches: number;
@@ -434,6 +438,14 @@ export interface Player {
   birthAge: number; // Startalter 14
   age: number;
   attributes: Attributes;
+  /** Reiner Anzeige-Snapshot von `attributes`/`traits` zu Beginn der laufenden Saison
+   * (vor deren Events) - berührt keine Spiellogik/Attribut-Berechnung, dient
+   * ausschließlich den Delta-Balken im Dossier-/Saisonrückblick-Screen (siehe
+   * `AttributeBars`/`TraitBars`). Wird beim Saisonstart aktualisiert und am
+   * Saisonende 1:1 in `SeasonStats` kopiert, damit die Delta-Anzeige der bereits
+   * abgeschlossenen Saison erhalten bleibt. */
+  attributesAtSeasonStart: Attributes;
+  traitsAtSeasonStart: Traits;
   potential: Attributes; // verborgene Obergrenze
   /** Fraktionaler Wachstums-/Abbau-Rest je Attribut, der beim Runden auf ganze
    * Punkte übrig bleibt und in die nächste Saison mitgenommen wird (siehe `ageUpPlayer`). */
