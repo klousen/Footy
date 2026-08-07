@@ -1207,7 +1207,13 @@ export const EVENT_TEMPLATES: EventTemplate[] = [
         {
           id: "ja",
           label: "Leihe akzeptieren",
-          effects: { attributes: { mentalitaet: 1 }, clubRelation: 2, morale: 2, wantsTransfer: true, logText: "ist offen für eine Leihe und signalisiert dem Verein Wechselbereitschaft.", logKind: "info" },
+          // BEWUSST kein wantsTransfer:true - dies ist ein vom VEREIN vorgeschlagener
+          // Leihvorschlag (siehe description), keine aktiv-öffentliche Wechselforderung
+          // des Spielers. `wantsTransfer` garantiert im Transfersystem ein sofortiges
+          // Angebot im nächsten Fenster OHNE Cooldown und färbt spätere Angebotstexte
+          // als "dein öffentlich geäußerter Wechselwunsch" - das wäre hier irreführend
+          // (bloße Zustimmung zu einer vereinsseitigen Leihe, kein eigener Vorstoß).
+          effects: { attributes: { mentalitaet: 1 }, clubRelation: 2, morale: 2, logText: "akzeptiert die vom Verein vorgeschlagene Leihe für mehr Spielpraxis.", logKind: "info" },
         },
         {
           id: "nein",
@@ -5943,8 +5949,17 @@ export const EVENT_TEMPLATES: EventTemplate[] = [
           {
             id: "anhoeren",
             label: "Angebote anhören",
+            // BEWUSST kein wantsTransfer:true - das reine Anhören über den Berater ist
+            // (anders als z.B. "Wechsel fordern") kein aktiv-öffentlicher Wechselwunsch,
+            // sondern diskretes Sondieren. `wantsTransfer` ist im gesamten Transfersystem
+            // ein starkes, eindeutiges Signal (garantiertes Angebot im nächsten Fenster
+            // OHNE Cooldown, siehe `shouldTriggerTransferOpportunity`) und färbt zudem
+            // die Framing-Texte künftiger Angebote als "dein öffentlich geäußerter
+            // Wechselwunsch" - das wäre hier irreführend (Bugreport: Spieler bekam diesen
+            // Text, ohne je einen Wechsel gefordert zu haben). Die erhöhte Bekanntheit
+            // reicht bereits, um über den bestehenden "gute Form"-Pfad organisch (und
+            // korrekt als solches beschriftet) mehr Angebote nach sich zu ziehen.
             effects: {
-              wantsTransfer: true,
               clubRelation: -4,
               reputation: 5,
               logText: "lässt sich nach dem internationalen Titel erste Anfragen von Spitzenklubs durch den Berater vorlegen.",
