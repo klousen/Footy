@@ -48,6 +48,30 @@ export function overallRatingFromAttributes(attributes: Attributes, position: Po
   return Math.round(sum);
 }
 
+/**
+ * Ob der Spieler kurz vor dem karriereende steht (siehe `shouldOfferRetirement`
+ * in careerEngine.ts für den Player-Wrapper, der App.tsx den Retirement-Entscheid
+ * anbietet) - lebt bewusst auch hier in types.ts statt nur in careerEngine.ts,
+ * damit z.B. `events.ts` spätcarriere-Events (wie "Lockruf des großen Geldes")
+ * daran koppeln kann, OHNE die Auswahl in eine Saison zu legen, in der die
+ * Karriere ohnehin gleich endet - sonst wirkt ein "letzter großer Zahltag"
+ * kurz vor Karriereende sinnlos, weil kaum noch Zeit bleibt, ihn auszukosten
+ * (Bugreport). Duplikation der Bedingung wäre fehleranfällig, ein zirkulärer
+ * Import von careerEngine.ts nach events.ts dagegen nicht möglich.
+ */
+export function isNearRetirement(player: Player): boolean {
+  if (player.age >= 39) return true;
+  if (player.age < 32) return false;
+  const overall = overallRatingFromAttributes(player.attributes, player.position);
+  const weights = POSITION_WEIGHTS[player.position];
+  let peakOverall = 0;
+  for (const key of Object.keys(weights) as AttributeKey[]) {
+    peakOverall += player.potential[key] * weights[key];
+  }
+  peakOverall = Math.round(peakOverall);
+  return overall < peakOverall * 0.72 || player.fitness < 55;
+}
+
 export const POSITION_WEIGHTS: Record<Position, Attributes> = {
   TW: { technik: 0.15, tempo: 0.05, physis: 0.25, mentalitaet: 0.35, intelligenz: 0.15, charisma: 0.05 },
   IV: { technik: 0.12, tempo: 0.13, physis: 0.33, mentalitaet: 0.25, intelligenz: 0.12, charisma: 0.05 },

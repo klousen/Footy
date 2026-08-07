@@ -1,5 +1,5 @@
 import type { EventTemplate, Player } from "./types";
-import { overallRatingFromAttributes } from "./types";
+import { isNearRetirement, overallRatingFromAttributes } from "./types";
 import { clamp, FEMALE_FIRST_NAMES, FIRST_NAMES, LAST_NAMES } from "./data";
 
 // Hilfsfunktion für lesbaren Vereinsnamen im Text
@@ -1977,9 +1977,16 @@ export const EVENT_TEMPLATES: EventTemplate[] = [
     id: "veteran_lockruf_geld",
     category: "transfer",
     minAge: 32,
-    maxAge: 38,
+    // Bewusst enger als das frühere maxAge:38 (Bugreport: Event kam kurz vor
+    // Karriereende, "letzter großer Zahltag" konnte praktisch nicht mehr
+    // ausgekostet werden) - typischerweise um 34 gedacht, siehe unten zusätzlich
+    // die Sperre für Spieler, die ohnehin schon knapp vor dem Karriereende stehen.
+    maxAge: 35,
     weight: 1,
-    condition: (p) => p.reputation > 55,
+    // `!isNearRetirement(p)`: kein "letzter großer Zahltag" mehr anbieten, wenn die
+    // Karriere durch Leistungsabbau/Fitness ohnehin gleich zu Ende geht - sonst
+    // wirkt der große Wechsel sinnlos, weil kaum noch Zeit bleibt, ihn zu erleben.
+    condition: (p) => p.reputation > 55 && !isNearRetirement(p),
     build: (p, ctx) => {
       const wealthGain = rInt(ctx, 400, 900) * 1000;
       return {

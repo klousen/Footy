@@ -19,7 +19,7 @@ import type {
   SquadRole,
   TraitKey,
 } from "./types";
-import { overallRatingFromAttributes, POSITION_WEIGHTS } from "./types";
+import { isNearRetirement, overallRatingFromAttributes } from "./types";
 import { clamp } from "./data";
 import { ATTRIBUTE_LABEL, ATTRIBUTE_ORDER, formatMoney, RELATIONSHIP_LABEL, SQUAD_ROLE_RANK, TRAIT_LABEL, TRAIT_ORDER } from "./labels";
 import { eligibleTemplates, getTemplateById, EVENT_TEMPLATES } from "./events";
@@ -754,7 +754,21 @@ export function simulateSeason(
   const attackWeight = { TW: 0.02, IV: 0.15, AV: 0.35, ZM: 0.55, FS: 0.85, ST: 1.0 }[player.position];
   const goalChancePerMatch = (overall / 100) * attackWeight * 0.45;
   const assistChancePerMatch = (overall / 100) * attackWeight * 0.35;
-  const goals = Math.max(0, Math.round(matches * goalChancePerMatch * (0.7 + rng() * 0.6)));
+  // Harte Sicherheits-Obergrenze pro Position (Bugreport: 132 Tore in einer
+  // einzigen IV-Saison) - die Formel oben ist durch die Attribut-Deckel (1-99)
+  // und die festen `attackWeight`-Gewichte bereits rechnerisch auf realistische
+  // Werte begrenzt (Stresstest mit maximal möglichen Attributen: IV max. 3,
+  // AV max. 6 Tore/Saison), diese Kappung ist zusätzliche Absicherung gegen
+  // künftige Formel-Änderungen, die das aus dem Ruder laufen lassen könnten.
+  // Grenzen an realen Torquoten von Verteidigern orientiert: Innenverteidiger
+  // meist 1-2 Tore/Saison, torgefährliche Ausnahmen 4-7; Außenverteidiger
+  // meist 2-5, seltene Ausnahmen (Standard-Schützen) bis 8-15 - jeweils mit
+  // Luft nach oben für echte Wunderkinder, die dank hoher Gesamtstärke
+  // ohnehin schon die höchste `goalChancePerMatch` innerhalb der Position
+  // bekommen, statt einer eigenen Sonderregel.
+  const GOAL_CAP: Partial<Record<Position, number>> = { TW: 2, IV: 7, AV: 15, ZM: 30, FS: 45, ST: 50 };
+  const goalCap = GOAL_CAP[player.position] ?? Infinity;
+  const goals = Math.min(goalCap, Math.max(0, Math.round(matches * goalChancePerMatch * (0.7 + rng() * 0.6))));
   const assists = Math.max(0, Math.round(matches * assistChancePerMatch * (0.7 + rng() * 0.6)));
 
   const form = (player.morale - 50) / 100; // -0.5 .. 0.5
@@ -2807,15 +2821,10 @@ export function buildClubTenures(player: Player): ClubTenure[] {
   return tenures;
 }
 
-export function shouldOfferRetirement(player: Player): boolean {
-  if (player.age >= 39) return true;
-  if (player.age < 32) return false;
-  const overall = overallRating(player);
-  const peakOverall = Math.round(
-    ATTRIBUTE_KEYS.reduce((s, k) => s + player.potential[k] * POSITION_WEIGHTS[player.position][k], 0)
-  );
-  return overall < peakOverall * 0.72 || player.fitness < 55;
-}
+// Dünner Re-Export: die eigentliche Logik lebt in types.ts (siehe dort), damit
+// auch events.ts (kann careerEngine.ts nicht importieren, zirkulärer Import)
+// spätcarriere-Events daran koppeln kann, ohne sie kurz vor Karriereende zu ziehen.
+export const shouldOfferRetirement = isNearRetirement;
 
 export function computeLegacy(player: Player): { score: number; tier: string; factors: ScoreFactor[] } {
   const t = player.careerTotals;
