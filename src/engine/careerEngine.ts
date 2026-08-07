@@ -769,8 +769,21 @@ export function simulateSeason(
   // bekommen, statt einer eigenen Sonderregel.
   const GOAL_CAP: Partial<Record<Position, number>> = { TW: 2, IV: 7, AV: 15, ZM: 30, FS: 45, ST: 50 };
   const goalCap = GOAL_CAP[player.position] ?? Infinity;
-  const goals = Math.min(goalCap, Math.max(0, Math.round(matches * goalChancePerMatch * (0.7 + rng() * 0.6))));
-  const assists = Math.max(0, Math.round(matches * assistChancePerMatch * (0.7 + rng() * 0.6)));
+  // "Bock oder Flop": EINE gemeinsame Form-Würfelung für Tore UND Vorlagen (statt zwei
+  // unabhängiger, siehe Bugreport - sonst könnte eine Saison zufällig torreich, aber
+  // vorlagenarm ausfallen, was die "Saison lief einfach nicht"-Identität verwässert).
+  // Die Schwankungsbreite skaliert mit `attackWeight` (statt einer festen Spanne für
+  // alle Positionen) - Positionen, deren Wert stark an Torgefahr hängt (v.a. Stürmer),
+  // leben spürbar stärker von Tagesform/Chancenverwertung als Positionen, deren
+  // Torbeteiligung ohnehin nur ein kleiner Teil ihres Werts ist (Torwart/Verteidiger,
+  // siehe `productionFactor`/`bigChancesPrevented` dort). Setzt NACH allen Effekten
+  // von Verletzungen/Formtiefs/Entscheidungen an (die bestimmen bereits `overall`/
+  // `attackWeight`-Basis über `goalChancePerMatch`) - ersetzt sie nicht, streut nur
+  // zusätzlich um den bereits durch sie geprägten Erwartungswert.
+  const attackFormSpread = 0.3 + attackWeight * 0.5; // TW ~0.31 (kaum Streuung) .. ST 0.8 (echte Bock-/Flop-Saisons)
+  const attackFormMultiplier = 1 - attackFormSpread / 2 + rng() * attackFormSpread;
+  const goals = Math.min(goalCap, Math.max(0, Math.round(matches * goalChancePerMatch * attackFormMultiplier)));
+  const assists = Math.max(0, Math.round(matches * assistChancePerMatch * attackFormMultiplier));
 
   const form = (player.morale - 50) / 100; // -0.5 .. 0.5
 
