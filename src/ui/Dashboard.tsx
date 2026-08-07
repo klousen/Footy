@@ -1,6 +1,6 @@
 import { useState } from "react";
 import type { LeagueState, Player } from "../engine/types";
-import { POSITION_LABEL } from "../engine/types";
+import { POSITION_LABEL, overallRatingFromAttributes } from "../engine/types";
 import { overallRating, seasonLabelForNumber, squadRoleLabel } from "../engine/careerEngine";
 import { leagueNameForTier } from "../engine/leagueEngine";
 import { AttributeBars } from "./AttributeBars";
@@ -26,12 +26,16 @@ export function Dashboard({
   const lastStats = player.seasonHistory[player.seasonHistory.length - 1];
   const leagueName = leagueNameForTier(league, player.club.tier);
   const tier = overallTier(overall);
-  // Entwicklung seit dem letzten Saisonabschluss (vor dem Alterswachstum) - macht die
-  // Weiterentwicklung durch Training/Entscheidungen direkt auf dem Dashboard sichtbar.
-  // Exakt dieselbe Formel (aktuelle Gesamtstärke minus Wert zu Beginn der letzten
-  // Saison) wie im Saison-Rückblick (SeasonSummary), damit beide Bildschirme
-  // denselben Delta-Wert zeigen statt sich scheinbar zu widersprechen.
-  const trend = lastStats ? overall - lastStats.overallRating : null;
+  // Entwicklung seit dem letzten Saisonabschluss - macht die Weiterentwicklung durch
+  // Training/Entscheidungen direkt auf dem Dashboard sichtbar. Als Vergleichswert
+  // bewusst NICHT `lastStats.overallRating` nehmen (das wird erst NACH allen
+  // Entscheidungs-Events jener Saison erfasst, siehe SeasonSummary), sondern die
+  // Gesamtstärke aus dem echten Saisonbeginn-Snapshot neu berechnen - exakt dieselbe
+  // Formel wie im Saison-Rückblick (SeasonSummary), damit beide Bildschirme denselben
+  // Delta-Wert zeigen statt sich scheinbar zu widersprechen.
+  const trend = lastStats
+    ? overall - overallRatingFromAttributes(lastStats.attributesAtSeasonStart, player.position)
+    : null;
   // Klare Kennzeichnung, WELCHE Saison hier ansteht - ohne diesen Titel war beim
   // Wechsel vom Saison-Rückblick zurück aufs Dashboard nicht auf den ersten Blick
   // erkennbar, dass die neue Saison noch nicht begonnen hat.

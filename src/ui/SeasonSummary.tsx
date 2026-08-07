@@ -1,4 +1,5 @@
 import type { Player, SeasonStats } from "../engine/types";
+import { overallRatingFromAttributes } from "../engine/types";
 import { overallRating } from "../engine/careerEngine";
 import { formatMoney, overallTier } from "./labels";
 import { LeagueTableSnapshot } from "./LeagueTableSnapshot";
@@ -17,13 +18,19 @@ export function SeasonSummary({
   // Die Alterung (siehe `ageUpPlayer`) ist zu diesem Zeitpunkt bereits auf
   // `player` angewendet (finishSeasonEvents ruft sie direkt nach simulateSeason
   // auf) - die aktuelle Gesamtstärke spiegelt also schon den Zuwachs/Abbau
-  // dieser Saison wider. `stats.overallRating` ist dagegen der Wert VOR der
-  // Alterung (Stand zu Saisonbeginn). Delta = aktueller Wert minus Saisonbeginn-
-  // Wert zeigt damit exakt den Effekt DIESER Saison - und ist bewusst dieselbe
-  // Formel wie Dashboards "trend"-Anzeige (siehe dort), damit die beiden
-  // Bildschirme sich nicht scheinbar widersprechen.
+  // dieser Saison wider. Als Vergleichswert bewusst NICHT `stats.overallRating`
+  // nehmen: das wird erst innerhalb von `simulateSeason` erfasst, welches erst
+  // NACH allen Entscheidungs-Events dieser Saison läuft (siehe `finishSeasonEvents`)
+  // - Attributzuwachs durch Entscheidungen während der Saison wäre darin also
+  // schon "eingepreist" und würde im Delta fehlen (z.B. +1 durch eine Trainings-
+  // Entscheidung, danach 0 weiterer Zuwachs -> Delta zeigt fälschlich 0). Stattdessen
+  // denselben echten Saisonbeginn-Snapshot wie die Attribut-Balken verwenden (siehe
+  // `attributesAtSeasonStart`), damit Delta wirklich die GESAMTE Saison abdeckt -
+  // bewusst dieselbe Formel wie Dashboards "trend"-Anzeige (siehe dort), damit die
+  // beiden Bildschirme sich nicht scheinbar widersprechen.
   const currentOverall = overallRating(player);
-  const overallDelta = currentOverall - stats.overallRating;
+  const seasonStartOverall = overallRatingFromAttributes(stats.attributesAtSeasonStart, player.position);
+  const overallDelta = currentOverall - seasonStartOverall;
   const tier = overallTier(currentOverall);
   const isGoalkeeper = player.position === "TW";
   const isDefender = player.position === "IV" || player.position === "AV";
