@@ -14,12 +14,50 @@ export function leaguePrestigeRank(countryId: CountryId): number {
   return def ? def.uefaRank - 1 : COUNTRIES.length;
 }
 
+/**
+ * Reale UEFA-Team-Koeffizienten-Summe je Land (Stand 04.08.2026, dieselben Werte wie im
+ * `uefaRank`-Kommentar in leagues.ts, dort bisher nur als Rechercheergebnis dokumentiert,
+ * aber nie tatsächlich in eine Formel eingespeist). England (ca. 821) liegt real etwa
+ * 5.5x über Polen (ca. 149) - eine reine Rang-basierte Formel (1 bis 10, gleich große
+ * Schritte) kann diesen SCHIEFEN Abstand strukturell nicht abbilden: England/Spanien/
+ * Italien/Deutschland liegen real eng beieinander an der Spitze, dann ein großer Sprung
+ * runter zu Frankreich, ein moderater weiter zu Portugal, ein kleinerer zu Belgien/
+ * Niederlande, und Türkei/Polen liegen wiederum eng beieinander ganz unten - eine
+ * Rang-Formel mit fixen 0.06-Schritten pro Platz verteilt das stattdessen künstlich
+ * gleichmäßig (Bugreport: schwache Ligen schneiden im internationalen Vergleich
+ * spürbar zu gut ab, z.B. gewinnt ein Top-Verein aus Polen/Türkei gegen einen aus
+ * England/Deutschland deutlich öfter, als der reale Klassenunterschied hergibt).
+ */
+const UEFA_COEFFICIENT_SUM: Record<CountryId, number> = {
+  england: 821,
+  spain: 629,
+  italy: 610,
+  germany: 594,
+  france: 425,
+  portugal: 338,
+  belgium: 251,
+  netherlands: 251,
+  turkey: 179,
+  poland: 149,
+};
+
 /** Ligaansehen als Multiplikator: die bestplatzierte Liga der Auswahl zahlt spürbar
  * mehr, die am niedrigsten platzierte spürbar weniger - dieselbe Vereinsstärke ist in
- * einer Topliga schlicht mehr wert als in einer schwächeren (reale Transfermarkt-Logik). */
+ * einer Topliga schlicht mehr wert als in einer schwächeren (reale Transfermarkt-Logik).
+ * Aus der REALEN UEFA-Koeffizienten-Summe hergeleitet (siehe `UEFA_COEFFICIENT_SUM`)
+ * statt aus der bloßen Rang-Position - eine Quadratwurzel-Normalisierung staucht den
+ * realen ~5.5x-Abstand auf einen spielbaren, aber deutlich saftigeren Abstand als
+ * zuvor (Spanne jetzt ca. 0.65-1.4 statt 0.7-1.3), OHNE die Wurzel-Kompression komplett
+ * fallen zu lassen: eine 1:1-Übertragung des realen 5.5x-Verhältnisses würde v.a. das
+ * Gehaltsgefüge (siehe `estimateWage`) für Spieler in kleineren Ligen unrealistisch
+ * stark abwerten. */
 export function leaguePrestigeMultiplier(countryId: CountryId): number {
-  const rank = leaguePrestigeRank(countryId);
-  return clamp(1.3 - rank * 0.06, 0.7, 1.3);
+  const values = Object.values(UEFA_COEFFICIENT_SUM);
+  const min = Math.sqrt(Math.min(...values));
+  const max = Math.sqrt(Math.max(...values));
+  const sum = UEFA_COEFFICIENT_SUM[countryId] ?? Math.min(...values);
+  const t = max > min ? (Math.sqrt(sum) - min) / (max - min) : 0;
+  return clamp(0.65 + t * 0.75, 0.65, 1.4);
 }
 
 /**
