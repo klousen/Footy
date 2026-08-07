@@ -836,21 +836,17 @@ export function simulateSeason(
 
   const trophies: string[] = [];
   const trophyPool = TROPHY_POOL_BY_TIER[player.club.tier];
-  // Meisterschaft: die Tabellenführung ist die harte sportliche Voraussetzung (ohne
-  // Platz 1 nie ein Titel), aber OB das dann tatsächlich zum Titel wird, hängt vom
-  // Vereinskoeffizienten und dem eigenen Anteil ab - ein Übermacht-Klub wandelt eine
-  // Tabellenführung viel öfter in echte Meisterschaft um als ein knapper Erstplatzierter.
+  // Meisterschaft: NUR die tatsächliche Tabellenführung (Platz 1) kann den Titel
+  // bringen - alles andere widerspräche der im Saisonrückblick gezeigten Tabelle
+  // (Bugreport: Meisterschale trotz Tabellenplatz 2). OB Platz 1 dann tatsächlich
+  // zum Titel wird, hängt weiterhin vom Vereinskoeffizienten und dem eigenen Anteil
+  // ab - ein Übermacht-Klub wandelt eine Tabellenführung öfter in echte Meisterschaft
+  // um als ein knapper Erstplatzierter (der die Führung z.B. am letzten Spieltag noch
+  // hergeben könnte - das drückt die Chance, verhindert die Meisterschaft aber nicht
+  // grundsätzlich, solange `leaguePosition` am Saisonende Platz 1 zeigt).
   if (leaguePosition === 1) {
     const titleChance = clamp(0.45 + coeffDominance * 0.45 + trophyContribution, 0.25, 0.95);
     if (rng() < titleChance) trophies.push(trophyPool[0]);
-  } else if (leaguePosition === 2) {
-    // Knappes Titelrennen: auch als Vizemeister besteht übers Jahr gesehen eine reale,
-    // wenn auch deutlich kleinere Titelchance (Nervenschlacht am letzten Spieltag) -
-    // ohne diese Stufe wäre die Meisterschaft praktisch nur für die 2-3 absolut
-    // stärksten Vereine der Liga überhaupt erreichbar, für alle anderen (auch klar
-    // überdurchschnittliche Top-Vereine knapp darunter) komplett ausgeschlossen.
-    const closeTitleChance = clamp(0.06 + coeffDominance * 0.14 + Math.max(0, trophyContribution) * 0.3, 0.03, 0.25);
-    if (rng() < closeTitleChance) trophies.push(trophyPool[0]);
   }
   // Aufstiegs-Play-off (nur Liga 2): eigener, von der Pokal-Simulation unabhängiger
   // Zufalls-Slot - eine Aufstiegschance ist ein anderes Konzept als eine Pokal-
