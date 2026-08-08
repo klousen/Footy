@@ -33,6 +33,7 @@ export function loadGame(): GameState | null {
       state.player.loanActive ??= false;
       state.player.loanReturnClub ??= null;
       state.player.loanReturnCountryId ??= null;
+      state.player.loanNarrative ??= null;
       state.player.definingMoment ??= null;
       state.player.edeljokerLocked ??= false;
       state.player.formSlumpSeasons ??= 0;

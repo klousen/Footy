@@ -8,8 +8,10 @@ import {
   applyChoice,
   applyClubOfferChoice,
   applyLeaguePromotionRelegation,
+  applyLoanDecisionChoice,
   buildEpilogue,
   buildEventFromId,
+  buildLoanFutureEvent,
   buildRetirementEvent,
   clubOfferTemplateId,
   computeAchievements,
@@ -30,6 +32,7 @@ import {
   STALE_AFTER_TRANSFER_TEMPLATE_IDS,
   summarizeEffects,
 } from "./engine/careerEngine";
+import { LOAN_DECISION_TEMPLATE_IDS } from "./engine/loanStory";
 import { pickSpreadClubOffers } from "./engine/leagueEngine";
 import { StartScreen } from "./ui/StartScreen";
 import { SelectCountry } from "./ui/SelectCountry";
@@ -173,6 +176,16 @@ export default function App() {
     const player = current.player;
     const league = current.leagueState;
     if (!player || !league) return;
+    // Narratives Leihjahr: die drei Entscheidungen wirken über Vereinsbeziehung/
+    // Attribute (siehe loanStory.ts) - die daraus resultierende Kaderrolle soll
+    // noch VOR der Saison-Simulation DIESER Saison selbst greifen (sonst würde
+    // ein erkämpfter Stammplatz erst in der FOLGESaison echte Einsatzminuten
+    // bringen, siehe `resolveClubSituation`, das sonst erst NACH der Simulation
+    // läuft).
+    if (player.loanNarrative) {
+      const earlyRoleEntry = resolveClubSituation(player, league);
+      if (earlyRoleEntry) player.log.push(earlyRoleEntry);
+    }
     const stats = simulateSeason(player, current.seasonNumber, league, current.foreignLeagues, current.europeanLeagueDrift);
     ageUpPlayer(player);
     const clubEntry = resolveClubSituation(player, league);
@@ -218,9 +231,17 @@ export default function App() {
     // stehen, obwohl der Wechsel sie gerade beendet hat (siehe
     // `endedStorylineTemplateIds`) - sonst würde z.B. "Zoff mit dem Trainer" beim
     // ALTEN Verein nach dem Wechsel fälschlich beim NEUEN Verein weitererzählt.
+    // Narratives Leihjahr (siehe loanStory.ts): eine der drei Leih-Entscheidungen
+    // läuft NICHT über die generische `applyChoice` (Würfel + Momentum bestimmen
+    // den Ausgang erst zur Laufzeit), sondern über die dedizierte
+    // `applyLoanDecisionChoice`.
+    const isLoanDecision = LOAN_DECISION_TEMPLATE_IDS.includes(game.currentEvent.templateId);
+
     let didTransfer = false;
     let endedStorylineTemplateIds: string[] = [];
-    const feedback = isClubOfferEvent(game.currentEvent.templateId)
+    const feedback = isLoanDecision
+      ? applyLoanDecisionChoice(player, game.seasonNumber, game.currentEvent.templateId, choice.id)
+      : isClubOfferEvent(game.currentEvent.templateId)
       ? (() => {
           const oldClubId = player.club.clubId;
           const result = applyClubOfferChoice(player, league, game.currentEvent!, choice.id, foreignLeagues);
@@ -247,12 +268,26 @@ export default function App() {
           };
         })();
 
+    // Ein gerade erst akzeptiertes Leihangebot (reason "loan") startet den
+    // exklusiven Leihjahr-Event-State: der Rest der Saison gehört ab jetzt
+    // AUSSCHLIESSLICH den drei Leih-Entscheidungen - alle noch wartenden
+    // "normalen" Saison-Events dieser Saison entfallen (siehe types.ts
+    // `Player.loanNarrative`, Abschnitt "WICHTIG: LEIHJAHR IST EIN EXKLUSIVER
+    // EVENT-STATE" der Feature-Vorgabe).
+    const justStartedLoanNarrative =
+      didTransfer &&
+      game.currentEvent.templateId === clubOfferTemplateId("loan") &&
+      player.loanNarrative !== null &&
+      player.loanNarrative.decisions.length === 0;
+
     setGame({
       ...game,
       player: { ...player },
       leagueState: newActiveLeague ?? { ...league },
       foreignLeagues: { ...foreignLeagues },
-      pendingEventIds: didTransfer
+      pendingEventIds: justStartedLoanNarrative
+        ? [...LOAN_DECISION_TEMPLATE_IDS]
+        : didTransfer
         ? game.pendingEventIds.filter((id) => !STALE_AFTER_TRANSFER_TEMPLATE_IDS.has(id) && !endedStorylineTemplateIds.includes(id))
         : game.pendingEventIds,
       feedback,
@@ -263,6 +298,12 @@ export default function App() {
   function handleFeedbackContinue() {
     if (!game.player || !game.currentEvent || !game.feedback) return;
     const isRetirementDecision = game.currentEvent.templateId === "retirement_decision";
+    // Abschnitt 7+8: die "bleiben/zurück/abwarten"-Entscheidung nach dem
+    // Leihjahr ist KEIN Teil einer laufenden Saison (die läuft bereits seit der
+    // Saisonbilanz) - anders als jedes andere Event darf sie nach dem
+    // Feedback NICHT `finishSeasonEvents` auslösen, sondern führt direkt
+    // zurück ins Dashboard (dieselbe Weiche wie beim Rücktritts-Event).
+    const isLoanFutureDecision = game.currentEvent.templateId === clubOfferTemplateId("loan-keep");
     const choiceId = game.feedback.choiceId;
     const player = game.player;
 
@@ -272,6 +313,11 @@ export default function App() {
       } else {
         setGame({ ...game, player: { ...player }, currentEvent: null, feedback: null, screen: "dashboard" });
       }
+      return;
+    }
+
+    if (isLoanFutureDecision) {
+      setGame({ ...game, player: { ...player }, currentEvent: null, feedback: null, screen: "dashboard" });
       return;
     }
 
@@ -286,6 +332,15 @@ export default function App() {
 
   function handleContinueFromSummary() {
     if (!game.player) return;
+    // Abschnitt 7+8: nach der Saisonbilanz eines Leihjahres folgt zwingend die
+    // Entscheidung über die Zukunft (Vertragsangebot des Leihvereins bzw.
+    // Rückkehr zum Stammverein), bevor es überhaupt zur normalen Dashboard-/
+    // Rücktritts-Weiche zurückgeht - derselbe "erzwungenes Spezial-Event"-
+    // Mechanismus wie beim Rücktritts-Angebot unten.
+    if (game.player.loanNarrative) {
+      setGame({ ...game, currentEvent: buildLoanFutureEvent(game.player), feedback: null, screen: "event" });
+      return;
+    }
     if (shouldOfferRetirement(game.player)) {
       setGame({ ...game, currentEvent: buildRetirementEvent(game.player), feedback: null, screen: "event" });
     } else {

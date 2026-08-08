@@ -48,6 +48,7 @@ export const CATEGORY_LABEL: Record<string, string> = {
   jugend: "Jugend",
   beziehung: "Beziehung & Familie",
   meilenstein: "Meilenstein",
+  leihe: "Leihjahr",
 };
 
 export const RELATIONSHIP_LABEL: Record<RelationshipStatus, string> = {

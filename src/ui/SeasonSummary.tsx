@@ -1,9 +1,11 @@
-import type { Player, SeasonStats } from "../engine/types";
+import type { LoanNarrativeState, Player, SeasonStats } from "../engine/types";
 import { overallRatingFromAttributes } from "../engine/types";
 import { overallRating } from "../engine/careerEngine";
+import { computeLoanSummaryTier } from "../engine/loanStory";
 import { formatMoney, overallTier } from "./labels";
 import { LeagueTableSnapshot } from "./LeagueTableSnapshot";
 import { StatBox } from "./StatBox";
+import { AttributeBars } from "./AttributeBars";
 
 export function SeasonSummary({
   stats,
@@ -152,6 +154,10 @@ export function SeasonSummary({
         </div>
       )}
 
+      {player.loanNarrative && (
+        <LoanSeasonRecap narrative={player.loanNarrative} player={player} currentOverall={currentOverall} />
+      )}
+
       <div className="panel">
         <div className="score-header">
           <h3>Saison-Bilanz</h3>
@@ -182,6 +188,66 @@ export function SeasonSummary({
       <button className="btn btn-primary" onClick={onContinue}>
         Weiter
       </button>
+    </div>
+  );
+}
+
+/**
+ * Abschnitt 6 der Leihjahr-Vorgabe: die Saisonbilanz nach dem dritten
+ * Ereignis. Zeigt AUSSCHLIESSLICH tatsächliche Werte - die Bewertung
+ * (BREAKOUT/ETABLIERT/...) ergibt sich rein rechnerisch aus den drei echten
+ * Würfel-Ergebnissen (siehe `computeLoanSummaryTier`), die Attribut-/
+ * Gesamtstärke-Veränderung ist der reale Vorher-/Nachher-Vergleich (siehe
+ * `attributesAtLoanStart`/`overallAtLoanStart`) - nichts davon wird erfunden.
+ * Spiele/Tore/Vorlagen/Einsatzquote stehen bereits in den Stat-Boxen oben,
+ * hier geht es gezielt um das, was NUR die Leihe betrifft.
+ */
+function LoanSeasonRecap({
+  narrative,
+  player,
+  currentOverall,
+}: {
+  narrative: LoanNarrativeState;
+  player: Player;
+  currentOverall: number;
+}) {
+  const tier = computeLoanSummaryTier(narrative.decisions.map((d) => d.modifiedRoll));
+  const overallDelta = currentOverall - narrative.overallAtLoanStart;
+
+  return (
+    <div className="panel">
+      <div className="score-header">
+        <h3>📋 Leihjahr-Bilanz</h3>
+        <span className="score-badge">
+          {tier.emoji} {tier.label}
+        </span>
+      </div>
+      <p className="muted">{tier.description}</p>
+      <p className="muted">
+        Leihgrund: <strong>{narrative.reasonTitle}</strong> - {narrative.reasonText}
+      </p>
+      <p>
+        Gesamtstärke bei Leihbeginn {narrative.overallAtLoanStart} → jetzt {currentOverall}
+        {overallDelta !== 0 && ` (${overallDelta > 0 ? "+" : ""}${overallDelta})`}
+      </p>
+      <AttributeBars attributes={player.attributes} compare={narrative.attributesAtLoanStart} />
+
+      <h4>Die drei Entscheidungen</h4>
+      <ul className="score-factors">
+        {narrative.decisions.map((d, i) => (
+          <li key={i}>
+            <span>
+              {d.decisionTitle}: {d.choiceLabel}
+              <br />
+              <span className="muted">{d.resultText}</span>
+            </span>
+            <span>
+              🎲{d.raw}
+              {d.modifier !== 0 ? ` (${d.modifier > 0 ? "+" : ""}${d.modifier})` : ""} → {d.modifiedRoll} {d.momentumEmoji}
+            </span>
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }

@@ -10,6 +10,7 @@ import type {
   GameEvent,
   GameState,
   LeagueState,
+  LoanDecisionLogEntry,
   LogEntry,
   NationalCupResult,
   Player,
@@ -23,6 +24,14 @@ import { isNearRetirement, overallRatingFromAttributes } from "./types";
 import { clamp } from "./data";
 import { ATTRIBUTE_LABEL, ATTRIBUTE_ORDER, formatMoney, RELATIONSHIP_LABEL, SQUAD_ROLE_RANK, TRAIT_LABEL, TRAIT_ORDER } from "./labels";
 import { eligibleTemplates, getTemplateById, EVENT_TEMPLATES } from "./events";
+import {
+  computeLoanSummaryTier,
+  deriveLoanReason,
+  loanClubKeepChance,
+  LOAN_DECISIONS,
+  LOAN_DECISION_TEMPLATE_IDS,
+  resolveLoanDecision,
+} from "./loanStory";
 import { COUNTRIES, type CountryId } from "./leagues";
 import {
   buildLeagueState,
@@ -204,6 +213,7 @@ export function createPlayer(
       edeljokerLocked: false,
       formSlumpSeasons: 0,
       secondSpringSeasons: 0,
+      loanNarrative: null,
     },
   };
 }
@@ -648,6 +658,73 @@ export function summarizeEffects(effects: EventChoice["effects"], player?: Playe
 
 function signed(n: number): string {
   return `${n > 0 ? "+" : ""}${n}`;
+}
+
+// ---------------------------------------------------------------------------
+// Narratives Leihjahr (siehe loanStory.ts) - eine der drei Leih-Entscheidungen
+// auflösen. Bewusst NICHT über die generische `applyChoice` (die Effekte
+// stehen erst nach dem Würfelwurf + Momentum fest, siehe `resolveLoanDecision`)
+// - die eigentliche Spieler-Mutation läuft aber trotzdem über die exportierte
+// `applyChoice`, damit Attribut-/Trait-Clamping, `scaleDecisionAttributeDelta`
+// usw. exakt wie bei jedem anderen Event greifen (dieselbe Skalierung, nicht
+// nochmal separat nachgebaut).
+// ---------------------------------------------------------------------------
+
+export function applyLoanDecisionChoice(
+  player: Player,
+  seasonNumber: number,
+  templateId: string,
+  choiceId: string
+): ChoiceFeedback {
+  const narrative = player.loanNarrative;
+  const decisionIndex = LOAN_DECISION_TEMPLATE_IDS.indexOf(templateId);
+  if (!narrative || decisionIndex < 0) {
+    // Sollte durch die Exklusiv-State-Prüfung in App.tsx nie passieren -
+    // sicherheitshalber ein neutraler Fallback statt eines Absturzes.
+    return { choiceId, text: "Nichts passiert.", kind: "info", deltaLines: [] };
+  }
+  const incomingMomentum = { emoji: narrative.momentumEmoji, label: narrative.momentumLabel, modifier: narrative.momentum };
+  const resolution = resolveLoanDecision(decisionIndex, choiceId, player.position, incomingMomentum, rng);
+  const { roll, outcome, choiceLabel } = resolution;
+
+  applyChoice({ player, seasonNumber } as unknown as GameState, {
+    id: choiceId,
+    label: choiceLabel,
+    effects: outcome.effects,
+  });
+
+  narrative.momentum = roll.outgoingMomentum.modifier;
+  narrative.momentumEmoji = roll.outgoingMomentum.emoji;
+  narrative.momentumLabel = roll.outgoingMomentum.label;
+
+  const logEntry: LoanDecisionLogEntry = {
+    decisionTitle: LOAN_DECISIONS[decisionIndex].title,
+    choiceLabel,
+    raw: roll.raw,
+    modifier: roll.incomingMomentum.modifier,
+    modifiedRoll: roll.modifiedRoll,
+    momentumEmoji: roll.outgoingMomentum.emoji,
+    momentumLabel: roll.outgoingMomentum.label,
+    resultText: outcome.text,
+    resultKind: outcome.kind,
+    deltaLabel: outcome.deltaLabel,
+  };
+  narrative.decisions = [...narrative.decisions, logEntry];
+
+  player.log.push({ season: seasonNumber, age: player.age, text: outcome.text, kind: outcome.kind });
+
+  const diceLine =
+    roll.incomingMomentum.modifier !== 0
+      ? `🎲 ${roll.raw} ${roll.incomingMomentum.emoji} ${roll.incomingMomentum.label} (${signed(roll.incomingMomentum.modifier)}) → Ergebnis: ${roll.modifiedRoll}`
+      : `🎲 ${roll.raw} → Ergebnis: ${roll.modifiedRoll}`;
+  const outgoingLine = `${roll.outgoingMomentum.emoji} ${roll.outgoingMomentum.label}`;
+
+  return {
+    choiceId,
+    text: outcome.text,
+    kind: outcome.kind,
+    deltaLines: [diceLine, outgoingLine, ...outcome.deltaLabel],
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -1808,7 +1885,7 @@ export function applyLeaguePromotionRelegation(player: Player, league: LeagueSta
 // Sichtbare Vereinswechsel: Profidebüt, Transferangebote, Bankphasen-Druck
 // ---------------------------------------------------------------------------
 
-export type ClubOfferReason = "pro-debut" | "opportunity" | "pressure" | "lockruf" | "loan" | "loan-return";
+export type ClubOfferReason = "pro-debut" | "opportunity" | "pressure" | "lockruf" | "loan" | "loan-return" | "loan-keep";
 
 const CLUB_OFFER_PREFIX = "club_offer:";
 
@@ -2364,7 +2441,7 @@ function buildClubOfferEvent(
       : reason === "opportunity"
       ? `${lastSeasonRef}sind Scouts auf ${player.name} bei ${player.club.name} aufmerksam geworden. Im Sommertransferfenster erkundigen sich ${count} Vereine nach dir.${foreignNote}`
       : reason === "loan"
-      ? `Bei ${player.club.name} kommst du kaum zum Einsatz - statt dich weiter auf der Bank verkümmern zu lassen, bietet der Verein eine einjährige Leihe zu ${candidates[0]?.club.city} (${candidates[0]?.flag} ${candidates[0]?.countryName}) an. Du hast dabei kaum Mitsprache bei der Wahl - Vorgabe ist Vorgabe. Nach einem Jahr geht es garantiert zurück zu ${player.club.name}.`
+      ? `${deriveLoanReason(player).text} Konkret bietet der Verein eine einjährige Leihe zu ${candidates[0]?.club.city} (${candidates[0]?.flag} ${candidates[0]?.countryName}) an. Du hast dabei kaum Mitsprache bei der Wahl - Vorgabe ist Vorgabe. Nach einem Jahr geht es garantiert zurück zu ${player.club.name}.`
       : `${pressureReason}. Im Winterfenster wäre der Verein offen für einen Wechsel - ${count} Vereine haben bereits angefragt.${foreignNote}`;
 
   return {
@@ -2472,7 +2549,50 @@ export function applyClubOfferChoice(
 ): ClubOfferResult {
   const reason = event.templateId.slice(CLUB_OFFER_PREFIX.length) as ClubOfferReason;
 
-  if (choiceId === "stay") {
+  // Die finale Entscheidung nach dem narrativen Leihjahr (siehe loanStory.ts) -
+  // beendet den exklusiven Event-State IMMER, unabhängig davon, welche der drei
+  // Optionen (bleiben/zurück/abwarten) gewählt wird.
+  if (reason === "loan-keep") player.loanNarrative = null;
+
+  if (choiceId === "loan-stay") {
+    // Aus der Leihe wird ein dauerhafter Wechsel beim AKTUELLEN (Leih-)Verein -
+    // kein Kandidaten-Fund nötig (der Spieler ist ja schon dort), nur ein
+    // frischer Vertrag + Vertrauensbonus, weil der Verein aktiv um die
+    // dauerhafte Verpflichtung geworben hat.
+    const overall = overallRating(player);
+    const wage = estimateWage(
+      overall,
+      player.reputation,
+      player.club,
+      player.country,
+      clubLeagueRank(player.club.clubId, player.club.tier, league)
+    );
+    player.contract = { club: player.club.name, yearsLeft: 3, wagePerYear: wage, squadRole: currentSquadRole(player, player.club.strength) };
+    player.clubRelation = clamp(player.clubRelation + 15, 0, 100);
+    player.loanActive = false;
+    player.loanReturnClub = null;
+    player.loanReturnCountryId = null;
+    player.clubChangesCount += 1;
+    const text = `${player.name} bleibt dauerhaft bei ${player.club.name} - aus der Leihe wird ein fester Wechsel.`;
+    player.log.push({ season: 0, age: player.age, text, kind: "positive" });
+    return {
+      feedback: {
+        choiceId,
+        text,
+        kind: "positive",
+        deltaLines: [`Fester Vertrag bei ${player.club.name}`, `Gehalt: ${formatMoney(wage)} / Jahr`, "Vereinsbeziehung +15"],
+      },
+    };
+  }
+
+  // "Abwarten" führt vertraglich trotzdem zurück zum Stammverein (die Leihe ist
+  // vorbei, ein Verbleib "in der Schwebe" gibt es nicht) - fällt bewusst in
+  // denselben Rückkehr-Pfad wie eine explizite Rückkehr weiter unten, nur mit
+  // offenem Wechselwunsch statt endgültigem Schlussstrich.
+  const isOpenFuture = choiceId === "loan-wait";
+  const resolvedChoiceId = isOpenFuture && player.loanReturnClub ? `club-${player.loanReturnClub.clubId}` : choiceId;
+
+  if (resolvedChoiceId === "stay") {
     player.clubRelation = clamp(player.clubRelation + 10, 0, 100);
     player.morale = clamp(player.morale + 5, 0, 100);
     player.wantsTransfer = false;
@@ -2532,7 +2652,7 @@ export function applyClubOfferChoice(
     };
   }
 
-  const clubId = choiceId.replace(/^club-/, "");
+  const clubId = resolvedChoiceId.replace(/^club-/, "");
   const oldCountryId = player.country;
   // Erst in der Heimatliga suchen; steckt der Verein in keiner gecachten Auslandsliga,
   // ist es ein Auslandswechsel - die Ziel-Liga wird dann zur neuen aktiven Liga.
@@ -2605,7 +2725,13 @@ export function applyClubOfferChoice(
   const leagueLabel = leagueNameForTier(targetLeague, chosen.tier);
 
   const kind: LogEntry["kind"] =
-    reason === "pro-debut" ? "milestone" : reason === "pressure" ? "negative" : reason === "loan-return" ? "info" : "positive";
+    reason === "pro-debut"
+      ? "milestone"
+      : reason === "pressure"
+      ? "negative"
+      : reason === "loan-return" || reason === "loan-keep"
+      ? "info"
+      : "positive";
   const text =
     reason === "pro-debut"
       ? `${player.name} unterschreibt den ersten Profivertrag bei ${chosen.city} (${leagueLabel}).`
@@ -2613,16 +2739,21 @@ export function applyClubOfferChoice(
       ? `${player.name} wird für ein Jahr an ${chosen.city} (${targetLeague.flag} ${targetLeague.countryName}, ${leagueLabel}) verliehen.`
       : reason === "loan-return"
       ? `${player.name} kehrt nach der Leihe zu ${chosen.city} zurück.`
+      : reason === "loan-keep"
+      ? isOpenFuture
+        ? `${player.name} lässt die Zukunft vorerst offen und kehrt nach der Leihe zu ${chosen.city} zurück.`
+        : `${player.name} kehrt nach der Leihe zu ${chosen.city} zurück.`
       : movingCountryId
       ? `${player.name} wagt den Auslandswechsel von ${oldName} zu ${chosen.city} (${targetLeague.flag} ${targetLeague.countryName}, ${leagueLabel}).`
       : `${player.name} wechselt von ${oldName} zu ${chosen.city} (${leagueLabel}).`;
+  if (reason === "loan-keep" && isOpenFuture) player.wantsTransfer = true;
   player.log.push({ season: 0, age: player.age, text, kind });
 
   // Ergebnis des Einsatzminuten-Versprechens als eigener Log-Eintrag - klar
   // getrennt von der reinen Wechsel-Meldung, damit sichtbar wird, WARUM die
   // tatsächliche Rolle ggf. von der versprochenen abweicht. Bei der Rückkehr
   // von der Leihe entfällt das (siehe Cointoss-Block unten stattdessen).
-  if (reason !== "loan-return") {
+  if (reason !== "loan-return" && reason !== "loan-keep") {
     player.log.push({
       season: 0,
       age: player.age,
@@ -2642,7 +2773,25 @@ export function applyClubOfferChoice(
     player.loanActive = true;
     player.loanReturnClub = { clubId: oldClubId, name: oldName, country: league.countryName, tier: oldTier, strength: oldStrength };
     player.loanReturnCountryId = oldCountryId;
-  } else if (reason === "loan-return") {
+    // Startet den exklusiven Leihjahr-Event-State (siehe loanStory.ts/App.tsx
+    // handleChoice) - der Grund wurde bereits VOR dem Wechsel anhand des alten
+    // Vereins/der alten Kaderrolle abgeleitet (siehe `buildClubOfferEvent`),
+    // hier erneut ermittelt (identischer Spielerzustand zu diesem Zeitpunkt in
+    // derselben Funktion, keine zusätzliche State-Übergabe nötig).
+    const reasonInfo = deriveLoanReason(player);
+    player.loanNarrative = {
+      reasonId: reasonInfo.id,
+      reasonTitle: reasonInfo.title,
+      reasonText: reasonInfo.text,
+      loanClubName: chosen.city,
+      momentum: 0,
+      momentumEmoji: "🟡",
+      momentumLabel: "Neutral",
+      decisions: [],
+      overallAtLoanStart: overall,
+      attributesAtLoanStart: { ...player.attributes },
+    };
+  } else if (reason === "loan-return" || reason === "loan-keep") {
     player.loanActive = false;
     player.loanReturnClub = null;
     player.loanReturnCountryId = null;
@@ -2697,7 +2846,7 @@ export function applyClubOfferChoice(
     `Liga: ${leagueLabel}`,
     `Gehalt: ${formatMoney(wage)} / Jahr`,
     `Rolle im Kader: ${newRole}`,
-    ...(reason === "loan-return"
+    ...(reason === "loan-return" || reason === "loan-keep"
       ? []
       : [
           promiseKept
@@ -2781,6 +2930,52 @@ export function applyClubOfferChoice(
     feedback: { choiceId, text, kind, deltaLines },
     newActiveLeague,
     endedStorylineTemplateIds: endedThreads.map((t) => t.nextTemplateId),
+  };
+}
+
+/**
+ * Abschnitt 7+8: baut die Entscheidung am ENDE des narrativen Leihjahres - ob
+ * der Leihverein eine dauerhafte Verpflichtung anbietet (Wahrscheinlichkeit
+ * abhängig von der tatsächlichen Saisonbewertung + wie gut der Spieler zum
+ * Verein passt, siehe `loanClubKeepChance`) und, falls ja, die Wahl zwischen
+ * bleiben/zurück/abwarten. Direkt als GameEvent gebaut (wie
+ * `buildRetirementEvent`) statt über `EVENT_TEMPLATES` - kein Zufalls-Draw,
+ * wird von App.tsx `handleContinueFromSummary` unmittelbar nach der
+ * Saisonbilanz einer Leih-Saison erzwungen. Der `club_offer:`-Präfix im
+ * `templateId` lässt App.tsx die Auflösung automatisch an das bereits
+ * bestehende `applyClubOfferChoice` weiterreichen (siehe `isClubOfferEvent`).
+ */
+export function buildLoanFutureEvent(player: Player): GameEvent {
+  const narrative = player.loanNarrative!;
+  const back = player.loanReturnClub!;
+  const overall = overallRating(player);
+  const tier = computeLoanSummaryTier(narrative.decisions.map((d) => d.modifiedRoll));
+  const keepChance = loanClubKeepChance(tier.id, overall, player.club.strength);
+  const offerMade = rng() < keepChance;
+  const backDetail = `${back.tier === 1 ? "1." : "2."} Liga · Vereinsstärke ${back.strength}`;
+
+  if (!offerMade) {
+    return {
+      id: `loan-future-${player.age}-${Math.round(rng() * 1e6)}`,
+      templateId: `${CLUB_OFFER_PREFIX}loan-keep`,
+      category: "leihe",
+      title: "Zurück zum Stammverein",
+      description: `${player.club.name} möchte dich nicht dauerhaft verpflichten. Du kehrst nach Ablauf der Leihe zu ${back.name} zurück.`,
+      choices: [{ id: `club-${back.clubId}`, label: `Zurück zu ${back.name}`, detail: backDetail, effects: {} }],
+    };
+  }
+
+  return {
+    id: `loan-future-${player.age}-${Math.round(rng() * 1e6)}`,
+    templateId: `${CLUB_OFFER_PREFIX}loan-keep`,
+    category: "leihe",
+    title: "Der Leihverein möchte dich behalten",
+    description: `Deine Leistungen bei ${player.club.name} haben überzeugt - der Verein möchte dich dauerhaft verpflichten.`,
+    choices: [
+      { id: "loan-stay", label: "Ich möchte bleiben", detail: `Dauerhafter Wechsel zu ${player.club.name}`, effects: {} },
+      { id: `club-${back.clubId}`, label: "Ich möchte zurück", detail: `Rückkehr zu ${back.name} · ${backDetail}`, effects: {} },
+      { id: "loan-wait", label: "Ich möchte abwarten", detail: "Offene Verhandlung - die Zukunft bleibt vorerst offen", effects: {} },
+    ],
   };
 }
 

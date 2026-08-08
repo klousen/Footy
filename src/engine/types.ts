@@ -416,7 +416,8 @@ export type EventCategory =
   | "nationalmannschaft"
   | "jugend"
   | "beziehung"
-  | "meilenstein";
+  | "meilenstein"
+  | "leihe";
 
 export interface GameEvent {
   id: string;
@@ -578,6 +579,51 @@ export interface Player {
    * wird nach einer Trennung OHNE Kinder gesetzt (siehe `applyEffects`), klingt
    * über die Saisons ab. */
   secondSpringSeasons: number;
+  /** Solange gesetzt, läuft ein narratives Leihjahr (siehe `loanStory.ts`) -
+   * EXKLUSIVER Event-State: keine anderen saisonalen Events, keine normale
+   * Auswahl über `pickSeasonTemplateIds` (siehe App.tsx `handleChoice`/
+   * careerEngine.ts `applyClubOfferChoice`). Wird beim Akzeptieren eines
+   * Leihangebots gesetzt und nach der finalen "bleiben/zurück/abwarten"-
+   * Entscheidung wieder auf `null` zurückgesetzt. */
+  loanNarrative: LoanNarrativeState | null;
+}
+
+/** Protokoll-Eintrag EINER der drei Leih-Entscheidungen (siehe `Player.loanNarrative`)
+ * - trägt sowohl den rohen Würfelwurf als auch das Ergebnis, damit die Saisonbilanz
+ * am Ende der Leihe die TATSÄCHLICHEN drei Ereignisse nachzeichnen kann, statt sie
+ * zu erfinden. */
+export interface LoanDecisionLogEntry {
+  decisionTitle: string;
+  choiceLabel: string;
+  raw: number;
+  modifier: number;
+  modifiedRoll: number;
+  momentumEmoji: string;
+  momentumLabel: string;
+  resultText: string;
+  resultKind: LogEntry["kind"];
+  deltaLabel: string[];
+}
+
+/** Laufender Zustand eines narrativen Leihjahres (siehe `loanStory.ts`) - lebt
+ * bewusst gebündelt in einem einzigen Feld statt mehrerer verstreuter Player-
+ * Werte, damit die komplette Leih-Erzählung mit einem einzigen `= null` sauber
+ * endet (siehe `Player.loanNarrative`). */
+export interface LoanNarrativeState {
+  reasonId: string;
+  reasonTitle: string;
+  reasonText: string;
+  loanClubName: string;
+  /** Aktueller Würfel-Modifikator (Momentum) für die NÄCHSTE Entscheidung. */
+  momentum: number;
+  momentumEmoji: string;
+  momentumLabel: string;
+  decisions: LoanDecisionLogEntry[];
+  /** Gesamtstärke/Attribute unmittelbar zu Beginn der Leihe (vor den drei
+   * Entscheidungen) - Vergleichsbasis für die ECHTE Veränderung in der
+   * Saisonbilanz (siehe SeasonSummary.tsx), keine erfundenen Werte. */
+  overallAtLoanStart: number;
+  attributesAtLoanStart: Attributes;
 }
 
 export interface Achievement {

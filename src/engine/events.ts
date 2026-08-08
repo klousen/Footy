@@ -1,6 +1,7 @@
-import type { EventTemplate, Player } from "./types";
+import type { EventChoice, EventTemplate, Player } from "./types";
 import { isNearRetirement, overallRatingFromAttributes } from "./types";
 import { clamp, FEMALE_FIRST_NAMES, FIRST_NAMES, LAST_NAMES } from "./data";
+import { LOAN_DECISIONS } from "./loanStory";
 
 // Hilfsfunktion für lesbaren Vereinsnamen im Text
 const club = (p: Player) => p.club.name;
@@ -6412,6 +6413,36 @@ export const EVENT_TEMPLATES: EventTemplate[] = [
       ],
     }),
   },
+
+  // ---------------------------------------------------------------------
+  // NARRATIVES LEIHJAHR (siehe loanStory.ts) - drei Entscheidungen einer
+  // laufenden Leihe. `storylineOnly: true` wie bei Storyline-Fortsetzungen:
+  // werden NIE zufällig über `pickSeasonTemplateIds`/`eligibleTemplates`
+  // gezogen, sondern ausschließlich explizit eingespielt (siehe App.tsx
+  // `handleChoice`, das die Leihe als exklusiven Event-State direkt in
+  // `pendingEventIds` einreiht, sobald ein Leihangebot angenommen wird).
+  // Die `effects: {}` je Entscheidung sind bewusste Platzhalter: die
+  // eigentliche Auflösung (Würfel + Momentum + Ausgang) übernimmt
+  // `applyLoanDecisionChoice` in careerEngine.ts über `loanStory.ts`,
+  // NICHT die generische `applyChoice` - App.tsx erkennt diese Templates
+  // an ihrer ID und routet entsprechend um.
+  // ---------------------------------------------------------------------
+  ...LOAN_DECISIONS.map((decision): EventTemplate => ({
+    id: decision.templateId,
+    category: "leihe",
+    minAge: 15,
+    maxAge: 40,
+    weight: 0,
+    storylineOnly: true,
+    build: (p) => ({
+      category: "leihe",
+      title: decision.title,
+      description: decision.description(p.loanNarrative?.loanClubName ?? p.club.name),
+      choices: decision.choices.map(
+        (c): EventChoice => ({ id: c.id, label: c.label, detail: c.detail, effects: {} })
+      ),
+    }),
+  })),
 ];
 
 export function getTemplateById(id: string): EventTemplate | undefined {
