@@ -51,13 +51,40 @@ const UEFA_COEFFICIENT_SUM: Record<CountryId, number> = {
  * fallen zu lassen: eine 1:1-Übertragung des realen 5.5x-Verhältnisses würde v.a. das
  * Gehaltsgefüge (siehe `estimateWage`) für Spieler in kleineren Ligen unrealistisch
  * stark abwerten. */
+/** Obergrenze von `leaguePrestigeMultiplier` (bei der angesehensten Liga der Auswahl,
+ * aktuell England) - als eigene Konstante, damit `displayClubStrength` unten nicht den
+ * Wert `1.4` ein zweites Mal unabhängig pflegen muss. */
+const MAX_LEAGUE_PRESTIGE_MULTIPLIER = 1.4;
+
 export function leaguePrestigeMultiplier(countryId: CountryId): number {
   const values = Object.values(UEFA_COEFFICIENT_SUM);
   const min = Math.sqrt(Math.min(...values));
   const max = Math.sqrt(Math.max(...values));
   const sum = UEFA_COEFFICIENT_SUM[countryId] ?? Math.min(...values);
   const t = max > min ? (Math.sqrt(sum) - min) / (max - min) : 0;
-  return clamp(0.65 + t * 0.75, 0.65, 1.4);
+  return clamp(0.65 + t * 0.75, 0.65, MAX_LEAGUE_PRESTIGE_MULTIPLIER);
+}
+
+/**
+ * International vergleichbare "Vereinsstärke" für die ANZEIGE beim Vergleich von
+ * Vereinen aus VERSCHIEDENEN Ländern (siehe Bugreport: ein Verein mit rohem
+ * `strength` 80 aus einer kleinen Liga wirkte "stärker" als einer mit 78 aus der
+ * angesehensten Liga der Auswahl - beide Rohwerte sind aber rein LOKAL normalisiert
+ * (jede Liga-Pyramide erzeugt ihre Vereinsstärken unabhängig im selben 10-99-Band,
+ * siehe `strengthForRank`), ein direkter Zahlenvergleich über Ländergrenzen hinweg
+ * ist daher irreführend.
+ *
+ * Reine ANZEIGE-Transformation, NICHTS an der eigentlichen Spiellogik (Kaderrolle,
+ * Einsatzminuten-Versprechen, Gehalt, Tabellen-Simulation, Auf-/Abstieg, ...) ändert
+ * sich dadurch - die arbeitet weiterhin mit dem rohen `strength`-Wert, exakt wie
+ * bisher kalibriert. Skaliert relativ zur angesehensten Liga der Auswahl (deren
+ * Vereine also unverändert ihre bisherigen Rohwerte zeigen), schwächere Ligen werden
+ * proportional zu ihrem echten UEFA-Ansehen nach unten gestaucht - genau umgekehrt
+ * zu `leaguePrestigeMultiplier`, das denselben Faktor fürs Gehalt nach OBEN dreht.
+ */
+export function displayClubStrength(strength: number, countryId: CountryId): number {
+  const ratio = leaguePrestigeMultiplier(countryId) / MAX_LEAGUE_PRESTIGE_MULTIPLIER;
+  return clamp(Math.round(strength * ratio), 1, 99);
 }
 
 /**

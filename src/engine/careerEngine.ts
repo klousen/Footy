@@ -38,6 +38,7 @@ import {
   buildTableSnapshot,
   clubCoefficient,
   clubLeagueRank,
+  displayClubStrength,
   findClub,
   leagueNameForTier,
   leaguePrestigeRank,
@@ -2172,6 +2173,11 @@ function buildClubOfferEvent(
 ): GameEvent {
   const overall = overallRating(player);
   const currentStrength = player.club.strength;
+  // International vergleichbare Anzeige-Variante (siehe `displayClubStrength`) -
+  // NUR für Texte, die dem Spieler direkt gezeigt werden. Die eigentliche
+  // Spiellogik (Kaderrolle, Einsatzminuten-Versprechen, ...) rechnet weiterhin
+  // mit dem rohen `currentStrength` weiter.
+  const currentStrengthDisplay = displayClubStrength(currentStrength, player.country);
   const pool = [...league.tier1, ...league.tier2];
   const lastStats = player.seasonHistory[player.seasonHistory.length - 1];
 
@@ -2193,7 +2199,7 @@ function buildClubOfferEvent(
         {
           id: `club-${back.clubId}`,
           label: `Zurück zu ${back.name}`,
-          detail: `${back.tier === 1 ? "1." : "2."} Liga · Vereinsstärke ${back.strength} · Gehalt ca. ${formatMoney(wagePreview)}/Jahr`,
+          detail: `${back.tier === 1 ? "1." : "2."} Liga · Vereinsstärke ${displayClubStrength(back.strength, player.loanReturnCountryId ?? player.homeCountryId)} · Gehalt ca. ${formatMoney(wagePreview)}/Jahr`,
           effects: {},
         },
       ],
@@ -2353,11 +2359,16 @@ function buildClubOfferEvent(
           : `Wechsel zu ${cand.club.city}`,
       // Vereinsstärke des Kandidaten DIREKT neben der des aktuellen Vereins, damit
       // der Sprung (oder Rückschritt) auf einen Blick erkennbar ist, statt den
-      // eigenen Vereinswert erst im Dashboard nachschlagen zu müssen.
+      // eigenen Vereinswert erst im Dashboard nachschlagen zu müssen. Beide über
+      // `displayClubStrength` international vergleichbar gemacht - der rohe
+      // `strength`-Wert ist rein LOKAL je Liga normiert (siehe dort) und beim
+      // Vergleich zweier Vereine aus unterschiedlichen Ländern sonst irreführend
+      // (Bugreport: ein Verein aus einer kleinen Liga wirkte mit rohem Wert
+      // "stärker" als einer aus der angesehensten Liga der Auswahl).
       detail:
         reason === "loan"
-          ? `${cand.leagueLabel} · Vereinsstärke ${cand.club.strength} · Ein Jahr Leihe, danach automatische Rückkehr zu ${player.club.name} · Gehalt ca. ${formatMoney(wagePreview)}/Jahr`
-          : `${cand.leagueLabel} · Vereinsstärke ${cand.club.strength} (aktuell: ${currentStrength}) · Einsatzminuten-Versprechen: ${squadRoleLabel(promisedRole, player.position)} (${Math.round(promiseChance * 100)}% Erfolgschance) · Gehalt ca. ${formatMoney(wagePreview)}/Jahr${cand.isForeign ? " · Auslandswechsel" : ""}`,
+          ? `${cand.leagueLabel} · Vereinsstärke ${displayClubStrength(cand.club.strength, cand.countryId)} · Ein Jahr Leihe, danach automatische Rückkehr zu ${player.club.name} · Gehalt ca. ${formatMoney(wagePreview)}/Jahr`
+          : `${cand.leagueLabel} · Vereinsstärke ${displayClubStrength(cand.club.strength, cand.countryId)} (aktuell: ${currentStrengthDisplay}) · Einsatzminuten-Versprechen: ${squadRoleLabel(promisedRole, player.position)} (${Math.round(promiseChance * 100)}% Erfolgschance) · Gehalt ca. ${formatMoney(wagePreview)}/Jahr${cand.isForeign ? " · Auslandswechsel" : ""}`,
       effects: {},
     };
   });
@@ -2384,7 +2395,7 @@ function buildClubOfferEvent(
     choices.push({
       id: "stay",
       label: `Bei ${player.club.name} bleiben`,
-      detail: `Zeigt dem Verein die Treue - stärkt die Vereinsbeziehung. Vereinsstärke bleibt bei ${currentStrength}.`,
+      detail: `Zeigt dem Verein die Treue - stärkt die Vereinsbeziehung. Vereinsstärke bleibt bei ${currentStrengthDisplay}.`,
       effects: {},
     });
   } else if (reason === "loan") {
@@ -2466,8 +2477,8 @@ function buildClubOfferEvent(
       ? `Dein öffentlich geäußerter Wechselwunsch bleibt nicht ungehört - im Sommertransferfenster melden sich prompt ${count} Vereine, die genau darauf gewartet haben.${foreignNote}`
       : reason === "lockruf"
       ? lockrufBeraterFraming
-        ? `${lastSeasonRef}hat dein Berater im Hintergrund die Fühler ausgestreckt - ${lockrufClub} (Vereinsstärke ${candidates[0]?.club.strength}) legt jetzt ein einzelnes, konkretes Angebot auf den Tisch. Kein Vorgeplänkel, direkt mit Konditionen: annehmen oder bei ${player.club.name} (Vereinsstärke ${currentStrength}) bleiben.`
-        : `${lastSeasonRef}meldet sich der Verein völlig überraschend (Vereinsstärke ${candidates[0]?.club.strength}) mit einem einzelnen, konkreten Angebot. Kein Vorgeplänkel, direkt mit Konditionen: annehmen oder bei ${player.club.name} (Vereinsstärke ${currentStrength}) bleiben.`
+        ? `${lastSeasonRef}hat dein Berater im Hintergrund die Fühler ausgestreckt - ${lockrufClub} (Vereinsstärke ${candidates[0] ? displayClubStrength(candidates[0].club.strength, candidates[0].countryId) : ""}) legt jetzt ein einzelnes, konkretes Angebot auf den Tisch. Kein Vorgeplänkel, direkt mit Konditionen: annehmen oder bei ${player.club.name} (Vereinsstärke ${currentStrengthDisplay}) bleiben.`
+        : `${lastSeasonRef}meldet sich der Verein völlig überraschend (Vereinsstärke ${candidates[0] ? displayClubStrength(candidates[0].club.strength, candidates[0].countryId) : ""}) mit einem einzelnen, konkreten Angebot. Kein Vorgeplänkel, direkt mit Konditionen: annehmen oder bei ${player.club.name} (Vereinsstärke ${currentStrengthDisplay}) bleiben.`
       : reason === "opportunity"
       ? `${lastSeasonRef}sind Scouts auf ${player.name} bei ${player.club.name} aufmerksam geworden. Im Sommertransferfenster erkundigen sich ${count} Vereine nach dir.${foreignNote}`
       : reason === "loan"
@@ -2982,7 +2993,7 @@ export function buildLoanFutureEvent(player: Player): GameEvent {
   const tier = computeLoanSummaryTier(narrative.decisions.map((d) => d.modifiedRoll));
   const keepChance = loanClubKeepChance(tier.id, overall, player.club.strength);
   const offerMade = rng() < keepChance;
-  const backDetail = `${back.tier === 1 ? "1." : "2."} Liga · Vereinsstärke ${back.strength}`;
+  const backDetail = `${back.tier === 1 ? "1." : "2."} Liga · Vereinsstärke ${displayClubStrength(back.strength, player.loanReturnCountryId ?? player.homeCountryId)}`;
 
   if (!offerMade) {
     return {
