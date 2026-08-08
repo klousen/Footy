@@ -6421,20 +6421,22 @@ export const EVENT_TEMPLATES: EventTemplate[] = [
   },
 
   // ---------------------------------------------------------------------
-  // SOMMERPAUSE (siehe VACATION_TEMPLATE_ID) - kommt IMMER als letztes Ereignis
-  // einer Saison, garantiert für jeden Profi (siehe App.tsx `handleStartSeason`,
-  // das die ID explizit ans Ende der Saison-Queue anhängt statt sie über die
-  // normale Gewichtungs-Auswahl zu ziehen - deshalb hier `weight: 0` +
-  // `storylineOnly: true`, dieselbe Konvention wie bei den Leihjahr-
-  // Entscheidungen oben). Feuert JEDE Saison ab dem Profidebüt (siehe dortige
-  // Alters-Gate) - bei dieser Häufigkeit braucht es besonders viel Text-
-  // Varianz (Titel/Beschreibung UND Reiseziel), damit sich nicht jede der
-  // 15-20 Sommerpausen einer Karriere wortgleich anfühlt.
+  // SOMMERPAUSE (siehe VACATION_TEMPLATE_ID) - kommt, WENN sie feuert, immer als
+  // letztes Ereignis einer Saison (siehe App.tsx `handleStartSeason`, das die ID
+  // explizit ans Ende der Saison-Queue anhängt statt sie über die normale
+  // Gewichtungs-Auswahl zu ziehen - deshalb hier `weight: 0` + `storylineOnly:
+  // true`, dieselbe Konvention wie bei den Leihjahr-Entscheidungen oben). OB sie
+  // überhaupt feuert, entscheidet `shouldTriggerVacationEvent` (feste
+  // Wahrscheinlichkeit/Saison, NICHT jede Sommerpause - reiht sich damit in die
+  // Häufigkeit der übrigen Karriere-Events ein, siehe dortiger Kommentar),
+  // frühestens ab Alter 20. Trotzdem noch häufig genug für spürbare Text-Varianz
+  // (Titel/Beschreibung UND Reiseziel), damit sich nicht jede Sommerpause einer
+  // Karriere wortgleich anfühlt.
   // ---------------------------------------------------------------------
   {
     id: VACATION_TEMPLATE_ID,
     category: "lifestyle",
-    minAge: 18,
+    minAge: 20,
     maxAge: 40,
     weight: 0,
     storylineOnly: true,

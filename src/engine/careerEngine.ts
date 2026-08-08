@@ -2014,6 +2014,24 @@ export function shouldTriggerLoanAbroad(player: Player): boolean {
   return rng() < chance;
 }
 
+/**
+ * Sommerpause-Event (siehe VACATION_TEMPLATE_ID in events.ts) - bewusst NICHT
+ * jede Saison, sondern mit einer festen Wahrscheinlichkeit pro Saison, damit es
+ * sich in die Häufigkeit der übrigen Karriere-Events einreiht statt als einziges
+ * garantiertes Ereignis herauszustechen. 15% pro erwachsener Saison ergibt über
+ * eine typische Karriere (Alters-Gate bis Karriereende, oft 15-20 Saisons)
+ * simuliert im Schnitt ~2.7 Auftritte - derselbe Häufigkeitsbereich wie die
+ * anderen häufigsten regulären Events (siehe Bugreport-Analyse "Häufigkeit aller
+ * Events", z.B. lifestyle_ernaehrung/sponsor_schuhe mit Ø 2.1-2.2/Karriere).
+ * Ab 20 statt schon ab dem Profidebüt (18) - ein Teenager mitten in den ersten
+ * Profijahren hat noch nicht dasselbe Urlaubs-/Luxusbudget-Thema wie ein
+ * gestandener Profi.
+ */
+export function shouldTriggerVacationEvent(player: Player): boolean {
+  if (player.age < 20) return false;
+  return rng() < 0.15;
+}
+
 /** Baut die Liga-Pyramide eines fremden Landes lazy und cached sie danach dauerhaft -
  * damit ein gezeigtes Auslandsangebot exakt dem entspricht, was man bei Annahme bekommt
  * (kein erneutes Würfeln der Vereinsstärken zwischen Angebot und Zusage). */
