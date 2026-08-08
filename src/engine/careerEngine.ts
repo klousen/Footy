@@ -2341,14 +2341,27 @@ function buildClubOfferEvent(
     // Dieselbe Formel wie bei der tatsächlichen Zusage (siehe `applyClubOfferChoice`),
     // damit das hier gezeigte Gehalt exakt dem entspricht, was man am Ende bekommt.
     const wagePreview = estimateWage(overall, player.reputation, cand.club, cand.countryId, cand.leagueRank);
-    const transferOverall = transferEffectiveOverall(player, overall, currentStrength);
-    const promisedRole = squadRoleForOverall(transferOverall, cand.club.strength, player.position);
+    // Kaderrolle/Einsatzminuten-Versprechen für einen VEREINSWECHSEL vergleichen die
+    // eigene (länderunabhängige) Gesamtstärke mit einem konkreten Zielverein -
+    // beide Vereinsstärken (altes UND neues Land) müssen hierfür auf derselben,
+    // international vergleichbaren Skala stehen (siehe `displayClubStrength`),
+    // sonst entsteht exakt der Bugreport: ein Wechsel zu einem (real deutlich
+    // schwächeren) Verein aus einer kleinen Liga wurde als "härter" bewertet als
+    // der eigene Stammplatz bei einem Topklub, nur weil beide LOKAL normierten
+    // Rohwerte zufällig ähnlich hoch lagen. Betrifft NUR die Wechsel-Entscheidung
+    // selbst - die laufende Kaderrolle beim AKTUELLEN Verein (siehe
+    // `currentSquadRole`/`resolveClubSituation`) bleibt bewusst auf der rohen,
+    // lokalen Skala (dort ist "wie stehe ich innerhalb MEINER Liga da" die
+    // richtige Frage, kein Länder-Vergleich).
+    const candStrengthForTransfer = displayClubStrength(cand.club.strength, cand.countryId);
+    const transferOverall = transferEffectiveOverall(player, overall, currentStrengthDisplay);
+    const promisedRole = squadRoleForOverall(transferOverall, candStrengthForTransfer, player.position);
     // Das Einsatzminuten-Versprechen eines NEUEN Vereins ist nie hundertprozentig
     // sicher - je größer der Sprung zwischen eigener Stärke und Vereinsniveau,
     // desto eher bleibt die versprochene Rolle nur ein Lippenbekenntnis (siehe
     // `applyClubOfferChoice`, wo tatsächlich ausgewürfelt wird, ob der Verein das
     // Versprechen einhält).
-    const promiseChance = rolePromiseChance(transferOverall, cand.club.strength);
+    const promiseChance = rolePromiseChance(transferOverall, candStrengthForTransfer);
     return {
       id: `club-${cand.club.id}`,
       label:
@@ -2367,8 +2380,8 @@ function buildClubOfferEvent(
       // "stärker" als einer aus der angesehensten Liga der Auswahl).
       detail:
         reason === "loan"
-          ? `${cand.leagueLabel} · Vereinsstärke ${displayClubStrength(cand.club.strength, cand.countryId)} · Ein Jahr Leihe, danach automatische Rückkehr zu ${player.club.name} · Gehalt ca. ${formatMoney(wagePreview)}/Jahr`
-          : `${cand.leagueLabel} · Vereinsstärke ${displayClubStrength(cand.club.strength, cand.countryId)} (aktuell: ${currentStrengthDisplay}) · Einsatzminuten-Versprechen: ${squadRoleLabel(promisedRole, player.position)} (${Math.round(promiseChance * 100)}% Erfolgschance) · Gehalt ca. ${formatMoney(wagePreview)}/Jahr${cand.isForeign ? " · Auslandswechsel" : ""}`,
+          ? `${cand.leagueLabel} · Vereinsstärke ${candStrengthForTransfer} · Ein Jahr Leihe, danach automatische Rückkehr zu ${player.club.name} · Gehalt ca. ${formatMoney(wagePreview)}/Jahr`
+          : `${cand.leagueLabel} · Vereinsstärke ${candStrengthForTransfer} (aktuell: ${currentStrengthDisplay}) · Einsatzminuten-Versprechen: ${squadRoleLabel(promisedRole, player.position)} (${Math.round(promiseChance * 100)}% Erfolgschance) · Gehalt ca. ${formatMoney(wagePreview)}/Jahr${cand.isForeign ? " · Auslandswechsel" : ""}`,
       effects: {},
     };
   });
@@ -2726,14 +2739,16 @@ export function applyClubOfferChoice(
   const wage = estimateWage(overall, player.reputation, chosen, wageCountryId, clubLeagueRank(chosen.id, chosen.tier, targetLeague));
   // Derselbe bewiesene Stammspieler-Bodensatz wie in der Angebots-Vorschau (siehe
   // `transferEffectiveOverall`), damit das dort gezeigte Versprechen exakt dem
-  // entspricht, was hier tatsächlich ausgewürfelt wird.
-  const transferOverall = transferEffectiveOverall(player, overall, oldStrength);
-  const promisedRole = squadRoleForOverall(transferOverall, chosen.strength, player.position);
+  // entspricht, was hier tatsächlich ausgewürfelt wird - dieselbe international
+  // vergleichbare Skala wie in `buildClubOfferEvent` (siehe `displayClubStrength`
+  // dort), altes UND neues Land jeweils mit dem eigenen Länderansehen normiert.
+  const transferOverall = transferEffectiveOverall(player, overall, displayClubStrength(oldStrength, oldCountryId));
+  const promisedRole = squadRoleForOverall(transferOverall, displayClubStrength(chosen.strength, wageCountryId), player.position);
   // Das in der Angebots-Vorschau gezeigte Einsatzminuten-Versprechen (siehe
   // `buildClubOfferEvent`) wird hier tatsächlich ausgewürfelt: je größer der
   // Sprung zwischen eigener Stärke und Vereinsniveau, desto eher bleibt es ein
   // Lippenbekenntnis und die tatsächliche Rolle fällt eine Stufe niedriger aus.
-  const promiseChance = rolePromiseChance(transferOverall, chosen.strength);
+  const promiseChance = rolePromiseChance(transferOverall, displayClubStrength(chosen.strength, wageCountryId));
   const promiseKept = rng() < promiseChance;
   const newRole = promiseKept ? promisedRole : roleOneStepDown(promisedRole, player.position);
   player.contract = { club: chosen.city, yearsLeft: 3, wagePerYear: wage, squadRole: newRole };
