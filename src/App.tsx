@@ -33,6 +33,7 @@ import {
   summarizeEffects,
 } from "./engine/careerEngine";
 import { LOAN_DECISION_TEMPLATE_IDS } from "./engine/loanStory";
+import { VACATION_TEMPLATE_ID } from "./engine/events";
 import { pickSpreadClubOffers } from "./engine/leagueEngine";
 import { StartScreen } from "./ui/StartScreen";
 import { SelectCountry } from "./ui/SelectCountry";
@@ -150,6 +151,18 @@ export default function App() {
     if (offerReason) {
       const insertIndex = offerReason === "pressure" ? Math.ceil(ids.length / 2) : 0;
       ids = insertAt(ids, clubOfferTemplateId(offerReason), insertIndex);
+    }
+
+    // Sommerpause: kommt garantiert als LETZTES Ereignis jeder Saison, für jeden
+    // Profi (ab dem Profidebüt - kein Urlaubs-Budget/-Thema für Jugendspieler).
+    // Bewusst ganz am Ende angehängt (nach Storylines/Vereinsangeboten), damit
+    // sie wirklich "kurz vor der Sommerpause" wirkt statt mittendrin. Während
+    // eines laufenden Leihjahres wird sie automatisch verworfen, sobald das
+    // Leihangebot angenommen wird (siehe `handleChoice`, das die Event-Queue
+    // dann komplett durch die drei Leih-Entscheidungen ersetzt) - keine
+    // zusätzliche Prüfung hier nötig.
+    if (game.player.age >= 18) {
+      ids = [...ids, VACATION_TEMPLATE_ID];
     }
 
     if (ids.length === 0) {

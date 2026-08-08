@@ -3,6 +3,12 @@ import { isNearRetirement, overallRatingFromAttributes } from "./types";
 import { clamp, FEMALE_FIRST_NAMES, FIRST_NAMES, LAST_NAMES } from "./data";
 import { LOAN_DECISIONS } from "./loanStory";
 
+/** Sommerpause-Event (siehe Template weiter unten) - wird NIE über die normale
+ * Gewichtungs-Auswahl gezogen, sondern von App.tsx `handleStartSeason` explizit
+ * als LETZTES Ereignis jeder Saison angehängt. Als Konstante exportiert, damit
+ * App.tsx nicht denselben String-Literal duplizieren muss. */
+export const VACATION_TEMPLATE_ID = "urlaub_sommerpause";
+
 // Hilfsfunktion für lesbaren Vereinsnamen im Text
 const club = (p: Player) => p.club.name;
 
@@ -6412,6 +6418,113 @@ export const EVENT_TEMPLATES: EventTemplate[] = [
         },
       ],
     }),
+  },
+
+  // ---------------------------------------------------------------------
+  // SOMMERPAUSE (siehe VACATION_TEMPLATE_ID) - kommt IMMER als letztes Ereignis
+  // einer Saison, garantiert für jeden Profi (siehe App.tsx `handleStartSeason`,
+  // das die ID explizit ans Ende der Saison-Queue anhängt statt sie über die
+  // normale Gewichtungs-Auswahl zu ziehen - deshalb hier `weight: 0` +
+  // `storylineOnly: true`, dieselbe Konvention wie bei den Leihjahr-
+  // Entscheidungen oben). Feuert JEDE Saison ab dem Profidebüt (siehe dortige
+  // Alters-Gate) - bei dieser Häufigkeit braucht es besonders viel Text-
+  // Varianz (Titel/Beschreibung UND Reiseziel), damit sich nicht jede der
+  // 15-20 Sommerpausen einer Karriere wortgleich anfühlt.
+  // ---------------------------------------------------------------------
+  {
+    id: VACATION_TEMPLATE_ID,
+    category: "lifestyle",
+    minAge: 18,
+    maxAge: 40,
+    weight: 0,
+    storylineOnly: true,
+    build: (p, ctx) => {
+      const variant = pickVariant(ctx, [
+        {
+          title: "Wohin geht's in den Urlaub?",
+          description:
+            "Die Saison ist geschafft - kurz vor der Sommerpause stellt sich die immer gleiche Frage: Wie und wo verbringst du die freien Wochen, bevor die Vorbereitung auf die neue Saison beginnt?",
+        },
+        {
+          title: "Die Sommerpause steht an",
+          description:
+            "Nach einer langen Saison ist Zeit für eine Pause. Wohin geht es dieses Jahr - und wie sehr lässt du dabei den Fußball hinter dir?",
+        },
+        {
+          title: "Planung für die Sommerpause",
+          description:
+            "Kurz vor dem letzten Spieltag macht sich schon Vorfreude auf die Sommerpause breit. Die Frage ist nur: Erholung pur oder lieber schon der Blick Richtung neue Saison?",
+        },
+        {
+          title: "Die Koffer für den Sommer",
+          description:
+            "Bald ist Saisonende - Zeit, sich Gedanken über die Sommerpause zu machen. Ganz weit weg, ein Kompromiss oder lieber gar nicht wirklich Pause?",
+        },
+      ]);
+
+      const choices: EventChoice[] = [];
+
+      // Nur wählbar, wenn genug Geld dafür da ist - keine Kreditaufnahme für den Urlaub.
+      if (p.wealth >= 100000) {
+        // Bewusst mit getrennter Bewegungs- ("Ab ...") und Lage-Formulierung
+        // ("... verbracht") je Reiseziel - "Ab auf die Malediven" / "auf den
+        // Malediven verbracht" statt grammatikalisch falschem "Ab nach die
+        // Malediven".
+        const destination = pickVariant(ctx, [
+          { to: "auf die Malediven", at: "auf den Malediven" },
+          { to: "nach Dubai", at: "in Dubai" },
+          { to: "in die Karibik", at: "in der Karibik" },
+          { to: "auf die Seychellen", at: "auf den Seychellen" },
+          { to: "nach Bora Bora", at: "auf Bora Bora" },
+        ]);
+        choices.push({
+          id: "luxus",
+          label: "Luxus-Fernreise antreten",
+          detail: `Ab ${destination.to} - Erholung auf höchstem Niveau, aber teuer und weit weg vom Trainingsplatz.`,
+          effects: {
+            morale: rInt(ctx, 12, 18),
+            reputation: rInt(ctx, 5, 9),
+            wealth: -100000,
+            fitness: -rInt(ctx, 4, 7),
+            attributes: { physis: -1 },
+            traitDeltas: { arbeitsmoral: -2 },
+            logText: `hat die Sommerpause ${destination.at} verbracht.`,
+            logKind: "info",
+          },
+        });
+      }
+
+      const europaDestination = pickVariant(ctx, ["Spanien", "Italien", "Griechenland", "Portugal", "Kroatien"]);
+      choices.push(
+        {
+          id: "europa",
+          label: "Wochen in Europa verbringen",
+          detail: `Ein entspannter Sommer in ${europaDestination} - Sonne, neue Eindrücke, ohne das ganz große Budget.`,
+          effects: {
+            morale: rInt(ctx, 6, 10),
+            attributes: { charisma: 1 },
+            wealth: -40000,
+            logText: `hat die Sommerpause in ${europaDestination} verbracht.`,
+            logKind: "info",
+          },
+        },
+        {
+          id: "training",
+          label: "Zuhause bleiben und gezielt trainieren",
+          detail: "Statt Fernweh lieber Extra-Trainingseinheiten und Nähe zum Verein - die neue Saison schon im Blick.",
+          effects: {
+            morale: rInt(ctx, 2, 4),
+            fitness: rInt(ctx, 4, 7),
+            traitDeltas: { arbeitsmoral: 2, disziplin: 2 },
+            clubRelation: rInt(ctx, 4, 7),
+            logText: "hat die Sommerpause für zusätzliches Training beim Verein genutzt.",
+            logKind: "info",
+          },
+        }
+      );
+
+      return { category: "lifestyle", title: variant.title, description: variant.description, choices };
+    },
   },
 
   // ---------------------------------------------------------------------
