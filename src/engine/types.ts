@@ -407,6 +407,33 @@ export interface ChoiceFeedback {
   deltaLines: string[];
 }
 
+/** Strukturierte Daten für eine Wechselangebots-Karte (siehe `EventCard`s
+ * Angebots-Layout, `footy-karriere-mockup.html` ".offer-card") - reine
+ * Anzeige-Aufbereitung derselben Werte, die auch in `EventChoice.detail`
+ * stecken (siehe `buildClubOfferEvent`), nur strukturiert statt als ein
+ * einziger Fließtextsatz. Nur bei club_offer-Events gesetzt (siehe
+ * `isClubOfferEvent`) - andere Events bleiben bei der klassischen
+ * Label/Detail-Darstellung. */
+export interface OfferCardData {
+  /** Karten-Überschrift, z.B. "Gelsenkirchen" oder "Bei Karlsruhe bleiben". */
+  headline: string;
+  league: string;
+  /** Flagge, NUR gesetzt bei einem Auslandsangebot - steuert das "Ausland"-Badge. */
+  abroadFlag?: string;
+  strength: number;
+  /** Vergleichswert für den Trend-Pfeil - weggelassen (bzw. gleich `strength`),
+   * wenn kein sinnvoller Vergleich existiert (z.B. "Bleiben"-Karte: unverändert). */
+  strengthPrev?: number;
+  wage: number;
+  /** Gehalts-Differenz zum aktuellen Gehalt - weggelassen, wenn kein aktuelles
+   * Gehalt existiert (z.B. allererster Profivertrag) oder unverändert (Bleiben). */
+  wageDelta?: number;
+  roleLabel: string;
+  roleSub?: string;
+  typeLabel: string;
+  isStay: boolean;
+}
+
 export interface EventChoice {
   id: string;
   label: string;
@@ -414,6 +441,8 @@ export interface EventChoice {
   effects: EffectDelta;
   /** Für Nachfolge-Konsequenzen, die erst später ausgewertet werden (z.B. Trainingsergebnis) */
   followUpChance?: { chance: number; success: EffectDelta; failure: EffectDelta };
+  /** Strukturierte Angebots-Karten-Daten, siehe `OfferCardData`. */
+  offerCard?: OfferCardData;
 }
 
 export type EventCategory =

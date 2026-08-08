@@ -1,4 +1,4 @@
-import type { ChoiceFeedback, EventChoice, GameEvent, Player } from "../engine/types";
+import type { ChoiceFeedback, EventChoice, GameEvent, OfferCardData, Player } from "../engine/types";
 import { isClubOfferEvent } from "../engine/careerEngine";
 import { CATEGORY_LABEL, formatMoney } from "./labels";
 
@@ -22,6 +22,17 @@ export function EventCard({
   onChoose: (choice: EventChoice) => void;
   onContinue: () => void;
 }) {
+  // Wechselangebote (siehe `isClubOfferEvent`) bekommen ein eigenes, scanbares
+  // Kartenlayout statt der generischen Wahl-Buttons-Liste - siehe `OfferCard`
+  // unten. NUR solange noch keine Entscheidung gefallen ist (die Rückmeldung
+  // danach bleibt das normale `feedback-panel`) und solange mindestens eine
+  // Karte tatsächlich strukturierte Daten mitbringt (siehe `OfferCardData`) -
+  // `buildClubOfferEvent` befüllt das nicht für jeden club_offer-Reason (z.B.
+  // Leih-Rückkehr/Verbleib-Entscheidung), die fallen sonst auf die klassische
+  // Label/Detail-Darstellung zurück.
+  const isOffer = isClubOfferEvent(event.templateId);
+  const showOfferCards = isOffer && !feedback && event.choices.some((c) => c.offerCard);
+
   return (
     <div className="screen event-screen">
       <div className="event-meta">
@@ -30,45 +41,121 @@ export function EventCard({
           {player.name}, {player.age} Jahre
         </span>
       </div>
-      {isClubOfferEvent(event.templateId) && player.contract.wagePerYear > 0 && (
+      {isOffer && player.contract.wagePerYear > 0 && (
         <div className="event-current-wage">
           Aktuelles Gehalt zum Vergleich: <strong>{formatMoney(player.contract.wagePerYear)}/Jahr</strong>
         </div>
       )}
-      <div className="event-card">
-        <h2>{event.title}</h2>
-        <p>{event.description}</p>
 
-        {!feedback && (
-          <div className="event-choices">
-            {event.choices.map((choice) => (
-              <button key={choice.id} className="choice-btn" onClick={() => onChoose(choice)}>
-                <span className="choice-label">{choice.label}</span>
-                {choice.detail && <span className="choice-detail">{choice.detail}</span>}
-              </button>
-            ))}
-          </div>
-        )}
-
-        {feedback && (
-          <div className={`feedback-panel kind-${feedback.kind}`}>
-            <div className="feedback-headline">
-              <span className="feedback-icon">{KIND_ICON[feedback.kind] ?? "ℹ️"}</span>
-              <span>{feedback.text}</span>
-            </div>
-            {feedback.deltaLines.length > 0 && (
-              <ul className="feedback-deltas">
-                {feedback.deltaLines.map((line, i) => (
-                  <li key={i}>{line}</li>
-                ))}
-              </ul>
+      {showOfferCards ? (
+        <div className="offer-screen-body">
+          <h2>{event.title}</h2>
+          {/* Kontext-Absatz bewusst nur EINMAL oben, nicht pro Karte wiederholt
+              (siehe Bugreport: bisher stand derselbe Fließtext-Kontext implizit
+              in jeder einzelnen Wahl). */}
+          <p className="offer-context">{event.description}</p>
+          <div className="offer-list">
+            {event.choices.map((choice) =>
+              choice.offerCard ? (
+                <OfferCard key={choice.id} choice={choice} data={choice.offerCard} onChoose={onChoose} />
+              ) : (
+                <button key={choice.id} className="choice-btn" onClick={() => onChoose(choice)}>
+                  <span className="choice-label">{choice.label}</span>
+                  {choice.detail && <span className="choice-detail">{choice.detail}</span>}
+                </button>
+              )
             )}
-            <button className="btn btn-primary" onClick={onContinue}>
-              Weiter
-            </button>
           </div>
+        </div>
+      ) : (
+        <div className="event-card">
+          <h2>{event.title}</h2>
+          <p>{event.description}</p>
+
+          {!feedback && (
+            <div className="event-choices">
+              {event.choices.map((choice) => (
+                <button key={choice.id} className="choice-btn" onClick={() => onChoose(choice)}>
+                  <span className="choice-label">{choice.label}</span>
+                  {choice.detail && <span className="choice-detail">{choice.detail}</span>}
+                </button>
+              ))}
+            </div>
+          )}
+
+          {feedback && (
+            <div className={`feedback-panel kind-${feedback.kind}`}>
+              <div className="feedback-headline">
+                <span className="feedback-icon">{KIND_ICON[feedback.kind] ?? "ℹ️"}</span>
+                <span>{feedback.text}</span>
+              </div>
+              {feedback.deltaLines.length > 0 && (
+                <ul className="feedback-deltas">
+                  {feedback.deltaLines.map((line, i) => (
+                    <li key={i}>{line}</li>
+                  ))}
+                </ul>
+              )}
+              <button className="btn btn-primary" onClick={onContinue}>
+                Weiter
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** Eine einzelne Wechselangebots-Karte (siehe `footy-karriere-mockup.html`
+ * ".offer-card"/".offer-pills") - Vereinsname, Liga, ggf. Auslands-Badge und
+ * ein 2x2-Pill-Grid mit Vereinsstärke (+Trend), Gehalt (+Differenz), Rolle/
+ * Effekt und Typ. Die "Bleiben"-Variante (`data.isStay`) ist bewusst gleich
+ * gestaltet wie die Wechselkarten (gleicher Rahmen/gleiche Textfarbe), nur die
+ * Pill-Inhalte unterscheiden sich sinngemäß. */
+function OfferCard({ choice, data, onChoose }: { choice: EventChoice; data: OfferCardData; onChoose: (choice: EventChoice) => void }) {
+  const hasTrend = data.strengthPrev !== undefined && data.strengthPrev !== data.strength;
+  const trendUp = hasTrend && data.strength > (data.strengthPrev as number);
+
+  return (
+    <button type="button" className={`offer-card${data.isStay ? " stay" : ""}`} onClick={() => onChoose(choice)}>
+      <div className="offer-head">
+        <span className="offer-club">{data.headline}</span>
+        {data.abroadFlag && (
+          <span className="offer-abroad">
+            {data.abroadFlag} Ausland
+          </span>
         )}
       </div>
-    </div>
+      <div className="offer-league">{data.league}</div>
+      <div className="offer-pills">
+        <div className="offer-pill">
+          <div className="l">Vereinsstärke</div>
+          <div className={hasTrend ? `v ${trendUp ? "strength-up" : "strength-down"}` : "v"}>
+            {data.strength}
+            {hasTrend && ` ${trendUp ? "▲" : "▼"} (${data.strengthPrev})`}
+          </div>
+        </div>
+        <div className="offer-pill">
+          <div className="l">Gehalt</div>
+          <div className={data.wageDelta !== undefined && data.wageDelta > 0 ? "v salary-up" : "v"}>{formatMoney(data.wage)}</div>
+          {data.wageDelta !== undefined && data.wageDelta !== 0 && (
+            <div className={`sub ${data.wageDelta > 0 ? "sub-positive" : "sub-negative"}`}>
+              {data.wageDelta > 0 ? "+" : ""}
+              {formatMoney(data.wageDelta)}
+            </div>
+          )}
+        </div>
+        <div className="offer-pill">
+          <div className="l">{data.isStay ? "Effekt" : "Rolle"}</div>
+          <div className="v">{data.roleLabel}</div>
+          {data.roleSub && <div className="sub">{data.roleSub}</div>}
+        </div>
+        <div className="offer-pill">
+          <div className="l">Typ</div>
+          <div className="v">{data.typeLabel}</div>
+        </div>
+      </div>
+    </button>
   );
 }

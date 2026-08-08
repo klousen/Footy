@@ -1053,6 +1053,149 @@ input:focus {
   margin-top: 4px;
 }
 
+/* ---------------- Wechselangebote v2 (strukturierte Karten) ----------------
+   Siehe footy-karriere-mockup.html ".offer-screen"/".offer-card"/".offer-pills" -
+   ersetzt den bisherigen Fließtext-Satz pro Angebot durch ein scanbares
+   2x2-Pill-Grid je Karte (siehe `EventCard`/`OfferCard`). */
+
+.offer-screen-body {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.offer-screen-body h2 {
+  font-size: clamp(1.3rem, 4vw, 1.7rem);
+}
+
+.offer-context {
+  color: var(--muted);
+  font-family: var(--font-body);
+  font-size: 0.92rem;
+  line-height: 1.6;
+  margin: 0 0 10px;
+}
+
+.offer-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.offer-card {
+  text-align: left;
+  background: var(--bg-panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 16px 16px 14px;
+  color: var(--chalk);
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  transition: border-color 0.2s ease, background-color 0.2s ease;
+}
+
+.offer-card:hover {
+  border-color: var(--gold);
+  background: rgba(201, 162, 39, 0.06);
+}
+
+.offer-card:active {
+  transform: scale(0.99);
+}
+
+/* "Bleiben"-Karte bewusst gleichwertig gestaltet - gleicher Rahmen, gleiche
+   Textfarbe beim Vereinsnamen, kein visuelles Abwerten gegenüber Wechselangeboten. */
+.offer-card.stay .offer-club {
+  color: var(--chalk);
+}
+
+.offer-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.offer-club {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 1.15rem;
+  text-transform: uppercase;
+  line-height: 1.2;
+}
+
+.offer-abroad {
+  flex: none;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--gold-bright);
+  border: 1px solid var(--gold);
+  border-radius: 10px;
+  padding: 2px 9px;
+  white-space: nowrap;
+}
+
+.offer-league {
+  font-size: 0.82rem;
+  color: var(--muted);
+  margin-bottom: 4px;
+}
+
+.offer-pills {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+
+.offer-pill {
+  background: var(--bg-deep);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 8px 10px;
+}
+
+.offer-pill .l {
+  font-size: 0.66rem;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.offer-pill .v {
+  font-family: var(--font-mono);
+  font-weight: 600;
+  font-size: 0.95rem;
+  color: var(--chalk);
+  margin-top: 1px;
+}
+
+.offer-pill .v.strength-up,
+.offer-pill .v.salary-up {
+  color: var(--green);
+}
+
+.offer-pill .v.strength-down {
+  color: var(--red);
+}
+
+.offer-pill .sub {
+  font-size: 0.7rem;
+  color: var(--muted);
+  margin-top: 1px;
+}
+
+.offer-pill .sub-positive {
+  color: var(--green);
+}
+
+.offer-pill .sub-negative {
+  color: var(--red);
+}
+
 /* ---------------- Score / Bilanz ---------------- */
 
 .score-header {

@@ -13,6 +13,7 @@ import type {
   LoanDecisionLogEntry,
   LogEntry,
   NationalCupResult,
+  OfferCardData,
   Player,
   Position,
   ScoreFactor,
@@ -2362,6 +2363,26 @@ function buildClubOfferEvent(
     // `applyClubOfferChoice`, wo tatsächlich ausgewürfelt wird, ob der Verein das
     // Versprechen einhält).
     const promiseChance = rolePromiseChance(transferOverall, candStrengthForTransfer);
+    // Nur eine Gehalts-Differenz zeigen, wenn ein aktuelles Gehalt zum Vergleich
+    // existiert (nicht beim allerersten Profivertrag, siehe "pro-debut" - dort
+    // wäre "wagePerYear: 0" als Basis eine bedeutungslose "+100%"-Differenz).
+    const wageDelta = player.contract.wagePerYear > 0 ? wagePreview - player.contract.wagePerYear : undefined;
+    // Strukturierte Kartendaten (siehe `OfferCardData`) für das neue Angebots-
+    // Kartenlayout - dieselben bereits berechneten Werte wie im `detail`-Fließtext
+    // unten, nur aufgeschlüsselt statt zusammengezogen.
+    const offerCard: OfferCardData = {
+      headline: cand.club.city,
+      league: cand.leagueLabel,
+      abroadFlag: cand.isForeign ? cand.flag : undefined,
+      strength: candStrengthForTransfer,
+      strengthPrev: currentStrengthDisplay,
+      wage: wagePreview,
+      wageDelta,
+      roleLabel: reason === "loan" ? "Leihe" : squadRoleLabel(promisedRole, player.position),
+      roleSub: reason === "loan" ? `Rückkehr zu ${player.club.name}` : `${Math.round(promiseChance * 100)}% Erfolgschance`,
+      typeLabel: reason === "loan" ? "Leihe" : cand.isForeign ? "Ausland" : "Inland",
+      isStay: false,
+    };
     return {
       id: `club-${cand.club.id}`,
       label:
@@ -2377,12 +2398,15 @@ function buildClubOfferEvent(
       // `strength`-Wert ist rein LOKAL je Liga normiert (siehe dort) und beim
       // Vergleich zweier Vereine aus unterschiedlichen Ländern sonst irreführend
       // (Bugreport: ein Verein aus einer kleinen Liga wirkte mit rohem Wert
-      // "stärker" als einer aus der angesehensten Liga der Auswahl).
+      // "stärker" als einer aus der angesehensten Liga der Auswahl). Nur noch als
+      // Textfallback (z.B. Sharepic-Caption o.ä.) - die eigentliche Anzeige nutzt
+      // jetzt `offerCard` (siehe `EventCard`).
       detail:
         reason === "loan"
           ? `${cand.leagueLabel} · Vereinsstärke ${candStrengthForTransfer} · Ein Jahr Leihe, danach automatische Rückkehr zu ${player.club.name} · Gehalt ca. ${formatMoney(wagePreview)}/Jahr`
           : `${cand.leagueLabel} · Vereinsstärke ${candStrengthForTransfer} (aktuell: ${currentStrengthDisplay}) · Einsatzminuten-Versprechen: ${squadRoleLabel(promisedRole, player.position)} (${Math.round(promiseChance * 100)}% Erfolgschance) · Gehalt ca. ${formatMoney(wagePreview)}/Jahr${cand.isForeign ? " · Auslandswechsel" : ""}`,
       effects: {},
+      offerCard,
     };
   });
 
@@ -2403,6 +2427,16 @@ function buildClubOfferEvent(
       label: `Profivertrag bei ${player.club.name} unterschreiben`,
       detail: `Bleib deinem Jugendverein treu · Rolle voraussichtlich ${squadRoleLabel(squadRoleForOverall(overall, currentStrength, player.position), player.position)} · Gehalt ca. ${formatMoney(stayWagePreview)}/Jahr · Vertrauensbonus durch die vertraute Umgebung`,
       effects: {},
+      offerCard: {
+        headline: `Bei ${player.club.name} bleiben`,
+        league: leagueNameForTier(league, player.club.tier),
+        strength: currentStrengthDisplay,
+        wage: stayWagePreview,
+        roleLabel: squadRoleLabel(squadRoleForOverall(overall, currentStrength, player.position), player.position),
+        roleSub: "Vertrauensbonus durch die vertraute Umgebung",
+        typeLabel: "Bleiben",
+        isStay: true,
+      },
     });
   } else if (reason === "opportunity" || reason === "lockruf") {
     choices.push({
@@ -2410,6 +2444,16 @@ function buildClubOfferEvent(
       label: `Bei ${player.club.name} bleiben`,
       detail: `Zeigt dem Verein die Treue - stärkt die Vereinsbeziehung. Vereinsstärke bleibt bei ${currentStrengthDisplay}.`,
       effects: {},
+      offerCard: {
+        headline: `Bei ${player.club.name} bleiben`,
+        league: leagueNameForTier(league, player.club.tier),
+        strength: currentStrengthDisplay,
+        wage: player.contract.wagePerYear,
+        roleLabel: "Treue",
+        roleSub: "stärkt Vereinsbeziehung",
+        typeLabel: "Bleiben",
+        isStay: true,
+      },
     });
   } else if (reason === "loan") {
     choices.push({
@@ -2417,12 +2461,32 @@ function buildClubOfferEvent(
       label: `Beim Verein um den Stammplatz kämpfen`,
       detail: `Lehnt die Leihe ab und bleibt bei ${player.club.name} - riskanter, aber keine Reise ins Ungewisse.`,
       effects: {},
+      offerCard: {
+        headline: `Bei ${player.club.name} bleiben`,
+        league: leagueNameForTier(league, player.club.tier),
+        strength: currentStrengthDisplay,
+        wage: player.contract.wagePerYear,
+        roleLabel: "Kämpfen",
+        roleSub: "riskant, aber keine Reise ins Ungewisse",
+        typeLabel: "Bleiben",
+        isStay: true,
+      },
     });
   } else if (reason === "pressure") {
     choices.push({
       id: "fight",
       label: player.consecutiveBenchSeasons >= 1 ? "Kämpfen und den Stammplatz zurückerobern" : "Das Verhältnis kitten und bleiben",
       detail: "Riskant, aber du bleibst bei deinem aktuellen Verein.",
+      offerCard: {
+        headline: `Bei ${player.club.name} bleiben`,
+        league: leagueNameForTier(league, player.club.tier),
+        strength: currentStrengthDisplay,
+        wage: player.contract.wagePerYear,
+        roleLabel: player.consecutiveBenchSeasons >= 1 ? "Kämpfen" : "Kitten",
+        roleSub: "riskant, aber du bleibst",
+        typeLabel: "Bleiben",
+        isStay: true,
+      },
       effects: {},
     });
   }
