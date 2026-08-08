@@ -1239,6 +1239,11 @@ export function simulateSeason(
     tableSnapshot,
     europeanCup,
     nationalCup,
+    // Noch VOR dieser Zeile gesetzt (siehe Player.loanNarrative) - wird erst nach der
+    // finalen "bleiben/zurück/abwarten"-Entscheidung (also NACH dieser Saison) wieder
+    // auf `null` zurückgesetzt, hier also zuverlässig noch aktiv, falls diese Saison
+    // ein Leihjahr war.
+    onLoan: player.loanNarrative !== null,
   };
 
   player.seasonHistory.push(stats);
@@ -1991,7 +1996,7 @@ export function shouldTriggerSingleClubApproach(player: Player): boolean {
  */
 export function shouldTriggerLoanAbroad(player: Player): boolean {
   if (player.stage === "jugend") return false;
-  if (player.age > 23) return false;
+  if (player.age > 24) return false;
   if (player.loanActive) return false;
   if (player.wantsTransfer) return false;
   if (player.injury && player.injury.weeksOut > 0) return false;
@@ -1999,7 +2004,14 @@ export function shouldTriggerLoanAbroad(player: Player): boolean {
   const strugglingForMinutes =
     player.contract.squadRole === "Ergänzungsspieler" || player.contract.squadRole === "Ersatzbank";
   if (!strugglingForMinutes) return false;
-  return rng() < 0.18;
+  // Je länger die Bankphase andauert, desto eher greift der Verein zur Leihe - ein
+  // Spieler, der schon mehrere Saisons feststeckt, wird realistisch früher "geparkt"
+  // als einer, der gerade erst auf die Bank gerutscht ist. Basis deutlich angehoben
+  // (18% -> 35%), damit das narrative Leihjahr (siehe loanStory.ts) im typischen
+  // Zeitfenster einer Karriere auch tatsächlich zum Zug kommt, statt eine seltene
+  // Ausnahme zu bleiben.
+  const chance = clamp(0.35 + player.consecutiveBenchSeasons * 0.12, 0.35, 0.7);
+  return rng() < chance;
 }
 
 /** Baut die Liga-Pyramide eines fremden Landes lazy und cached sie danach dauerhaft -
@@ -2997,7 +3009,14 @@ export function buildClubTenures(player: Player): ClubTenure[] {
   for (const s of player.seasonHistory) {
     if (s.age < PRO_DEBUT_AGE) continue;
     const last = tenures[tenures.length - 1];
-    if (last && last.club === s.club) {
+    // Eine Leih-Saison (siehe `SeasonStats.onLoan`) bildet IMMER eine eigene,
+    // exakt eine Saison lange Zugehörigkeit - verschmilzt weder mit der Zeit
+    // beim Stammverein davor noch (bei dauerhaftem Verbleib nach der Leihe) mit
+    // den Saisons beim selben Verein danach. Das "(L)"-Kürzel (siehe
+    // `ClubTenure.onLoan`) soll sich sonst sonst fälschlich auf eine ganze,
+    // längere Vereinszugehörigkeit erstrecken, obwohl nur eine einzelne Saison
+    // davon tatsächlich eine Leihe war.
+    if (last && last.club === s.club && !last.onLoan && !s.onLoan) {
       last.toAge = s.age;
       last.seasons += 1;
       last.avgScore += s.score;
@@ -3012,6 +3031,7 @@ export function buildClubTenures(player: Player): ClubTenure[] {
         avgScore: s.score,
         promoted: s.promoted,
         relegated: s.relegated,
+        onLoan: s.onLoan,
       });
     }
   }

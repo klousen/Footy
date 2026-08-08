@@ -5,7 +5,6 @@ import { computeLoanSummaryTier } from "../engine/loanStory";
 import { formatMoney, overallTier } from "./labels";
 import { LeagueTableSnapshot } from "./LeagueTableSnapshot";
 import { StatBox } from "./StatBox";
-import { AttributeBars } from "./AttributeBars";
 
 export function SeasonSummary({
   stats,
@@ -154,9 +153,7 @@ export function SeasonSummary({
         </div>
       )}
 
-      {player.loanNarrative && (
-        <LoanSeasonRecap narrative={player.loanNarrative} player={player} currentOverall={currentOverall} />
-      )}
+      {player.loanNarrative && <LoanSeasonRecap narrative={player.loanNarrative} currentOverall={currentOverall} />}
 
       <div className="panel">
         <div className="score-header">
@@ -202,48 +199,30 @@ export function SeasonSummary({
  * Spiele/Tore/Vorlagen/Einsatzquote stehen bereits in den Stat-Boxen oben,
  * hier geht es gezielt um das, was NUR die Leihe betrifft.
  */
-function LoanSeasonRecap({
-  narrative,
-  player,
-  currentOverall,
-}: {
-  narrative: LoanNarrativeState;
-  player: Player;
-  currentOverall: number;
-}) {
+function LoanSeasonRecap({ narrative, currentOverall }: { narrative: LoanNarrativeState; currentOverall: number }) {
   const tier = computeLoanSummaryTier(narrative.decisions.map((d) => d.modifiedRoll));
   const overallDelta = currentOverall - narrative.overallAtLoanStart;
 
   return (
     <div className="panel">
       <div className="score-header">
-        <h3>📋 Leihjahr-Bilanz</h3>
+        <h3>📋 Leihjahr bei {narrative.loanClubName}</h3>
         <span className="score-badge">
           {tier.emoji} {tier.label}
         </span>
       </div>
-      <p className="muted">{tier.description}</p>
       <p className="muted">
-        Leihgrund: <strong>{narrative.reasonTitle}</strong> - {narrative.reasonText}
+        {narrative.reasonTitle} - {tier.description}
+        {overallDelta !== 0 && ` Gesamtstärke ${overallDelta > 0 ? "+" : ""}${overallDelta}.`}
       </p>
-      <p>
-        Gesamtstärke bei Leihbeginn {narrative.overallAtLoanStart} → jetzt {currentOverall}
-        {overallDelta !== 0 && ` (${overallDelta > 0 ? "+" : ""}${overallDelta})`}
-      </p>
-      <AttributeBars attributes={player.attributes} compare={narrative.attributesAtLoanStart} />
-
-      <h4>Die drei Entscheidungen</h4>
       <ul className="score-factors">
         {narrative.decisions.map((d, i) => (
           <li key={i}>
             <span>
               {d.decisionTitle}: {d.choiceLabel}
-              <br />
-              <span className="muted">{d.resultText}</span>
             </span>
             <span>
-              🎲{d.raw}
-              {d.modifier !== 0 ? ` (${d.modifier > 0 ? "+" : ""}${d.modifier})` : ""} → {d.modifiedRoll} {d.momentumEmoji}
+              🎲{d.modifiedRoll} {d.momentumEmoji}
             </span>
           </li>
         ))}

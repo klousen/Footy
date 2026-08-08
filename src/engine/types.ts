@@ -181,6 +181,12 @@ export interface ClubTenure {
   /** Ob der Verein während dieser Zugehörigkeit mindestens einmal auf-/abgestiegen ist. */
   promoted: boolean;
   relegated: boolean;
+  /** True nur für eine einzelne Leih-Saison (siehe `SeasonStats.onLoan`) - eine
+   * solche Zugehörigkeit umfasst laut `buildClubTenures` IMMER genau eine Saison,
+   * auch wenn direkt davor/danach weitere Saisons beim selben Verein liegen
+   * (z.B. dauerhafter Verbleib nach der Leihe) - die Kennzeichnung gilt bewusst
+   * nur für diese eine Saison, nicht rückwirkend für die ganze Vereinszeit. */
+  onLoan?: boolean;
 }
 
 /** Ergebnis der europäischen Wettbewerbsteilnahme einer Saison (siehe `europeanCup.ts`)
@@ -294,6 +300,12 @@ export interface SeasonStats {
   /** Nationaler Pokal dieser Saison (siehe `nationalCup.ts`) - nie `null`, jeder Liga-1-/
    * Liga-2-Verein nimmt automatisch teil. */
   nationalCup: NationalCupResult;
+  /** True, wenn diese Saison ein narratives Leihjahr war (siehe `Player.loanNarrative`,
+   * loanStory.ts) - Grundlage für das "(L)"-Kürzel im Karriereverlauf am Karriereende
+   * (siehe `buildClubTenures`/`ClubTenure.onLoan`), gilt bewusst NUR für diese eine
+   * Saison, nicht für spätere Saisons beim selben Verein (z.B. bei dauerhaftem Verbleib
+   * nach der Leihe). */
+  onLoan: boolean;
 }
 
 export interface LogEntry {

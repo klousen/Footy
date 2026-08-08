@@ -133,6 +133,12 @@ export function CareerEnd({
                 </span>
                 <span className="club-tenure-club">
                   {ct.club}
+                  {ct.onLoan && (
+                    <span className="tenure-loan-tag" title="Leihe" aria-label="Leihe">
+                      {" "}
+                      (L)
+                    </span>
+                  )}
                   {ct.promoted && (
                     <span className="tenure-arrow tenure-arrow-up" title="Aufstieg" aria-label="Aufstieg">
                       ↑
