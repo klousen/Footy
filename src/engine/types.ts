@@ -395,8 +395,57 @@ export interface EffectDelta {
   edeljokerLocked?: boolean;
   /** Setzt/verlängert `Player.formSlumpSeasons` (siehe dort). */
   formSlumpSeasons?: number;
+  /**
+   * EXPLIZITER Ceiling Break (siehe "CAREER NARRATIVE ... TECHNISCHE VERANKERUNG"
+   * Abschnitt 20/24) - der EINZIGE Weg, wie `player.potential` je über den zu
+   * Karrierestart gewürfelten Wert hinaus steigen kann. Hebt `potential[key]` UND
+   * `attributes[key]` je um den angegebenen Betrag an (siehe `applyEffects`),
+   * protokolliert den Moment in `Player.ceilingBreaks`. Bewusst nur von einem
+   * einzigen, sehr seltenen Event gesetzt (siehe "ceiling_break_moment" in
+   * events.ts) - NICHT der Normalfall eines Attribut-Effekts (die deckeln jetzt
+   * regulär am `potential`, siehe `applyEffects`).
+   */
+  ceilingBreak?: Partial<Record<AttributeKey, number>>;
   logText?: string;
   logKind?: LogEntry["kind"];
+}
+
+/** EIN protokollierter Ceiling Break (siehe `EffectDelta.ceilingBreak`). */
+export interface CeilingBreakEntry {
+  season: number;
+  age: number;
+  attribute: AttributeKey;
+  amount: number;
+}
+
+/**
+ * EIN aktiver, laufend geführter Narrative-Thread (siehe "TECHNISCHE VERANKERUNG"
+ * Abschnitt 7/12) - bewusst auf GENAU EINEN gleichzeitig aktiven Thread beschränkt
+ * (kein voller Multi-Thread-Store), das erste konkret modellierte Thread-Muster
+ * ("nach einem großen/riskanten Wechsel folgt entweder Anpassung/Durchbruch oder
+ * Rückschlag/Wiederaufbau"). Wird an mehreren Stellen aktualisiert: gestartet in
+ * `applyClubOfferChoice` (siehe `recordTransferDecision`), Stage-Übergänge in
+ * `simulateSeason` anhand der tatsächlichen Einsatzzeit-/Performance-Entwicklung.
+ */
+export interface NarrativeThread {
+  type: "BIG_MOVE_ADAPTATION";
+  startedSeason: number;
+  startedAge: number;
+  stage: "ADAPTATION" | "STRUGGLE" | "REBUILD" | "BREAKTHROUGH";
+  /** Saison-Index (in `seasonHistory`), AB DEM der Thread beobachtet wird - i.d.R.
+   * identisch mit dem `seasonHistoryIndex` der auslösenden Entscheidung. */
+  seasonHistoryIndex: number;
+}
+
+/** Abgeschlossener/aussagekräftiger Narrative-Moment (siehe `Player.narrativeHistory`) -
+ * kompakte Historie für `CareerEnd`s "prägende Momente", NICHT jede Saison neu
+ * befüllt, nur echte Wendepunkte (abgeschlossener Thread, Ceiling Break,
+ * Nationalmannschafts-Snub→Berufung, o.ä.). */
+export interface NarrativeHistoryEntry {
+  season: number;
+  age: number;
+  type: string;
+  label: string;
 }
 
 /** Eine laufende, mehrjährige Ereignis-Reihe (siehe `EffectDelta.storyline`). */
@@ -502,6 +551,15 @@ export interface EventTemplate {
    * waren (der Spieler war zu dem Zeitpunkt noch bei beiden "single").
    */
   exclusiveGroup?: string;
+  /**
+   * Zusätzlicher, KONTEXTABHÄNGIGER Gewichts-Multiplikator (siehe "CAREER NARRATIVE
+   * ... TECHNISCHE VERANKERUNG" Abschnitt 10/11) - multipliziert in
+   * `pickSeasonTemplateIds` auf das normale Gewicht drauf, macht ein Event bei
+   * passendem Karrierezustand deutlich wahrscheinlicher, OHNE es je zu erzwingen
+   * (bleibt Teil derselben gewichteten Zufallsauswahl wie jedes andere Template).
+   * Weggelassen bzw. `undefined` = neutral (Faktor 1), wie bisher.
+   */
+  dynamicWeight?: (player: Player) => number;
   build: (
     player: Player,
     ctx: { rng: () => number; storyData?: Record<string, string> }
@@ -673,6 +731,21 @@ export interface Player {
    * `applyClubOfferChoice` befüllt, bei "bleiben"/"kämpfen" ebenso wie bei einem
    * echten Wechsel (siehe `TransferDecisionType` "STABILITY_DECISION"). */
   transferDecisions: TransferDecisionEntry[];
+  /** Protokoll aller EXPLIZITEN Ceiling Breaks (siehe `EffectDelta.ceilingBreak`). */
+  ceilingBreaks: CeilingBreakEntry[];
+  /** Anzahl AUFEINANDERFOLGENDER Saisons, in denen der Spieler "nationalmannschafts-
+   * würdig" war (siehe `simulateSeason`), aber noch keine Länderspiele bekommen hat -
+   * auf 0 zurückgesetzt, sobald `nationalTeamCaps` steigt. Treibt sowohl eine steigende
+   * Berufungswahrscheinlichkeit (siehe `nationalTeamCallUpChance` in events.ts) als
+   * auch ein höheres Auswahlgewicht des Berufungs-Events (siehe `EventTemplate.
+   * dynamicWeight`) - ein dauerhaft verdienter Spieler bleibt so NICHT unbegrenzt vom
+   * reinen Zufall abhängig, ohne dass eine Berufung je garantiert wäre. */
+  nationalTeamCandidacySeasons: number;
+  /** Aktuell laufender Narrative-Thread (siehe `NarrativeThread`), `null` wenn keiner
+   * aktiv ist. */
+  activeNarrativeThread: NarrativeThread | null;
+  /** Kompakte Historie prägender Narrative-Momente (siehe `NarrativeHistoryEntry`). */
+  narrativeHistory: NarrativeHistoryEntry[];
 }
 
 /**
@@ -724,22 +797,41 @@ export interface DecisionImpact extends TransferDecisionEntry {
  * ABGELEITET aus `seasonHistory`/`transferDecisions`/`nationalTeamCaps`/aktuellen
  * Attributen (KEIN eigenes Persistenz-Feld, siehe `computeCareerNarrativeState`), am
  * Karriereende (oder jederzeit während der laufenden Karriere) neu berechenbar. */
+export type NarrativeTrend = "rising" | "falling" | "stable";
+
 export interface CareerNarrativeState {
   decisionImpacts: DecisionImpact[];
-  /** Die Entscheidung mit dem größten ABSOLUTEN Performance-Impact (positiv ODER
-   * negativ) - "die prägende Entscheidung der Karriere". `null` ohne auswertbare
-   * Entscheidung. */
+  /** Die Entscheidung mit dem größten GEWICHTETEN Performance-Impact - berücksichtigt
+   * neben dem rohen `perfImpact` auch, ob die Entscheidung einen später abgeschlossenen
+   * Narrative-Thread ausgelöst hat (siehe `NarrativeThread`/`Player.narrativeHistory`,
+   * Vorgabe "TECHNISCHE VERANKERUNG" Abschnitt 17: ein kurzfristig negativer Wechsel,
+   * der Jahre später zum Durchbruch führte, zählt mehr als ein kurzfristig positiver
+   * ohne Nachwirkung). `null` ohne auswertbare Entscheidung. */
   definingDecision: DecisionImpact | null;
-  /** Attribute, die AKTUELL über ihrem `potential`-Wert liegen (siehe Vorgabe Teil F,
-   * Mechanismus: `applyEffects`/`scaleDecisionAttributeDelta` deckeln Entscheidungs-
-   * Effekte NUR bei 1-99, nicht am Potential - siehe careerEngine.ts). */
-  ceilingBreaks: { attribute: AttributeKey; overAmount: number }[];
+  /** Explizite Ceiling Breaks (siehe `Player.ceilingBreaks`/`EffectDelta.ceilingBreak`) -
+   * NICHT mehr aus einem rohen Attribut-vs-Potential-Vergleich abgeleitet (siehe
+   * Vorgabe "TECHNISCHE VERANKERUNG" Abschnitt 20/24: Ceiling Breaks sind jetzt ein
+   * expliziter, protokollierter Mechanismus, kein Nebeneffekt). */
+  ceilingBreaks: CeilingBreakEntry[];
   /** Elite-Niveau (Peak-Gesamtstärke >= 80) erreicht, aber nie/kaum für die
    * Nationalmannschaft berufen (siehe Vorgabe Teil E: laut Diagnose unabhängig von
    * Leistung/Einsatzzeit - reines Berufungs-Losglück über viele unabhängige
    * Saison-Ziehungen). */
   nationalTeamSnub: boolean;
   peakOverall: number;
+  /** Trend-Signale (siehe "TECHNISCHE VERANKERUNG" Abschnitt 1) - jeweils aus den
+   * letzten bis zu 2 Saisons vs. den 2-3 Saisons davor abgeleitet, rein aus
+   * `seasonHistory` (keine Persistenz). Grundlage für die natursprachlichen
+   * Dashboard-/SeasonSummary-Texte (siehe `narrativeTrendLabel` in labels.ts). */
+  performanceTrend: NarrativeTrend;
+  playingTimeTrend: NarrativeTrend;
+  clubLevelTrend: NarrativeTrend;
+  /** Ausgang der ZULETZT abgeschlossenen (max. 1 Saison zurückliegenden)
+   * Transferentscheidung, sofern schon ein Nachher-Fenster existiert - `null` sonst. */
+  recentDecisionOutcome: DecisionImpact | null;
+  /** Durchreichung von `Player.activeNarrativeThread` - hier gebündelt, damit die UI
+   * nur EINE Quelle (`computeCareerNarrativeState`) abfragen muss. */
+  activeThread: NarrativeThread | null;
 }
 
 /**

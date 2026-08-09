@@ -1421,6 +1421,76 @@ input:focus {
   color: var(--muted);
 }
 
+.defining-moments-heading {
+  margin: 12px 0 4px;
+  font-weight: 600;
+  font-size: 0.85rem;
+}
+
+.defining-moments-list {
+  margin: 0;
+  padding-left: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.defining-moments-list li {
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.defining-moment-age {
+  font-weight: 600;
+  color: var(--text);
+  margin-right: 6px;
+}
+
+/* ---------------- Karrierebogen (Dashboard/SeasonSummary, siehe describeCareerMomentum) ---------------- */
+
+.narrative-momentum-panel {
+  border-color: rgba(201, 162, 39, 0.35);
+}
+
+.narrative-momentum-headline {
+  margin: 2px 0 4px;
+  font-weight: 700;
+  font-size: 1rem;
+  color: var(--gold-bright);
+}
+
+.turning-point-banner {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  border-radius: var(--radius);
+  padding: 10px 12px;
+  margin-bottom: 12px;
+  background: rgba(201, 162, 39, 0.1);
+  border: 1px solid rgba(201, 162, 39, 0.4);
+  font-size: 0.88rem;
+}
+
+.turning-point-banner .turning-point-star {
+  color: var(--gold-bright);
+}
+
+.narrative-momentum-headline-sub {
+  font-weight: 400;
+  font-size: 0.85rem;
+}
+
+.season-trend-lines {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
+}
+
+.trend-line {
+  font-size: 0.8rem;
+  margin: 2px 0;
+}
+
 /* ---------------- Season summary ---------------- */
 
 .mini-log {

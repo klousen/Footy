@@ -14,5 +14,9 @@ export {
   CAREER_PHENOTYPE_LABEL,
   CAREER_PHENOTYPE_DESCRIPTION,
   TRANSFER_DECISION_LABEL,
+  TRANSFER_DECISION_MEANING,
+  describeCareerMomentum,
+  describeSeasonNarrative,
+  turningPointForSeason,
 } from "../engine/labels";
-export type { OverallTier } from "../engine/labels";
+export type { OverallTier, NarrativeMomentumText } from "../engine/labels";

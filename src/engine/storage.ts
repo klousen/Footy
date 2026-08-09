@@ -48,6 +48,13 @@ export function loadGame(): GameState | null {
       // (siehe `Player.transferDecisions`) - leer als bestmögliche Annäherung, kein
       // rückwirkendes Nacherfinden vergangener Entscheidungen möglich.
       state.player.transferDecisions ??= [];
+      // Ältere Spielstände kennen das Runtime-Narrative-System noch nicht (siehe
+      // "CAREER NARRATIVE ... TECHNISCHE VERANKERUNG") - neutrale/leere Startwerte,
+      // kein rückwirkendes Nacherfinden vergangener Ceiling Breaks/Threads.
+      state.player.ceilingBreaks ??= [];
+      state.player.nationalTeamCandidacySeasons ??= 0;
+      state.player.activeNarrativeThread ??= null;
+      state.player.narrativeHistory ??= [];
       // Ältere Spielstände kennen das Heimatland noch nicht - als bestmögliche
       // Annäherung das aktuelle Land nehmen (nur relevant für künftige Rückkehr-Erkennung).
       state.player.homeCountryId ??= state.player.country;

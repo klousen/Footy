@@ -1,12 +1,12 @@
 import { useState } from "react";
 import type { LeagueState, Player } from "../engine/types";
 import { POSITION_LABEL, overallRatingFromAttributes } from "../engine/types";
-import { overallRating, seasonLabelForNumber, squadRoleLabel } from "../engine/careerEngine";
+import { computeCareerNarrativeState, overallRating, seasonLabelForNumber, squadRoleLabel } from "../engine/careerEngine";
 import { leagueNameForTier } from "../engine/leagueEngine";
 import { AttributeBars } from "./AttributeBars";
 import { TraitBars } from "./TraitBars";
 import { StoryThreads } from "./StoryThreads";
-import { formatMoney, overallTier, RELATIONSHIP_LABEL } from "./labels";
+import { describeCareerMomentum, formatMoney, overallTier, RELATIONSHIP_LABEL } from "./labels";
 import { StatBox } from "./StatBox";
 import { Timeline } from "./Timeline";
 
@@ -40,6 +40,11 @@ export function Dashboard({
   // Wechsel vom Saison-Rückblick zurück aufs Dashboard nicht auf den ersten Blick
   // erkennbar, dass die neue Saison noch nicht begonnen hat.
   const upcomingSeasonLabel = seasonLabelForNumber(seasonNumber + 1);
+  // Karrierebogen (siehe "CAREER NARRATIVE ... TECHNISCHE VERANKERUNG" Abschnitt 9/10/13):
+  // EINE gemeinsame Quelle (`computeCareerNarrativeState`), rein natursprachlich - siehe
+  // `describeCareerMomentum`s Doc-Kommentar, warum hier bewusst nur ein Panel statt zwei.
+  const narrativeState = computeCareerNarrativeState(player);
+  const momentum = describeCareerMomentum(narrativeState, player);
 
   return (
     <div className="screen dashboard">
@@ -102,6 +107,14 @@ export function Dashboard({
       <button type="button" className="btn btn-outline-gold" onClick={() => {}}>
         💼 Investitionen
       </button>
+
+      {momentum && (
+        <div className="panel narrative-momentum-panel">
+          <h3>Karrierebogen</h3>
+          <p className="narrative-momentum-headline">{momentum.headline}</p>
+          <p className="muted">{momentum.text}</p>
+        </div>
+      )}
 
       <div className="panel">
         <h3>Attribute</h3>

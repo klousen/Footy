@@ -1,8 +1,8 @@
 import type { LoanNarrativeState, Player, SeasonStats } from "../engine/types";
 import { overallRatingFromAttributes } from "../engine/types";
-import { overallRating } from "../engine/careerEngine";
+import { computeCareerNarrativeState, overallRating } from "../engine/careerEngine";
 import { computeLoanSummaryTier } from "../engine/loanStory";
-import { formatMoney, overallTier } from "./labels";
+import { describeSeasonNarrative, formatMoney, overallTier, turningPointForSeason } from "./labels";
 import { LeagueTableSnapshot } from "./LeagueTableSnapshot";
 import { StatBox } from "./StatBox";
 
@@ -37,12 +37,27 @@ export function SeasonSummary({
   const isDefender = player.position === "IV" || player.position === "AV";
   const isMidfielder = player.position === "ZM";
 
+  // Karrierebogen dieser Saison (siehe "CAREER NARRATIVE ... TECHNISCHE VERANKERUNG"
+  // Abschnitt 13/14/15) - dieselbe Quelle (`computeCareerNarrativeState`) wie das
+  // Dashboard, keine eigene vereinfachte Logik.
+  const narrativeState = computeCareerNarrativeState(player);
+  const seasonNarrative = describeSeasonNarrative(stats, narrativeState, player);
+  const turningPoint = turningPointForSeason(player);
+  const recentTrendSeasons = player.seasonHistory.slice(-4);
+
   return (
     <div className="screen summary-screen">
       <h2>{stats.seasonLabel} - Rückblick</h2>
       <p className="muted">
         {player.name} bei {stats.club} ({stats.leagueName})
       </p>
+
+      {turningPoint && (
+        <div className="turning-point-banner">
+          <span className="turning-point-star">★</span>
+          <span>{turningPoint}</span>
+        </div>
+      )}
 
       {/* Hero-Box für die Gesamtstärke (mit Trend-Pfeil + Tier), getrennt von den
           übrigen Werten - siehe footy-karriere-mockup.html ".hero-rating". */}
@@ -160,6 +175,11 @@ export function SeasonSummary({
           <h3>Saison-Bilanz</h3>
           <span className="score-badge">{stats.score} Pkt. · {stats.scoreTier}</span>
         </div>
+        {seasonNarrative && (
+          <p className="narrative-momentum-headline">
+            {seasonNarrative.headline} <span className="muted narrative-momentum-headline-sub">- {seasonNarrative.text}</span>
+          </p>
+        )}
         <ul className="score-factors">
           {stats.scoreFactors.map((f, i) => (
             <li key={i}>
@@ -171,6 +191,19 @@ export function SeasonSummary({
             </li>
           ))}
         </ul>
+        {recentTrendSeasons.length >= 3 && (
+          <div className="season-trend-lines">
+            <p className="muted trend-line">
+              Performance: {recentTrendSeasons.map((s) => Math.round(s.performanceScore)).join(" → ")}
+            </p>
+            <p className="muted trend-line">
+              Einsatzzeit: {recentTrendSeasons.map((s) => `${Math.round((s.possibleMinutes > 0 ? s.minutesPlayed / s.possibleMinutes : 0) * 100)}%`).join(" → ")}
+            </p>
+            <p className="muted trend-line">
+              Gesamtstärke: {recentTrendSeasons.map((s) => s.overallRating).join(" → ")}
+            </p>
+          </div>
+        )}
       </div>
 
       <div className="panel">

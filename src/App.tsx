@@ -36,6 +36,7 @@ import {
 import { LOAN_DECISION_TEMPLATE_IDS } from "./engine/loanStory";
 import { VACATION_TEMPLATE_ID } from "./engine/events";
 import { pickSpreadClubOffers } from "./engine/leagueEngine";
+import { TRANSFER_DECISION_MEANING } from "./ui/labels";
 import { StartScreen } from "./ui/StartScreen";
 import { SelectCountry } from "./ui/SelectCountry";
 import { CreatePlayer } from "./ui/CreatePlayer";
@@ -259,10 +260,21 @@ export default function App() {
       : isClubOfferEvent(game.currentEvent.templateId)
       ? (() => {
           const oldClubId = player.club.clubId;
+          const decisionCountBefore = player.transferDecisions.length;
           const result = applyClubOfferChoice(player, league, game.currentEvent!, choice.id, foreignLeagues);
           if (result.newActiveLeague) newActiveLeague = result.newActiveLeague;
           didTransfer = player.club.clubId !== oldClubId;
           endedStorylineTemplateIds = result.endedStorylineTemplateIds ?? [];
+          // "Was das bedeutet" (siehe "CAREER NARRATIVE ... TECHNISCHE VERANKERUNG"
+          // Abschnitt 12) - rein qualitativ, der tatsächliche Ausgang ist hier noch
+          // nicht bekannt (siehe `TRANSFER_DECISION_MEANING`).
+          if (player.transferDecisions.length > decisionCountBefore) {
+            const justRecorded = player.transferDecisions[player.transferDecisions.length - 1];
+            return {
+              ...result.feedback,
+              deltaLines: [...result.feedback.deltaLines, `Was das bedeutet: ${TRANSFER_DECISION_MEANING[justRecorded.type]}`],
+            };
+          }
           return result.feedback;
         })()
       : (() => {

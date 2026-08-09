@@ -20,10 +20,12 @@ import type {
   OfferCardData,
   Player,
   Position,
+  NarrativeTrend,
   ScoreFactor,
   SeasonStats,
   SquadRole,
   TraitKey,
+  TransferDecisionEntry,
   TransferDecisionType,
 } from "./types";
 import { isNearRetirement, overallRatingFromAttributes } from "./types";
@@ -319,6 +321,10 @@ export function createPlayer(
       secondSpringSeasons: 0,
       loanNarrative: null,
       transferDecisions: [],
+      ceilingBreaks: [],
+      nationalTeamCandidacySeasons: 0,
+      activeNarrativeThread: null,
+      narrativeHistory: [],
     },
   };
 }
@@ -443,7 +449,13 @@ export function pickSeasonTemplateIds(
       // einige Saisons deutlich wahrscheinlicher.
       const secondSpringFactor =
         t.exclusiveGroup === "beziehung_start" && player.secondSpringSeasons > 0 ? 3 : 1;
-      return t.weight * categoryFactor * recencyFactor * categoryRecencyFactor * injuryFocusFactor * secondSpringFactor;
+      // Kontextabhängiger Gewichts-Multiplikator (siehe `EventTemplate.dynamicWeight`,
+      // "CAREER NARRATIVE ... TECHNISCHE VERANKERUNG" Abschnitt 10/11/17/18) - macht
+      // ein Event bei passendem Karrierezustand wahrscheinlicher, OHNE es je zu
+      // erzwingen (bleibt Teil derselben gewichteten Auswahl). Neutral (Faktor 1),
+      // wenn kein `dynamicWeight` definiert ist.
+      const dynamicFactor = t.dynamicWeight ? Math.max(0, t.dynamicWeight(player)) : 1;
+      return t.weight * categoryFactor * recencyFactor * categoryRecencyFactor * injuryFocusFactor * secondSpringFactor * dynamicFactor;
     });
     const totalWeight = weights.reduce((a, b) => a + b, 0);
     let r = rng() * totalWeight;
@@ -590,7 +602,23 @@ function applyEffects(player: Player, effects: EventChoice["effects"], season: n
   if (effects.attributes) {
     for (const key of Object.keys(effects.attributes) as AttributeKey[]) {
       const delta = effects.attributes[key] ?? 0;
-      player.attributes[key] = clamp(player.attributes[key] + delta, 1, 99);
+      // Deckelt regulär am `potential` (siehe "CAREER NARRATIVE ... TECHNISCHE
+      // VERANKERUNG" Abschnitt 20/23-24) - ein normaler Entscheidungs-Effekt kann
+      // das Potential NICHT mehr überschreiten, das war vorher ein unbeabsichtigter
+      // Nebeneffekt (siehe Diagnose Teil F). Der EINZIGE Weg über das Potential
+      // hinaus ist jetzt der explizite `effects.ceilingBreak` weiter unten, der
+      // `potential` selbst anhebt, bevor diese Grenze hier greift.
+      const cap = Math.min(99, player.potential[key]);
+      player.attributes[key] = clamp(player.attributes[key] + delta, 1, cap);
+    }
+  }
+  if (effects.ceilingBreak) {
+    for (const key of Object.keys(effects.ceilingBreak) as AttributeKey[]) {
+      const amount = effects.ceilingBreak[key] ?? 0;
+      if (amount <= 0) continue;
+      player.potential[key] = clamp(player.potential[key] + amount, 1, 99);
+      player.attributes[key] = clamp(player.attributes[key] + amount, 1, player.potential[key]);
+      player.ceilingBreaks.push({ season, age: player.age, attribute: key, amount });
     }
   }
   if (effects.morale) player.morale = clamp(player.morale + effects.morale, 0, 100);
@@ -1350,6 +1378,34 @@ export function simulateSeason(
   const capsThisSeason = Math.max(0, player.nationalTeamCaps - player.capsAtSeasonStart);
   player.capsAtSeasonStart = player.nationalTeamCaps;
 
+  // Nationalmannschafts-Kandidatur-Streak (siehe `Player.nationalTeamCandidacySeasons`,
+  // "CAREER NARRATIVE ... TECHNISCHE VERANKERUNG" Abschnitt 19/20/21) - zählt
+  // aufeinanderfolgende Saisons auf "nationalmannschaftswürdigem" Niveau (dieselbe
+  // grobe Schwelle wie `nationalmannschaft_einladung`s Bekanntheits-/Niveau-Gate in
+  // events.ts) OHNE dabei berufen zu werden. Treibt sowohl die Berufungswahrschein-
+  // lichkeit (siehe `nationalTeamCallUpChance`) als auch das Auswahlgewicht des
+  // Berufungs-Events (siehe `EventTemplate.dynamicWeight`) - ein dauerhaft verdienter
+  // Spieler bleibt so nicht unbegrenzt vom reinen Zufall abhängig.
+  const nationalTeamWorthy = overall >= 75 && player.reputation >= 45;
+  if (capsThisSeason > 0) {
+    // Eine echte Snub-Serie (mindestens 3 aufeinanderfolgende "würdige" Saisons ohne
+    // Berufung) endet mit der ersten Berufung - als prägender Moment festgehalten
+    // (siehe Vorgabe Abschnitt 21/22: "SNUB → CALL-UP → NATIONAL_TEAM_ESTABLISHED").
+    if (player.nationalTeamCandidacySeasons >= 3) {
+      player.narrativeHistory.push({
+        season: player.seasonHistory.length,
+        age: player.age,
+        type: "NATIONAL_TEAM_CALLUP_AFTER_SNUB",
+        label: "Die Einladung ist da - nach Jahren des Wartens",
+      });
+    }
+    player.nationalTeamCandidacySeasons = 0;
+  } else if (nationalTeamWorthy) {
+    player.nationalTeamCandidacySeasons += 1;
+  } else {
+    player.nationalTeamCandidacySeasons = 0;
+  }
+
   const { score, tier: scoreTier, factors: scoreFactors } = computeSeasonScore({
     avgRating,
     trophies,
@@ -1406,6 +1462,7 @@ export function simulateSeason(
   };
 
   player.seasonHistory.push(stats);
+  advanceNarrativeThread(player, stats);
 
   return stats;
 }
@@ -1938,7 +1995,7 @@ function recordTransferDecision(
   offerCard: OfferCardData | undefined,
   oldWage: number
 ) {
-  if (!offerCard || reason === "loan-return") return;
+  if (!offerCard || reason === "loan-return") return undefined;
   const strengthDelta = (offerCard.strength ?? 0) - (offerCard.strengthPrev ?? offerCard.strength ?? 0);
   // `offerCard.roleLabel` ist bereits Torwart-übersetzt ("Nummer 1"/"Nummer 2", siehe
   // `goalkeeperRoleLabel`) - hier auf dieselbe Rangskala wie `SQUAD_ROLE_RANK` gemappt.
@@ -1955,7 +2012,7 @@ function recordTransferDecision(
   const roleRankDelta = candidateRank - SQUAD_ROLE_RANK[oldRole];
   const wageDeltaPct = offerCard.wageDelta !== undefined && oldWage > 0 ? offerCard.wageDelta / oldWage : null;
   const type = classifyTransferDecision(reason, isStay, strengthDelta, roleRankDelta, wageDeltaPct);
-  player.transferDecisions.push({
+  const entry: TransferDecisionEntry = {
     season: player.seasonHistory.length + 1,
     age: player.age,
     type,
@@ -1963,7 +2020,96 @@ function recordTransferDecision(
     toClub: toClubName,
     strengthDelta: Math.round(strengthDelta * 10) / 10,
     seasonHistoryIndex: player.seasonHistory.length,
-  });
+  };
+  player.transferDecisions.push(entry);
+  return entry;
+}
+
+/**
+ * Startet den EINEN, gleichzeitig aktiven Narrative-Thread (siehe `NarrativeThread`,
+ * "TECHNISCHE VERANKERUNG" Abschnitt 7/12) - ausschließlich für einen klar riskanten
+ * Aufstiegswechsel (UPWARD_MOVE/PRESTIGE_RISK_MOVE), und nur, wenn gerade kein anderer
+ * Thread läuft (KEIN Multi-Thread-Store, siehe Doc-Kommentar `NarrativeThread`). Der
+ * eigentliche Ausgang (Anpassung gelingt/misslingt) wird NICHT hier entschieden,
+ * sondern erst über die tatsächliche Einsatzzeit-/Performance-Entwicklung der
+ * folgenden Saison(en) - siehe `advanceNarrativeThread` in `simulateSeason`.
+ */
+function maybeStartNarrativeThread(player: Player, entry: TransferDecisionEntry | undefined) {
+  if (!entry || player.activeNarrativeThread) return;
+  if (entry.type !== "UPWARD_MOVE" && entry.type !== "PRESTIGE_RISK_MOVE") return;
+  player.activeNarrativeThread = {
+    type: "BIG_MOVE_ADAPTATION",
+    startedSeason: entry.season,
+    startedAge: entry.age,
+    stage: "ADAPTATION",
+    seasonHistoryIndex: entry.seasonHistoryIndex,
+  };
+}
+
+/** Einsatzquote (0-100) einer Saison - `0`, wenn keine möglichen Minuten bekannt sind. */
+function seasonPlaytimePct(s: SeasonStats): number {
+  return s.possibleMinutes > 0 ? (s.minutesPlayed / s.possibleMinutes) * 100 : 0;
+}
+
+/**
+ * Bewegt den EINEN aktiven Narrative-Thread (siehe `NarrativeThread`) anhand der
+ * TATSÄCHLICHEN Einsatzzeit-/Performance-Entwicklung der gerade abgeschlossenen
+ * Saison weiter - wird einmal je Saison NACH `player.seasonHistory.push(stats)`
+ * aufgerufen (siehe `simulateSeason`). Reine Beobachtung realer Werte, keine
+ * Rückwirkung auf Spiellogik. Ein Thread, der zu lange (5+ Saisons) ohne klare
+ * Auflösung bleibt, läuft neutral aus (kein erzwungenes Happy End, kein
+ * erzwungener Rückschlag) - siehe "TECHNISCHE VERANKERUNG" Abschnitt 4/7.
+ */
+function advanceNarrativeThread(player: Player, stats: SeasonStats) {
+  const thread = player.activeNarrativeThread;
+  if (!thread) return;
+  const hist = player.seasonHistory;
+  const currentIdx = hist.length - 1; // die gerade gepushte Saison
+  if (currentIdx < thread.seasonHistoryIndex) return;
+  const seasonsSinceMove = currentIdx - thread.seasonHistoryIndex + 1;
+
+  if (thread.stage === "ADAPTATION") {
+    const baseline = hist[thread.seasonHistoryIndex - 1];
+    if (!baseline) {
+      player.activeNarrativeThread = null;
+      return;
+    }
+    const playtimeDelta = seasonPlaytimePct(stats) - seasonPlaytimePct(baseline);
+    const perfDelta = stats.performanceScore - baseline.performanceScore;
+    if (playtimeDelta < -12 || perfDelta < -8) {
+      thread.stage = "STRUGGLE";
+    } else if (playtimeDelta > 5 && perfDelta > 5) {
+      thread.stage = "BREAKTHROUGH";
+    } else if (seasonsSinceMove >= 2) {
+      // Nach spätestens 2 Saisons ohne klares Bild neutral auslaufen lassen -
+      // nicht jeder Wechsel muss ein narrativer Wendepunkt werden.
+      player.activeNarrativeThread = null;
+      return;
+    }
+  } else if (thread.stage === "STRUGGLE" || thread.stage === "REBUILD") {
+    const prevIdx = currentIdx - 1;
+    const prev = prevIdx >= thread.seasonHistoryIndex - 1 ? hist[prevIdx] : undefined;
+    const playtimeDelta = prev ? seasonPlaytimePct(stats) - seasonPlaytimePct(prev) : 0;
+    const perfDelta = prev ? stats.performanceScore - prev.performanceScore : 0;
+    if (thread.stage === "STRUGGLE" && playtimeDelta > 8 && perfDelta > 5) {
+      thread.stage = "REBUILD";
+    } else if (thread.stage === "REBUILD" && playtimeDelta >= -3 && perfDelta >= -2) {
+      thread.stage = "BREAKTHROUGH";
+    } else if (seasonsSinceMove >= 5) {
+      player.activeNarrativeThread = null;
+      return;
+    }
+  }
+
+  if (thread.stage === "BREAKTHROUGH") {
+    player.narrativeHistory.push({
+      season: currentIdx,
+      age: player.age,
+      type: "BIG_MOVE_BREAKTHROUGH",
+      label: "Durchbruch nach dem großen Schritt",
+    });
+    player.activeNarrativeThread = null;
+  }
 }
 
 /**
@@ -3366,7 +3512,17 @@ export function applyClubOfferChoice(
     }
   }
 
-  recordTransferDecision(player, reason, false, decisionOldClubName, chosen.city, decisionOldRole, decisionOfferCard, decisionOldWage);
+  const recordedDecision = recordTransferDecision(
+    player,
+    reason,
+    false,
+    decisionOldClubName,
+    chosen.city,
+    decisionOldRole,
+    decisionOfferCard,
+    decisionOldWage
+  );
+  maybeStartNarrativeThread(player, recordedDecision);
   return {
     feedback: { choiceId, text, kind, deltaLines },
     newActiveLeague,
@@ -3615,6 +3771,19 @@ function avg(values: number[]): number {
  * Trend VOR der Entscheidung (halbe Steigung) als Erwartungswert-Basis für den
  * tatsächlichen `perfImpact`.
  */
+/** Trend aus zwei Fenstern (jüngst vs. davor) ableiten - `null`/leere Fenster geben
+ * bewusst "stable" zurück (keine Über-Interpretation ohne genug Datenpunkte). Schwelle
+ * bewusst moderat (>4 Punkte auf der 0-100-`performanceScore`-Skala bzw. 4 Prozentpunkte
+ * Einsatzquote bzw. 3 Punkte Vereinsstärke), damit nicht jede Mikro-Schwankung schon
+ * als "Trend" gilt. */
+function trendFrom(recentAvg: number | null, priorAvg: number | null, threshold: number): NarrativeTrend {
+  if (recentAvg === null || priorAvg === null) return "stable";
+  const delta = recentAvg - priorAvg;
+  if (delta > threshold) return "rising";
+  if (delta < -threshold) return "falling";
+  return "stable";
+}
+
 export function computeCareerNarrativeState(player: Player): CareerNarrativeState {
   const hist = player.seasonHistory;
   const decisionImpacts: DecisionImpact[] = player.transferDecisions.map((d) => {
@@ -3632,20 +3801,75 @@ export function computeCareerNarrativeState(player: Player): CareerNarrativeStat
   });
 
   const withImpact = decisionImpacts.filter((d) => d.perfImpact !== null);
+  // Gewichtung berücksichtigt neben dem rohen Impact auch, ob die Entscheidung einen
+  // später ABGESCHLOSSENEN Thread ausgelöst hat (siehe `Player.narrativeHistory`,
+  // Vorgabe "TECHNISCHE VERANKERUNG" Abschnitt 17) - ein kurzfristig negativer
+  // Wechsel, der Saisons später zum Durchbruch führte, zählt mehr als ein kurzfristig
+  // positiver ohne erkennbare Nachwirkung.
   const definingDecision =
     withImpact.length > 0
-      ? withImpact.reduce((best, d) => (Math.abs(d.perfImpact!) > Math.abs(best.perfImpact!) ? d : best))
+      ? withImpact.reduce((best, d) => {
+          const dWeight = Math.abs(d.perfImpact!) * (threadOutcomeBoost(player, d.seasonHistoryIndex) ? 1.6 : 1);
+          const bestWeight = Math.abs(best.perfImpact!) * (threadOutcomeBoost(player, best.seasonHistoryIndex) ? 1.6 : 1);
+          return dWeight > bestWeight ? d : best;
+        })
       : null;
 
-  const ceilingBreaks = ATTRIBUTE_KEYS.filter((key) => player.attributes[key] > player.potential[key]).map((key) => ({
-    attribute: key,
-    overAmount: player.attributes[key] - player.potential[key],
-  }));
+  // Explizite Ceiling Breaks (siehe `Player.ceilingBreaks`) - NICHT mehr aus dem
+  // rohen Attribut-vs-Potential-Zustand abgeleitet (siehe Doc-Kommentar `CareerNarrativeState`).
+  const ceilingBreaks = player.ceilingBreaks;
 
   const peakOverall = hist.length > 0 ? Math.max(...hist.map((s) => s.overallRating)) : overallRating(player);
   const nationalTeamSnub = peakOverall >= 80 && player.nationalTeamCaps === 0;
 
-  return { decisionImpacts, definingDecision, ceilingBreaks, nationalTeamSnub, peakOverall };
+  // Trend-Fenster: jüngste (bis zu) 2 Saisons vs. die (bis zu) 3 Saisons davor.
+  const recentWindow = hist.slice(-2);
+  const priorWindow = hist.slice(Math.max(0, hist.length - 5), Math.max(0, hist.length - 2));
+  const recentPerf = recentWindow.length > 0 ? avg(recentWindow.map((s) => s.performanceScore)) : null;
+  const priorPerf = priorWindow.length > 0 ? avg(priorWindow.map((s) => s.performanceScore)) : null;
+  const recentPlaytime =
+    recentWindow.length > 0
+      ? avg(recentWindow.filter((s) => s.possibleMinutes > 0).map((s) => (s.minutesPlayed / s.possibleMinutes) * 100))
+      : null;
+  const priorPlaytime =
+    priorWindow.length > 0
+      ? avg(priorWindow.filter((s) => s.possibleMinutes > 0).map((s) => (s.minutesPlayed / s.possibleMinutes) * 100))
+      : null;
+  const recentClub = recentWindow.length > 0 ? avg(recentWindow.map((s) => s.overallRating)) : null;
+  const priorClub = priorWindow.length > 0 ? avg(priorWindow.map((s) => s.overallRating)) : null;
+
+  const performanceTrend = trendFrom(recentPerf, priorPerf, 4);
+  const playingTimeTrend = trendFrom(recentPlaytime, priorPlaytime, 4);
+  // Vereinsniveau-Trend nutzt bewusst dieselbe `overallRating`-Zeitreihe wie oben (kein
+  // separates Vereinsstärke-Tracking in `SeasonStats`) - als Näherung dafür, ob sich das
+  // eigene sportliche Niveau/Umfeld zuletzt spürbar verändert hat.
+  const clubLevelTrend = trendFrom(recentClub, priorClub, 3);
+
+  // Ausgang der ZULETZT abgeschlossenen Entscheidung (mit vorhandenem Nachher-Fenster).
+  const recentDecisionOutcome = [...withImpact].reverse().find((d) => hist.length - d.seasonHistoryIndex <= 3) ?? null;
+
+  return {
+    decisionImpacts,
+    definingDecision,
+    ceilingBreaks,
+    nationalTeamSnub,
+    peakOverall,
+    performanceTrend,
+    playingTimeTrend,
+    clubLevelTrend,
+    recentDecisionOutcome,
+    activeThread: player.activeNarrativeThread,
+  };
+}
+
+/** true, wenn die Entscheidung an `seasonHistoryIndex` einen Thread ausgelöst hat, der
+ * später mit `BREAKTHROUGH` in `Player.narrativeHistory` abgeschlossen wurde (siehe
+ * `advanceNarrativeThread`) - Hilfsfunktion für `computeCareerNarrativeState`s
+ * `definingDecision`-Gewichtung. */
+function threadOutcomeBoost(player: Player, seasonHistoryIndex: number): boolean {
+  return player.narrativeHistory.some(
+    (h) => h.type === "BIG_MOVE_BREAKTHROUGH" && Math.abs(h.season - seasonHistoryIndex) <= 4
+  );
 }
 
 /**

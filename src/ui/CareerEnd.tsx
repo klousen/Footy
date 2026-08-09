@@ -1,6 +1,7 @@
 import type { Achievement, Player, ScoreFactor } from "../engine/types";
 import { buildClubTenures, computeCareerNarrativeState, detectCareerPhenotype } from "../engine/careerEngine";
 import {
+  ATTRIBUTE_LABEL,
   CAREER_PHENOTYPE_DESCRIPTION,
   CAREER_PHENOTYPE_LABEL,
   formatMoney,
@@ -49,6 +50,19 @@ export function CareerEnd({
   // (siehe `computeCareerNarrativeState`/`detectCareerPhenotype` in careerEngine.ts).
   const narrativeState = computeCareerNarrativeState(player);
   const phenotype = detectCareerPhenotype(player);
+  // "Defining Moments" (siehe Vorgabe Abschnitt 27/18): kompakte, mit ECHTEN Daten
+  // belegte Liste - abgeschlossene Narrative-Threads (`player.narrativeHistory`) +
+  // explizite Ceiling Breaks (`player.ceilingBreaks`), chronologisch, auf 5 gedeckelt.
+  const definingMoments = [
+    ...player.narrativeHistory.map((h) => ({ season: h.season, age: h.age, label: h.label })),
+    ...player.ceilingBreaks.map((c) => ({
+      season: c.season,
+      age: c.age,
+      label: `Über das erwartete Limit hinaus (${ATTRIBUTE_LABEL[c.attribute]})`,
+    })),
+  ]
+    .sort((a, b) => a.season - b.season)
+    .slice(0, 5);
 
   return (
     <div className="screen career-end-screen">
@@ -83,6 +97,19 @@ export function CareerEnd({
               ? "die Leistung entwickelte sich danach spürbar besser als erwartet."
               : "die Leistung fiel danach spürbar hinter die eigene Erwartung zurück."}
           </p>
+        )}
+        {definingMoments.length > 0 && (
+          <>
+            <p className="defining-moments-heading">Prägende Momente</p>
+            <ol className="defining-moments-list">
+              {definingMoments.map((m, i) => (
+                <li key={i}>
+                  <span className="defining-moment-age">{m.age} J.</span>
+                  <span>{m.label}</span>
+                </li>
+              ))}
+            </ol>
+          </>
         )}
       </div>
 

@@ -48,11 +48,18 @@ function pickVariant<T>(ctx: { rng: () => number }, options: readonly T[]): T {
  * der Nationalelf (Ø ~62), 95+ einen ernsthaften Kandidaten für die 100-Cap-Marke
  * (Ø ~105) - "Wunderkind"-Bereich statt Standard-Verlauf.
  */
-function nationalTeamCallUpChance(overall: number, tier: 1 | 2, established: boolean): number {
+function nationalTeamCallUpChance(overall: number, tier: 1 | 2, established: boolean, candidacySeasons = 0): number {
   const base = clamp((overall - 52) / 42, 0.02, 0.97);
   const tierFactor = tier === 1 ? 1 : 0.3;
   const establishedBonus = established ? 0.15 : 0;
-  return clamp(base * tierFactor + establishedBonus, 0.02, 0.98);
+  // Snub-Streak-Bonus (siehe `Player.nationalTeamCandidacySeasons`, "CAREER NARRATIVE
+  // ... TECHNISCHE VERANKERUNG" Abschnitt 19/20): wächst mit jeder weiteren
+  // aufeinanderfolgenden "würdigen" Saison OHNE Berufung, gedeckelt bei +0.5 - ein
+  // dauerhaft verdienter Spieler bleibt so NICHT unbegrenzt vom reinen Zufall
+  // abhängig, ohne dass eine Berufung je auf 100% garantiert würde. Bei
+  // `candidacySeasons = 0` (Normalfall) exakt die vorherige, kalibrierte Formel.
+  const streakBonus = clamp(candidacySeasons * 0.06, 0, 0.5);
+  return clamp(base * tierFactor + establishedBonus + streakBonus, 0.02, 0.98);
 }
 
 // Frühestes typisches Heiratsalter, gekoppelt an Bildung: wer viel in Bildung
@@ -1113,8 +1120,14 @@ export const EVENT_TEMPLATES: EventTemplate[] = [
         if (!last || last.avgRating < 8 || overall < 68) return false;
       }
       const established = p.nationalTeamCaps >= 10;
-      return Math.random() < nationalTeamCallUpChance(overall, p.club.tier, established);
+      return Math.random() < nationalTeamCallUpChance(overall, p.club.tier, established, p.nationalTeamCandidacySeasons);
     },
+    // Zusätzlich zur steigenden Grundwahrscheinlichkeit (siehe `nationalTeamCallUpChance`)
+    // gewinnt das Event bei einer langen Kandidatur-Serie auch die gewichtete
+    // Saison-Auswahl deutlich häufiger (siehe `pickSeasonTemplateIds`) - sonst könnte
+    // ein an sich fälliger Spieler trotz erfüllter `condition` weiter im Eventpool
+    // untergehen. Bleibt bei `candidacySeasons = 0` neutral (Faktor 1).
+    dynamicWeight: (p) => 1 + clamp(p.nationalTeamCandidacySeasons * 0.5, 0, 6),
     build: (p, ctx) => {
       const isDebut = p.nationalTeamCaps === 0;
       const overall = overallRatingFromAttributes(p.attributes, p.position);
@@ -6589,6 +6602,9 @@ export const EVENT_TEMPLATES: EventTemplate[] = [
       const overall = overallRatingFromAttributes(p.attributes, p.position);
       return overall >= 75;
     },
+    // Wächst mit der Kandidatur-Serie (siehe `Player.nationalTeamCandidacySeasons`) -
+    // je länger der Snub andauert, desto präsenter wird der Frust darüber.
+    dynamicWeight: (p) => 1 + clamp(p.nationalTeamCandidacySeasons * 0.3, 0, 3),
     build: (p) => ({
       category: "nationalmannschaft",
       title: "Nie berufen",
@@ -6636,6 +6652,11 @@ export const EVENT_TEMPLATES: EventTemplate[] = [
       if (last.type !== "UPWARD_MOVE" && last.type !== "PRESTIGE_RISK_MOVE") return false;
       return p.contract.squadRole === "Rotation" || p.contract.squadRole === "Ergänzungsspieler" || p.contract.squadRole === "Ersatzbank";
     },
+    // Deutlich wahrscheinlicher, wenn der laufende `activeNarrativeThread` (siehe
+    // "TECHNISCHE VERANKERUNG" Abschnitt 7/12) den Wechsel bereits als STRUGGLE
+    // einordnet - dann passt das Event nicht nur formal, sondern zum tatsächlichen
+    // bisherigen Verlauf.
+    dynamicWeight: (p) => (p.activeNarrativeThread?.stage === "STRUGGLE" ? 3 : 1),
     build: (p) => ({
       category: "transfer",
       title: "Der Sprung ins kalte Wasser",
@@ -6661,6 +6682,60 @@ export const EVENT_TEMPLATES: EventTemplate[] = [
             traitDeltas: { fuehrung: 2 },
             logText: "fordert nach dem Wechsel offen mehr Einsatzzeit ein.",
             logKind: "negative",
+          },
+        },
+      ],
+    }),
+  },
+  {
+    // Positives Pendant zu "narrative_kaltes_wasser" (siehe "CAREER NARRATIVE ...
+    // TECHNISCHE VERANKERUNG" Abschnitt 5/17/18) - würdigt, wenn eine riskante/
+    // ambitionierte Entscheidung sich tatsächlich ausgezahlt hat: entweder mitten
+    // im Wiederaufbau nach einer schwierigen Anpassungsphase (`REBUILD`) oder kurz
+    // nach einem abgeschlossenen Durchbruch (`Player.narrativeHistory`).
+    id: "narrative_platz_gefunden",
+    category: "transfer",
+    minAge: 17,
+    maxAge: 37,
+    weight: 1.5,
+    unique: true,
+    condition: (p) => {
+      if (p.activeNarrativeThread?.stage === "REBUILD") return true;
+      const lastHistory = p.narrativeHistory[p.narrativeHistory.length - 1];
+      if (lastHistory?.type === "BIG_MOVE_BREAKTHROUGH" && p.seasonHistory.length - lastHistory.season <= 1) return true;
+      const last = p.transferDecisions[p.transferDecisions.length - 1];
+      if (!last) return false;
+      const recentEnough = p.seasonHistory.length - last.seasonHistoryIndex <= 2;
+      if (!recentEnough) return false;
+      if (last.type !== "DOWNWARD_MOVE" && last.type !== "PLAYING_TIME_MOVE") return false;
+      return p.contract.squadRole === "Stammspieler";
+    },
+    dynamicWeight: (p) => (p.activeNarrativeThread?.stage === "REBUILD" ? 3 : 1),
+    build: (p) => ({
+      category: "transfer",
+      title: "Du hast deinen Platz gefunden",
+      description: `Was zunächst wie ein Risiko wirkte, zahlt sich bei ${club(p)} jetzt spürbar aus - Einsatzzeit und Leistungen entwickeln sich klar in die richtige Richtung.`,
+      choices: [
+        {
+          id: "bestaetigen",
+          label: "Die neue Rolle bestätigen",
+          detail: "Konstanz statt Selbstzufriedenheit - weiter dranbleiben.",
+          effects: {
+            morale: 5,
+            clubRelation: 4,
+            traitDeltas: { arbeitsmoral: 1 },
+            logText: "bestätigt die neue Rolle mit weiteren starken Auftritten.",
+            logKind: "positive",
+          },
+        },
+        {
+          id: "genuss",
+          label: "Den Moment genießen",
+          detail: "Ein kurzer Moment des Durchatmens nach der harten Phase davor.",
+          effects: {
+            morale: 8,
+            logText: "genießt sichtlich, dass sich die Entscheidung ausgezahlt hat.",
+            logKind: "positive",
           },
         },
       ],
@@ -6716,19 +6791,89 @@ export const EVENT_TEMPLATES: EventTemplate[] = [
     }),
   },
   {
+    // Der eigentliche, EXPLIZITE Ceiling-Break-Auslöser (siehe "CAREER NARRATIVE ...
+    // TECHNISCHE VERANKERUNG" Abschnitt 20/24) - bewusst eng gefasst und zusätzlich
+    // über einen expliziten Zufallswurf in der Condition seltener gemacht (unabhängig
+    // von der Gewichtung im Eventpool): mindestens ein Attribut liegt bereits nah am
+    // eigenen Potential (die "Decke" ist spürbar erreicht), UND die letzte Saison war
+    // außergewöhnlich (`performanceScore`), UND die Zuverlässigkeit ist überdurch-
+    // schnittlich (`productionReliability`) - beides NUR lesend verwendet, keine
+    // Änderung an deren Formeln. Auf max. 2 Breaks pro Karriere begrenzt (siehe
+    // `Player.ceilingBreaks`), damit es ein seltener Ausnahmemoment bleibt, kein
+    // wiederholbarer Trick.
+    id: "ceiling_break_moment",
+    category: "meilenstein",
+    minAge: 17,
+    maxAge: 33,
+    weight: 1,
+    // Schwellen bewusst so kalibriert, dass der Break selten, aber über eine ganze
+    // Karriere hinweg tatsächlich ERLEBBAR bleibt (siehe Backtest: Ziel ~3-6% der
+    // Karrieren, nicht 1-in-mehreren-Tausend) - ein erster, deutlich strengerer
+    // Entwurf (Ø-Note 75+, Reliability 1.05+, Zufallswurf 12%) hätte laut Backtest
+    // faktisch nie ausgelöst.
+    condition: (p) => {
+      if (p.ceilingBreaks.length >= 2) return false;
+      const lastStats = p.seasonHistory[p.seasonHistory.length - 1];
+      if (!lastStats || lastStats.performanceScore < 68) return false;
+      if (p.productionReliability < 1.0) return false;
+      const nearCeiling = (Object.keys(p.attributes) as (keyof typeof p.attributes)[]).some(
+        (key) => p.potential[key] - p.attributes[key] <= 4 && p.potential[key] - p.attributes[key] >= 0
+      );
+      if (!nearCeiling) return false;
+      return Math.random() < 0.4;
+    },
+    build: (p, ctx) => {
+      // Das Attribut, das dem eigenen Potential aktuell am nächsten ist, bricht durch -
+      // bei mehreren gleich nahen wird zufällig unter ihnen gewählt.
+      const keys = Object.keys(p.attributes) as (keyof typeof p.attributes)[];
+      const candidates = keys.filter((key) => p.potential[key] - p.attributes[key] <= 4 && p.potential[key] - p.attributes[key] >= 0);
+      const breakKey = pickVariant(ctx, candidates.length > 0 ? candidates : keys);
+      const amount = rInt(ctx, 2, 4);
+      return {
+        category: "meilenstein",
+        title: "Über das erwartete Limit hinaus",
+        description: `${club(p)} und selbst neutrale Beobachter sind sich einig: In dieser Form spielt ${p.name} inzwischen über dem, was Scouts und Trainer für das Maximum gehalten hatten. Ein echter Ausreißer-Moment - nutzt du ihn, oder bleibst du auf Nummer sicher?`,
+        choices: [
+          {
+            id: "nutzen",
+            label: "Den Moment voll ausreizen",
+            detail: "Riskanter, aber die Chance auf einen echten Sprung über die eigenen Grenzen hinaus.",
+            effects: {
+              ceilingBreak: { [breakKey]: amount },
+              fitness: -6,
+              morale: 6,
+              logText: `hat einen außergewöhnlichen Moment voll ausgereizt und die eigenen Grenzen tatsächlich verschoben.`,
+              logKind: "milestone",
+            },
+          },
+          {
+            id: "sicher",
+            label: "Auf Nummer sicher gehen",
+            detail: "Kein Risiko - dafür bleibt die eigene Obergrenze unverändert.",
+            effects: {
+              clubRelation: 3,
+              traitDeltas: { disziplin: 2 },
+              logText: "bleibt trotz eines außergewöhnlichen Moments lieber auf Nummer sicher.",
+              logKind: "info",
+            },
+          },
+        ],
+      };
+    },
+  },
+  {
     id: "narrative_grenzen_gesprengt",
     category: "meilenstein",
     minAge: 16,
     maxAge: 40,
     weight: 1,
     unique: true,
-    // Mindestens ein Attribut liegt aktuell über dem eigentlichen `potential` (siehe
-    // `applyEffects`/`scaleDecisionAttributeDelta` in careerEngine.ts - Entscheidungs-
-    // Effekte deckeln nur bei 1-99, nicht am Potential) - ein seltener, bislang rein
-    // beiläufiger Nebeneffekt einzelner Entscheidungen, hier erstmals als eigener
-    // Moment gewürdigt statt unbemerkt zu bleiben.
-    condition: (p) =>
-      (Object.keys(p.attributes) as (keyof typeof p.attributes)[]).some((key) => p.attributes[key] > p.potential[key]),
+    // Reine REAKTION auf einen bereits erfolgten expliziten Ceiling Break (siehe
+    // "ceiling_break_moment" oben, `Player.ceilingBreaks`) - anders als vorher KEIN
+    // Vergleich mehr gegen den rohen Attribut-vs-Potential-Zustand (der ist seit
+    // `applyEffects`s Potential-Deckelung ohnehin nur noch nach einem echten
+    // Ceiling Break möglich).
+    condition: (p) => p.ceilingBreaks.length > 0,
     build: (p) => ({
       category: "meilenstein",
       title: "Über das erwartete Limit hinaus",
