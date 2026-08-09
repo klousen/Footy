@@ -180,14 +180,17 @@ export function SeasonSummary({
             {seasonNarrative.headline} <span className="muted narrative-momentum-headline-sub">- {seasonNarrative.text}</span>
           </p>
         )}
-        <ul className="score-factors">
+        <ul className="score-factors score-factors-detailed">
           {stats.scoreFactors.map((f, i) => (
             <li key={i}>
-              <span>{f.label}</span>
-              <span className={f.points >= 0 ? "factor-positive" : "factor-negative"}>
-                {f.points > 0 ? "+" : ""}
-                {f.points}
-              </span>
+              <div className="score-factor-main">
+                <span>{f.label}</span>
+                <span className={f.points >= 0 ? "factor-positive" : "factor-negative"}>
+                  {f.points > 0 ? "+" : ""}
+                  {f.points}
+                </span>
+              </div>
+              {f.detail && <span className="score-factor-detail">{f.detail}</span>}
             </li>
           ))}
         </ul>

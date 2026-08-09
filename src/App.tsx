@@ -35,7 +35,7 @@ import {
   summarizeEffects,
 } from "./engine/careerEngine";
 import { LOAN_DECISION_TEMPLATE_IDS } from "./engine/loanStory";
-import { VACATION_TEMPLATE_ID } from "./engine/events";
+import { UNDERDOG_CUP_TEMPLATE_ID, VACATION_TEMPLATE_ID } from "./engine/events";
 import { pickSpreadClubOffers } from "./engine/leagueEngine";
 import { TRANSFER_DECISION_MEANING } from "./ui/labels";
 import { StartScreen } from "./ui/StartScreen";
@@ -355,6 +355,11 @@ export default function App() {
     // Feedback NICHT `finishSeasonEvents` auslösen, sondern führt direkt
     // zurück ins Dashboard (dieselbe Weiche wie beim Rücktritts-Event).
     const isLoanFutureDecision = game.currentEvent.templateId === clubOfferTemplateId("loan-keep");
+    // Wie `isLoanFutureDecision`: ein erzwungenes Spezial-Event NACH der
+    // Saisonbilanz, kein Teil einer neuen laufenden Saison - darf nach dem
+    // Feedback NICHT `finishSeasonEvents` erneut auslösen (siehe
+    // `handleContinueFromSummary`).
+    const isUnderdogCupEvent = game.currentEvent.templateId === UNDERDOG_CUP_TEMPLATE_ID;
     const choiceId = game.feedback.choiceId;
     const player = game.player;
 
@@ -369,6 +374,15 @@ export default function App() {
 
     if (isLoanFutureDecision) {
       setGame({ ...game, player: { ...player }, currentEvent: null, feedback: null, screen: "dashboard" });
+      return;
+    }
+
+    if (isUnderdogCupEvent) {
+      if (shouldOfferRetirement(player)) {
+        setGame({ ...game, player: { ...player }, currentEvent: buildRetirementEvent(player), feedback: null });
+      } else {
+        setGame({ ...game, player: { ...player }, currentEvent: null, feedback: null, screen: "dashboard" });
+      }
       return;
     }
 
@@ -390,6 +404,15 @@ export default function App() {
     // Mechanismus wie beim Rücktritts-Angebot unten.
     if (game.player.loanNarrative) {
       setGame({ ...game, currentEvent: buildLoanFutureEvent(game.player), feedback: null, screen: "event" });
+      return;
+    }
+    // Außenseiter-Pokalsieg (siehe Bugreport + `UNDERDOG_CUP_TEMPLATE_ID` in
+    // events.ts): erzwungen als letztes Ereignis GENAU der Saison, deren
+    // Bilanz gerade angezeigt wurde (`game.lastSeasonStats`) - dieselbe
+    // "erzwungenes Spezial-Event"-Weiche wie beim Leihjahr/Rücktritt oben.
+    if (game.lastSeasonStats?.nationalCup?.champion && game.lastSeasonStats.nationalCup.underdog && game.leagueState) {
+      const cupEvent = buildEventFromId(UNDERDOG_CUP_TEMPLATE_ID, game.player, game.leagueState, game.foreignLeagues);
+      setGame({ ...game, currentEvent: cupEvent, feedback: null, screen: "event" });
       return;
     }
     if (shouldOfferRetirement(game.player)) {

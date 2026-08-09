@@ -9,6 +9,13 @@ import { LOAN_DECISIONS } from "./loanStory";
  * App.tsx nicht denselben String-Literal duplizieren muss. */
 export const VACATION_TEMPLATE_ID = "urlaub_sommerpause";
 
+/** Außenseiter-Pokalsieg-Event (siehe Template weiter unten) - wird NIE über die
+ * normale Gewichtungs-Auswahl gezogen, sondern von App.tsx `handleContinueFromSummary`
+ * explizit als letztes Ereignis GENAU DER Saison erzwungen, in der der Pokal
+ * tatsächlich gewonnen wurde (siehe dortiger Kommentar). Als Konstante exportiert,
+ * damit App.tsx nicht denselben String-Literal dupliziert. */
+export const UNDERDOG_CUP_TEMPLATE_ID = "landespokal_aussenseitersieg";
+
 // Hilfsfunktion für lesbaren Vereinsnamen im Text
 const club = (p: Player) => p.club.name;
 
@@ -104,14 +111,6 @@ function recentlyTransferred(p: Player): boolean {
 // sind zwei unterschiedliche, klar getrennte Auslöser.
 function lastEuropeanCup(p: Player) {
   return p.seasonHistory[p.seasonHistory.length - 1]?.europeanCup ?? null;
-}
-
-// Hilfsfunktion: nationales Pokal-Ergebnis der zuletzt abgeschlossenen Saison (siehe
-// `nationalCup.ts`/`SeasonStats.nationalCup`) - anders als `lastEuropeanCup` nie
-// `null` (jeder Liga-1-/Liga-2-Verein nimmt automatisch teil), daher direkt das
-// Ergebnisobjekt statt eines nullable Wrappers.
-function lastNationalCup(p: Player) {
-  return p.seasonHistory[p.seasonHistory.length - 1]?.nationalCup ?? null;
 }
 
 function europeanCompetitionName(competition: "CL" | "EL"): string {
@@ -6402,17 +6401,24 @@ export const EVENT_TEMPLATES: EventTemplate[] = [
   // `NationalCupResult.underdog`) - ein Titel als ohnehin favorisierter Topklub ist
   // bereits durch den Trophäen-Eintrag "Landespokal" selbst abgedeckt (Score/
   // Achievements/Sharepic), ohne dass es dafür noch ein eigenes Ereignis bräuchte.
+  //
+  // `storylineOnly: true` (siehe Bugreport): über die normale gewichtete
+  // Saisonauswahl (`pickSeasonTemplateIds`) gezogen, wäre dieses Event immer erst
+  // in der NÄCHSTEN Saison möglich (der Pokalsieg steht ja erst nach `simulateSeason`
+  // fest, die Event-Queue der laufenden Saison ist zu dem Zeitpunkt längst gebaut) -
+  // spürbar zu spät für einen Moment, der sich auf "gerade eben" bezieht. Wird
+  // deshalb wie das Leihjahr/Rücktrittsangebot NICHT gezogen, sondern von App.tsx
+  // `handleContinueFromSummary` explizit als letztes Ereignis GENAU DER Saison
+  // erzwungen, in der der Pokal tatsächlich gewonnen wurde (siehe
+  // `UNDERDOG_CUP_TEMPLATE_ID`).
   // ---------------------------------------------------------------------
   {
-    id: "landespokal_aussenseitersieg",
+    id: UNDERDOG_CUP_TEMPLATE_ID,
     category: "meilenstein",
     minAge: 17,
     maxAge: 40,
-    weight: 14,
-    condition: (p) => {
-      const cup = lastNationalCup(p);
-      return !!cup?.champion && cup.underdog;
-    },
+    weight: 0,
+    storylineOnly: true,
     build: (p) => ({
       category: "meilenstein",
       title: "Außenseiter-Sensation im Landespokal",

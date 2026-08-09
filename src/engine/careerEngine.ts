@@ -1518,7 +1518,7 @@ function scoreTierForScore(score: number): string {
  * entspricht, die die Rolle strukturell hergibt. Nur EINE Quelle der Wahrheit
  * für diese Zuordnung - siehe Kommentar bei `computeSeasonScore`.
  */
-const EXPECTED_PLAYTIME_RATIO_BY_ROLE: Record<SquadRole, number> = {
+export const EXPECTED_PLAYTIME_RATIO_BY_ROLE: Record<SquadRole, number> = {
   Stammspieler: 0.93,
   Rotation: 0.45,
   Ergänzungsspieler: 0.14,
@@ -1543,7 +1543,11 @@ function computeSeasonScore(input: {
   // Gewicht der individuellen Leistung inkl. Torbeteiligung/Abwehrarbeit, da diese
   // bereits vollständig in `avgRating` steckt. Gewicht bewusst erhöht (war: 26) -
   // die tatsächliche sportliche Leistung soll die Saisonwertung klar dominieren.
-  const ratingFactor = { label: "Sportliche Leistung (Ø Bewertung)", points: Math.round((input.avgRating - 6) * 32) };
+  const ratingFactor = {
+    label: "Sportliche Leistung (Ø Bewertung)",
+    points: Math.round((input.avgRating - 6) * 32),
+    detail: `Ø-Note ${input.avgRating.toFixed(1)} (Referenz: 6,0 = neutral)`,
+  };
 
   // Einsatzzeit: NICHT mehr gegen eine für alle Rollen gleiche 55%-Pauschalquote
   // gemessen (Bugreport/Designvorgabe: das bestrafte rechtmäßige Rotations-/
@@ -1561,16 +1565,28 @@ function computeSeasonScore(input: {
   const playTimeFactor = {
     label: "Einsatzzeit",
     points: clamp(Math.round((playTimeRatio - expectedPlayTimeRatio) * 90), -45, 25),
+    // Bewusst gegen die ROLLENERWARTUNG verglichen, nicht gegen die Vorsaison
+    // (siehe Kommentar oben) - der Vergleichswert wird hier explizit genannt,
+    // damit z.B. "88% Quote, aber trotzdem Minuspunkte" nachvollziehbar bleibt.
+    detail: `${Math.round(playTimeRatio * 100)}% Quote · erwartet als ${input.squadRole}: ~${Math.round(expectedPlayTimeRatio * 100)}%`,
   };
 
   const factors: ScoreFactor[] = [
     ratingFactor,
     playTimeFactor,
-    { label: "Titel", points: input.trophies.length * 50 },
-    { label: "Disziplin", points: -Math.round(input.yellowCards * 2 + input.redCards * 15) },
+    {
+      label: "Titel",
+      points: input.trophies.length * 50,
+      detail: input.trophies.length > 0 ? input.trophies.join(", ") : "keine Titel diese Saison",
+    },
+    {
+      label: "Disziplin",
+      points: -Math.round(input.yellowCards * 2 + input.redCards * 15),
+      detail: `${input.yellowCards}× Gelb${input.redCards > 0 ? `, ${input.redCards}× Rot` : ""}`,
+    },
   ];
   if (input.capsThisSeason > 0) {
-    factors.push({ label: "Länderspiele", points: input.capsThisSeason * 10 });
+    factors.push({ label: "Länderspiele", points: input.capsThisSeason * 10, detail: `${input.capsThisSeason} Einsätze` });
   }
 
   const score = factors.reduce((s, f) => s + f.points, 0);

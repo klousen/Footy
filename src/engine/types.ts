@@ -168,6 +168,11 @@ export type Traits = Record<TraitKey, number>;
 export interface ScoreFactor {
   label: string;
   points: number;
+  /** Optionale, kurze Erklärung, WIE sich `points` ergibt (z.B. Rohwert vs.
+   * Erwartungswert) - macht die Saison-/Legacy-Bilanz für sich verständlich,
+   * ohne dass Spielende die Formel dahinter kennen müssen (siehe Bugreport
+   * "hier ist total unklar was gemeint ist"). Wird NUR angezeigt, wenn gesetzt. */
+  detail?: string;
 }
 
 /** Ein zusammenhängender Zeitraum bei einem Verein - abgeleitet aus `seasonHistory`
