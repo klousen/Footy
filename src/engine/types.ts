@@ -272,6 +272,17 @@ export interface SeasonStats {
   /** Länderspiel-Einsätze in dieser Saison (Differenz zu `Player.capsAtSeasonStart`). */
   capsThisSeason: number;
   avgRating: number; // 1-10
+  /**
+   * Positionsabhängig normalisierte Leistungsbewertung dieser Saison (0-100,
+   * siehe `computeSeasonPerformanceScore` in careerEngine.ts) - im Unterschied zu
+   * `avgRating` (roher Notenschnitt) hier explizit die tatsächliche sportliche
+   * Leistung UNABHÄNGIG von Torbeteiligungen normalisiert: ein Innenverteidiger
+   * oder Torhüter kann über seine positionseigenen Metriken (verhinderte
+   * Großchancen bzw. Paradenquote/Gegentore) denselben Höchstwert erreichen wie
+   * ein Stürmer über Tore/Vorlagen. Grundlage für Peak-/Legacy-Berechnung, damit
+   * "wie groß war die Karriere" nicht strukturell Torschützen bevorzugt.
+   */
+  performanceScore: number;
   leaguePosition: number;
   trophies: string[];
   yellowCards: number;
@@ -521,6 +532,21 @@ export interface Player {
   /** Fraktionaler Wachstums-/Abbau-Rest je Attribut, der beim Runden auf ganze
    * Punkte übrig bleibt und in die nächste Saison mitgenommen wird (siehe `ageUpPlayer`). */
   growthCarry: Partial<Record<AttributeKey, number>>;
+  /**
+   * Verdeckter, bei der Charaktererstellung EINMAL gewürfelter und danach fester
+   * Multiplikator auf die altersabhängige Wachstumsrate (siehe `growthRate` in
+   * careerEngine.ts) - der zentrale Hebel dafür, dass die Potenzial-Ausschöpfung
+   * über viele Karrieren tatsächlich breit streut (Bust bis Overperformer) statt
+   * praktisch immer bei ~90-109% zu landen. Ein "Wunderkind" (siehe `createPlayer`)
+   * würfelt bevorzugt einen hohen Wert, ein Bust einen niedrigen - unabhängig vom
+   * Potenzial selbst, damit auch ein hohes Potenzial an einer schwachen Entwicklung
+   * scheitern kann und umgekehrt ein moderates Potenzial durch überdurchschnittliche
+   * Entwicklung außergewöhnlich ausgeschöpft werden kann. Bewusst NICHT über Events
+   * veränderbar (reine "wie schnell/zuverlässig entwickelt sich dieser Spieler
+   * biologisch"-Eigenschaft, kein Ergebnis von Spielerentscheidungen - die wirken
+   * weiterhin über Arbeitsmoral/Trainingsumfeld/Kaderrolle, siehe `ageUpPlayer`).
+   */
+  developmentTrajectory: number;
   morale: number; // 0-100
   fitness: number; // 0-100
   reputation: number; // 0-100 (Bekanntheit)

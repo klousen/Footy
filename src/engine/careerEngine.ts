@@ -76,6 +76,58 @@ function talentHint(potential: number): number {
   return clamp(Math.round((potential - 60) / 8), 0, 5);
 }
 
+/**
+ * Verdeckter Entwicklungs-Multiplikator (siehe `Player.developmentTrajectory`) -
+ * der zentrale Hebel für eine breite Ausschöpfungsverteilung (Bust bis
+ * außergewöhnlicher Overperformer), UNABHÄNGIG vom gewürfelten Potenzial selbst.
+ * Summe dreier Gleichverteilungen statt einer einzelnen (zentraler Grenzwertsatz)
+ * ergibt eine glockenförmige statt einer flachen Verteilung um die Mitte - die
+ * meisten Spieler entwickeln sich "normal", echte Ausreißer nach oben/unten
+ * bleiben selten, aber möglich.
+ *
+ * Ein Wunderkind bekommt NUR eine kleine garantierte Bodenerhöhung plus eine
+ * Chance (nicht Garantie!) auf einen deutlichen Zusatzschub - bewusst so, dass
+ * ein Wunderkind bei Pech in der Entwicklung trotzdem scheitern kann (siehe
+ * Vorgabe: "Ein Spieler mit 94 Potential kann scheitern").
+ */
+function rollDevelopmentTrajectory(wonderkind: boolean): number {
+  const avg = (rng() + rng() + rng()) / 3; // 0..1, glockenförmig um 0.5
+  // Mittelwert bewusst UNTER 1.0 (statt symmetrisch um 1.0) - das reine
+  // Wachstumsmodell (proportionales Annähern über ~16 Wachstums-Saisons, siehe
+  // `growthRate`/`ageUpPlayer`) konvergiert bei Trajektorie 1.0 in Kombination mit
+  // guter Kaderrolle (siehe dort) bereits sehr nah ans Potenzial - eine echte
+  // Streuung von Bust bis Overperformer braucht einen niedrigeren Mittelwert,
+  // kalibriert über `sim_engine_backtest.ts` (siehe dort für Zielverteilung).
+  let trajectory = 0.15 + avg * 0.85; // ~0.15 .. 1.0, Mittel ~0.58
+  if (wonderkind) {
+    trajectory += 0.1;
+    if (rng() < 0.55) trajectory += 0.2 + rng() * 0.25;
+  }
+  return clamp(trajectory, 0.12, 1.55);
+}
+
+/**
+ * Attribut-Profile ("Archetypen") - sorgen dafür, dass zwei Spieler mit
+ * identischem Start-OVR trotzdem unterschiedlich aussehen können (Techniker vs.
+ * Athlet vs. Spielmacher), statt dass die Attribute nur unabhängig um denselben
+ * Mittelwert streuen. Wirkt auf `potential` (voller Ausschlag) UND leicht
+ * abgeschwächt schon auf die Start-Attribute (frühe Anzeichen, siehe
+ * `createPlayer`) - "Allrounder" bleibt bewusst ungeskewt als vierte,
+ * gleichwahrscheinliche Option, damit nicht JEDER Spieler ein auffälliges
+ * Profil aufgezwungen bekommt.
+ */
+type AttributeArchetype = "techniker" | "athlet" | "spielmacher" | "allrounder";
+const ARCHETYPE_SKEW: Record<AttributeArchetype, Partial<Record<AttributeKey, number>>> = {
+  techniker: { technik: 8, intelligenz: 3, physis: -7, tempo: -1 },
+  athlet: { tempo: 8, physis: 8, technik: -7, intelligenz: -3 },
+  spielmacher: { mentalitaet: 7, intelligenz: 6, physis: -6, tempo: -2 },
+  allrounder: {},
+};
+function rollAttributeArchetype(): AttributeArchetype {
+  const pool: AttributeArchetype[] = ["techniker", "athlet", "spielmacher", "allrounder"];
+  return pool[Math.floor(rng() * pool.length)];
+}
+
 // ---------------------------------------------------------------------------
 // Spieler erstellen
 // ---------------------------------------------------------------------------
@@ -100,14 +152,32 @@ export function createPlayer(
   };
   potential[focusAttr] = clamp(potential[focusAttr] + 8, 0, 99);
 
+  // Attribut-Archetyp (siehe `ARCHETYPE_SKEW`): sorgt für unterschiedliche
+  // Profile bei gleichem Start-OVR (Techniker/Athlet/Spielmacher/Allrounder) -
+  // wirkt auf das Potenzial in voller Stärke, auf die Start-Attribute weiter
+  // unten nur leicht abgeschwächt (frühe Anzeichen, kein fertiges Profil mit 14).
+  const archetype = rollAttributeArchetype();
+  const archetypeSkew = ARCHETYPE_SKEW[archetype];
+  for (const key of ATTRIBUTE_KEYS) {
+    const skew = archetypeSkew[key];
+    if (skew) potential[key] = clamp(potential[key] + skew, 40, 99);
+  }
+
   // Seltener "Wunderkind"-Bonus: ein echtes Jahrhunderttalent, das eine
-  // realistische Chance auf eine absolute Top-Karriere mitbringt - macht "das
-  // Zeug zum Weltklasse-Spieler" spürbar wahrscheinlicher als bisher.
-  if (rng() < 0.08) {
+  // realistische Chance auf eine absolute Top-Karriere mitbringt. Bewusst
+  // KLEINER als früher (war: pauschal +6..12 auf ALLE Attribute) - ein
+  // Wunderkind soll sich vor allem über `developmentTrajectory` (siehe unten:
+  // schnellere/zuverlässigere Entwicklung, siehe `rollDevelopmentTrajectory`)
+  // von einem Standardtalent abheben, nicht schon am Tag 1 durch ein
+  // automatisch höheres Potenzial - "ein Wunderkind soll nicht automatisch
+  // Weltklasse werden".
+  const wonderkind = rng() < 0.08;
+  if (wonderkind) {
     for (const key of ATTRIBUTE_KEYS) {
-      potential[key] = clamp(potential[key] + randInt(6, 12), 0, 99);
+      potential[key] = clamp(potential[key] + randInt(3, 8), 0, 99);
     }
   }
+  const developmentTrajectory = rollDevelopmentTrajectory(wonderkind);
 
   // Start-Attribute: jeder Jungspieler würfelt unabhängig für jeden Wert (echte
   // Varianz von Spieler zu Spieler), plus ein bewusst kleiner, ans Potenzial
@@ -123,6 +193,13 @@ export function createPlayer(
     charisma: randInt(13, 24) + talentHint(potential.charisma),
   };
   base[focusAttr] += 8;
+  // Archetyp-Skew leicht abgeschwächt (Faktor ~0.4) auch auf die Start-Attribute -
+  // ein 14-jähriger Techniker zeigt schon erste technische Ansätze, ohne dass
+  // seine Physis jetzt schon komplett unterentwickelt wäre.
+  for (const key of ATTRIBUTE_KEYS) {
+    const skew = archetypeSkew[key];
+    if (skew) base[key] = clamp(Math.round(base[key] + skew * 0.4), 8, 40);
+  }
 
   const league = buildLeagueState(countryId, rng);
 
@@ -155,6 +232,7 @@ export function createPlayer(
       traitsAtSeasonStart: { arbeitsmoral: 50, disziplin: 50, medienimage: 50, fuehrung: 50 },
       potential,
       growthCarry: {},
+      developmentTrajectory,
       morale: 70,
       fitness: 90,
       reputation: 2,
@@ -972,6 +1050,17 @@ export function simulateSeason(
     6.0 + (overall - clubStrength) / 45 + form * 0.6 + disziplinFactor + relationshipFactor + productionFactor + slumpFactor;
   const avgRating = clamp(ratingBase + (rng() - 0.5) * 0.6, 3.5, 9.5);
 
+  // Positionsabhängig normalisierte Leistungsbewertung (0-100, siehe `SeasonStats.
+  // performanceScore`) - Grundlage für Peak-/Legacy-Berechnung, damit "wie groß war
+  // die Karriere" nicht nur über Tore/Vorlagen läuft. 50 = Liga-Durchschnitt, jeder
+  // Punkt Ø-Bewertung über/unter 6.0 zählt 10 Punkte, `productionFactor` (siehe oben -
+  // für JEDE Position gleich stark gewichtete, positionseigene Standout-Metrik:
+  // Tore/Vorlagen, verhinderte Großchancen, Ballgewinne/Schlüsselpässe oder
+  // Paradenquote/weiße Weste) gibt zusätzlich bis zu 22 Punkte oben drauf - ein
+  // Innenverteidiger mit Weltklasse-Zweikampfwerten kann so denselben Höchstwert
+  // erreichen wie ein Stürmer mit Weltklasse-Torquote.
+  const performanceScore = clamp(Math.round(50 + (avgRating - 6) * 10 + productionFactor * 20), 0, 100);
+
   // Niedrige Disziplin erhöht die Kartenwahrscheinlichkeit spürbar, hohe senkt sie
   const cardFactor = clamp(1.5 - player.traits.disziplin / 50, 0.5, 1.5);
   const yellowCards = Math.round(matches * 0.12 * (0.5 + rng()) * cardFactor);
@@ -1203,6 +1292,7 @@ export function simulateSeason(
     yellowCards,
     redCards,
     capsThisSeason,
+    squadRole: player.contract.squadRole,
   });
 
   const stats: SeasonStats = {
@@ -1226,6 +1316,7 @@ export function simulateSeason(
     progressiveActions,
     capsThisSeason,
     avgRating: Math.round(avgRating * 10) / 10,
+    performanceScore,
     leaguePosition,
     trophies,
     yellowCards,
@@ -1297,6 +1388,21 @@ function scoreTierForScore(score: number): string {
  * Score wert, und es gibt nur noch EINE Stelle (`productionFactor`), die bei künftigen
  * Balance-Anpassungen gepflegt werden muss statt zwei auseinanderlaufenden.
  */
+/**
+ * Für welche Einsatzquote eine gegebene Kaderrolle realistisch steht - dieselbe
+ * Rechnung wie `simulateSeason` (roleFactor × minutesPerMatchByRole/90), damit
+ * "Expected Playing Time" (siehe Vorgabe Abschnitt 15/17) exakt der Quote
+ * entspricht, die die Rolle strukturell hergibt. Nur EINE Quelle der Wahrheit
+ * für diese Zuordnung - siehe Kommentar bei `computeSeasonScore`.
+ */
+const EXPECTED_PLAYTIME_RATIO_BY_ROLE: Record<SquadRole, number> = {
+  Stammspieler: 0.93,
+  Rotation: 0.45,
+  Ergänzungsspieler: 0.14,
+  Ersatzbank: 0.05,
+  Ausbildungsspieler: 0.05,
+};
+
 function computeSeasonScore(input: {
   avgRating: number;
   trophies: string[];
@@ -1305,28 +1411,34 @@ function computeSeasonScore(input: {
   yellowCards: number;
   redCards: number;
   capsThisSeason: number;
+  squadRole: SquadRole;
 }): { score: number; tier: string; factors: ScoreFactor[] } {
   // Sportliche Leistung: bewusst UM DEN DURCHSCHNITT (6.0) ZENTRIERT statt einer
   // reinen Multiplikation - eine Ø-Bewertung von genau 6.0 (Mittelmaß) trägt damit
   // NICHTS zum Score bei, eine schwache Bewertung zieht ihn spürbar nach unten, eine
   // starke hebt ihn spürbar an. Trägt jetzt (siehe Kommentar oben) das gesamte
   // Gewicht der individuellen Leistung inkl. Torbeteiligung/Abwehrarbeit, da diese
-  // bereits vollständig in `avgRating` steckt.
-  const ratingFactor = { label: "Sportliche Leistung (Ø Bewertung)", points: Math.round((input.avgRating - 6) * 26) };
+  // bereits vollständig in `avgRating` steckt. Gewicht bewusst erhöht (war: 26) -
+  // die tatsächliche sportliche Leistung soll die Saisonwertung klar dominieren.
+  const ratingFactor = { label: "Sportliche Leistung (Ø Bewertung)", points: Math.round((input.avgRating - 6) * 32) };
 
-  // Einsatzzeit: wer kaum spielt, kann keine erfolgreiche Saison haben, egal wie gut
-  // die Bewertung in den wenigen Einsätzen war (Bugreport: eine Saison mit z.B. einem
-  // Kreuzbandriss und praktisch 0 Spielminuten wertete bislang wie eine normale
-  // Saison, weil `avgRating` unabhängig von der Einsatzzeit berechnet wird). Zentriert
-  // auf eine übliche Rotationsquote (~55%): eine annähernd volle Stammspieler-Saison
-  // gibt einen kleinen Bonus, ein verletzungs- oder bankbedingter Totalausfall
-  // (Einsatzquote nahe 0%) zieht den Score deutlich Richtung "Schwierige Saison" - OHNE
-  // eine gleichzeitig starke Bewertung in den tatsächlich bestrittenen Spielen (siehe
-  // `ratingFactor` oben, der davon unberührt bleibt) komplett zunichtezumachen: eine
-  // gelungene Rückkehr nach Verletzung mit starken Kurzeinsätzen bleibt erkennbar
-  // positiv, nur die verlorene Zeit selbst wird nicht mehr ignoriert.
+  // Einsatzzeit: NICHT mehr gegen eine für alle Rollen gleiche 55%-Pauschalquote
+  // gemessen (Bugreport/Designvorgabe: das bestrafte rechtmäßige Rotations-/
+  // Ergänzungsspieler strukturell, obwohl sie exakt die für ihre Rolle erwartbare
+  // Einsatzzeit bekommen), sondern gegen die für die AKTUELLE Kaderrolle plausible
+  // "Expected Playing Time" (siehe `EXPECTED_PLAYTIME_RATIO_BY_ROLE`) - ein
+  // Rotationsspieler mit rollentypischen ~45% Einsatzquote bekommt jetzt einen
+  // neutralen Faktor statt eines pauschalen Abzugs, ein NOMINELLER Stammspieler,
+  // der durch Verletzung/Vereinskonflikt trotzdem kaum spielt, bleibt weiterhin
+  // klar bestraft (großes Delta zur eigenen Rollenerwartung). Deutlich kleinere
+  // Skalierung/Kappung als zuvor, weil die verbleibende Differenz jetzt fast immer
+  // ein echtes Abweichungssignal ist (nicht mehr strukturelles Rollenrauschen).
   const playTimeRatio = input.possibleMinutes > 0 ? input.minutesPlayed / input.possibleMinutes : 1;
-  const playTimeFactor = { label: "Einsatzzeit", points: clamp(Math.round((playTimeRatio - 0.55) * 110), -70, 15) };
+  const expectedPlayTimeRatio = EXPECTED_PLAYTIME_RATIO_BY_ROLE[input.squadRole] ?? 0.45;
+  const playTimeFactor = {
+    label: "Einsatzzeit",
+    points: clamp(Math.round((playTimeRatio - expectedPlayTimeRatio) * 90), -45, 25),
+  };
 
   const factors: ScoreFactor[] = [
     ratingFactor,
@@ -1405,6 +1517,24 @@ function declineConditionMultiplier(player: Player): number {
   return physisFactor * injuryFactor;
 }
 
+/**
+ * Attribut-spezifischer Abbau-Multiplikator (zusätzlich zu `declineConditionMultiplier`,
+ * der nur die individuelle Robustheit abbildet) - körperliche Attribute (Tempo,
+ * Physis) bauen im Alter spürbar schneller ab als Erfahrung/Übersicht
+ * (Mentalität, Intelligenz), Technik liegt dazwischen (leicht rückläufig durch
+ * nachlassende Reaktionsschnelligkeit, aber deutlich stabiler als reine
+ * Athletik). Charisma/Image ist keine körperliche Fähigkeit und bleibt fast
+ * unberührt vom Alter.
+ */
+const ATTRIBUTE_DECLINE_MULTIPLIER: Record<AttributeKey, number> = {
+  tempo: 1.35,
+  physis: 1.2,
+  technik: 0.85,
+  mentalitaet: 0.55,
+  intelligenz: 0.6,
+  charisma: 0.75,
+};
+
 /** Kaderrolle der GERADE ABGELAUFENEN Saison (siehe `ageUpPlayer` - läuft vor dem
  * saisonalen Rollen-Update in `resolveClubSituation`, spiegelt also exakt die Rolle
  * wider, mit der tatsächlich gespielt wurde) wirkt sich direkt auf die
@@ -1449,6 +1579,24 @@ export function ageUpPlayer(player: Player): void {
   // Individuelle Robustheit (Physis + Verletzungshistorie, siehe dort) moduliert
   // die altersbedingte Abbaurate zusätzlich zur Kaderrolle.
   const conditionDeclineMultiplier = declineConditionMultiplier(player);
+  // Performance als Entwicklungssignal: eine deutlich über/unter dem Liga-
+  // Durchschnitt (50) liegende `performanceScore`-Saison beschleunigt bzw. bremst
+  // das Wachstum zusätzlich zur Kaderrolle - eine starke Saison MIT wenig
+  // Einsatzzeit zeigt sich schon in der Rolle (siehe oben), eine schwache Saison
+  // TROTZ Stammplatz soll trotzdem als Warnsignal wirken. Die "Performance
+  // Reliability" (wie belastbar ist ein einzelnes Saisonsignal) steigt mit dem
+  // Alter: mit 14/15 kann eine einzelne schwache Saison die Karriere nicht
+  // ausbremsen, ab ~21 zählt sie voll (siehe Vorgabe "Performance-Reliability").
+  const lastSeason = player.seasonHistory[player.seasonHistory.length - 1];
+  const performanceReliability = clamp((player.age - 15) / 6, 0.12, 1);
+  // Bewusst deutlich schwächer skaliert als ein erster Entwurf (war: ±0.6) - über
+  // viele Wachstums-Saisons hinweg summiert sich sonst ein systematischer
+  // Aufwärtsdrall (die Liga-Durchschnittsleistung `performanceScore` liegt in der
+  // Praxis eher leicht über 50, da Spieler tendenziell zu ungefähr passenden
+  // Vereinen finden), der die Trajektorie-Streuung (siehe oben) wieder verwässert.
+  const performanceGrowthMultiplier = lastSeason
+    ? clamp(1 + ((lastSeason.performanceScore - 50) / 100) * performanceReliability * 0.25, 0.88, 1.12)
+    : 1;
   const isBenchWarmer = player.contract.squadRole === "Ersatzbank";
   for (const key of ATTRIBUTE_KEYS) {
     const current = player.attributes[key];
@@ -1456,10 +1604,33 @@ export function ageUpPlayer(player: Player): void {
     let rawDelta: number;
     if (gRate > 0) {
       const room = potential - current;
-      rawDelta = gRate * room * workEthicMultiplier * trainingEnvironmentMultiplier * roleGrowthMultiplier * (0.7 + rng() * 0.6);
+      // `developmentTrajectory` (siehe dort) ist der zentrale Hebel für eine breite
+      // Potenzial-Ausschöpfungsverteilung über viele Karrieren - ein Spieler mit
+      // niedriger Trajektorie nähert sich seinem Potenzial spürbar langsamer an
+      // und kann so trotz hohem Potenzial ein Underperformer/Bust bleiben, ein
+      // Spieler mit hoher Trajektorie schöpft dasselbe Potenzial deutlich
+      // schneller/vollständiger aus (Overperformer-Fall). Das proportionale
+      // Wachstumsmodell (Annäherung an `room` über ~16 Wachstums-Saisons) ist
+      // stark kompensierend - über so viele Saisons gleichen sich lineare
+      // Trajektorie-Unterschiede sonst zu stark aus (siehe `sim_engine_backtest.ts`:
+      // eine rein lineare Anwendung führte selbst bei niedriger Trajektorie kaum zu
+      // echten Bust-Karrieren). Ein moderater Exponent (^1.6) verstärkt genau die
+      // UNTERE Hälfte der Verteilung zusätzlich, ohne überdurchschnittliche
+      // Trajektorien (nahe/über 1.0) nennenswert zu verändern.
+      const effectiveTrajectory = Math.pow(player.developmentTrajectory, 1.6);
+      rawDelta =
+        gRate *
+        room *
+        effectiveTrajectory *
+        workEthicMultiplier *
+        trainingEnvironmentMultiplier *
+        roleGrowthMultiplier *
+        performanceGrowthMultiplier *
+        (0.7 + rng() * 0.6);
       rawDelta = Math.max(0, rawDelta);
     } else if (dRate > 0) {
-      rawDelta = -dRate * current * roleDeclineMultiplier * conditionDeclineMultiplier * (0.7 + rng() * 0.6);
+      rawDelta =
+        -dRate * current * ATTRIBUTE_DECLINE_MULTIPLIER[key] * roleDeclineMultiplier * conditionDeclineMultiplier * (0.7 + rng() * 0.6);
     } else {
       rawDelta = 0;
     }
@@ -3154,44 +3325,96 @@ export function buildClubTenures(player: Player): ClubTenure[] {
 // spätcarriere-Events daran koppeln kann, ohne sie kurz vor Karriereende zu ziehen.
 export const shouldOfferRetirement = isNearRetirement;
 
+/**
+ * Titel-Gewichtung nach Wettbewerbsstufe (siehe Vorgabe Abschnitt 33) - ein
+ * Champions-Cup-Sieg muss deutlich mehr Legacy erzeugen als ein Landespokal.
+ * Individuelle Auszeichnungen (Torschützenkönig etc.) laufen bewusst NICHT hier
+ * mit ein - die boosten schon direkt `player.reputation` (siehe `simulateSeason`),
+ * fließen also über den Bekanntheits-Faktor unten ein, statt hier doppelt zu zählen.
+ */
+const TROPHY_LEGACY_POINTS: Record<string, number> = {
+  "Zweitliga-Meisterschaft": 90,
+  Landespokal: 105,
+  Meisterschale: 150,
+  "Europa Cup": 260,
+  "Champions Cup": 420,
+};
+
+/** Für den Legendary-Season-Bonus (siehe Vorgabe Abschnitt 38): nur die "großen"
+ * Wettbewerbstitel zählen, ein Landespokal allein macht noch keine legendäre Saison. */
+const LEGENDARY_SEASON_TROPHIES = new Set(["Meisterschale", "Europa Cup", "Champions Cup"]);
+
+/**
+ * Legacy-Score: bewertet die GESAMTE Karriere (siehe Vorgabe Abschnitt 31/39,
+ * Abgrenzung zu `computeSeasonScore`, das nur EINE Saison bewertet). Zielbild
+ * der Gewichtung (kalibriert über 1000+ simulierte Karrieren, siehe
+ * sim_legacy_*.ts): ~30% Karriere-/Peak-Performance, ~35% sportliche
+ * Erfolge/Output (Titel nach Wettbewerbsstufe + Tore/Vorlagen), ~13% Status
+ * (Bekanntheit + Nationalmannschaft), ~10% Vermögen (log-skaliert statt linear -
+ * siehe Bugreport: die alte lineare `wealth/5000`-Formel machte Vermögen zu
+ * knapp 57% des GESAMTEN Scores, weit vor jeder sportlichen Leistung), ~12%
+ * Karrieregeschichte/Soft Factors (Charakter, Vereinstreue, Verletzungshistorie,
+ * Familie). Diese Prozentsätze sind ein Zielbild, keine exakte Formel - die
+ * konkreten Konstanten unten wurden iterativ gegen die Simulation kalibriert.
+ */
 export function computeLegacy(player: Player): { score: number; tier: string; factors: ScoreFactor[] } {
   const t = player.careerTotals;
-  const avgRatingOverall =
-    player.seasonHistory.length > 0
-      ? player.seasonHistory.reduce((s, x) => s + x.avgRating, 0) / player.seasonHistory.length
-      : 6;
+  const history = player.seasonHistory;
+
+  // --- Sportliche Performance (Karriere-Ø + Peak, siehe Vorgabe Abschnitt 30) ---
+  const careerPerformanceAvg = history.length > 0 ? history.reduce((s, x) => s + x.performanceScore, 0) / history.length : 50;
+  const topSeasons = [...history].sort((a, b) => b.performanceScore - a.performanceScore).slice(0, 3);
+  const peakPerformanceAvg = topSeasons.length > 0 ? topSeasons.reduce((s, x) => s + x.performanceScore, 0) / topSeasons.length : 50;
+
+  // --- Titel nach Wettbewerbsstufe gewichtet (siehe `TROPHY_LEGACY_POINTS`) ---
+  const titlePoints = t.trophies.reduce((sum, trophy) => sum + (TROPHY_LEGACY_POINTS[trophy] ?? 0), 0);
+
+  // --- Legendary-Season-Bonus (Vorgabe Abschnitt 38): außergewöhnliche Saison-
+  // Performance (Top-15%-Bereich) KOMBINIERT mit einem großen Titel in derselben
+  // Saison - bewusst selten (braucht beides gleichzeitig) und mit festem, nicht
+  // weiter skalierendem Betrag, damit daraus keine neue dominante Punktquelle wird.
+  const legendarySeasons = history.filter((s) => s.performanceScore >= 85 && s.trophies.some((tr) => LEGENDARY_SEASON_TROPHIES.has(tr)));
+  const legendaryBonus = legendarySeasons.length * 60;
+
+  // --- Vermögen: log-skaliert statt linear (siehe Funktions-Kommentar oben) -
+  // zusätzliches Vermögen bleibt immer positiv, der Grenznutzen sinkt aber stark:
+  // 50 Mio. sind bei Weitem nicht doppelt so viel Legacy wert wie 5 Mio.
+  const wealthPoints = Math.round(40 * Math.log(1 + Math.max(0, player.wealth) / 100000));
 
   const factors: ScoreFactor[] = [
-    { label: "Tore", points: t.goals * 4 },
-    { label: "Vorlagen", points: Math.round(t.assists * 2.5) },
-    { label: "Titel", points: t.trophies.length * 40 },
-    { label: "Länderspiele", points: player.nationalTeamCaps * 6 },
-    { label: "Ø Bewertung Karriere", points: Math.round(avgRatingOverall * 25) },
-    { label: "Bekanntheit", points: player.reputation * 2 },
-    { label: "Vermögen", points: Math.round(player.wealth / 5000) },
+    { label: "Karriere-Performance", points: Math.round((careerPerformanceAvg - 50) * 18) },
+    { label: "Peak-Performance", points: Math.round((peakPerformanceAvg - 50) * 10) },
+    { label: "Titel", points: titlePoints },
+    { label: "Tore", points: Math.round(t.goals * 0.8) },
+    { label: "Vorlagen", points: Math.round(t.assists * 0.6) },
+    { label: "Bekanntheit", points: Math.round(player.reputation * 1.8) },
+    { label: "Nationalmannschaft", points: Math.round(player.nationalTeamCaps * 4 + player.nationalTeamGoals * 8) },
+    { label: "Vermögen", points: wealthPoints },
     // Gestaffelt statt einer harten 3-Stufen-Klippe: die allermeisten Karrieren
     // laufen realistisch über 3-4 Vereine, nicht nur einen einzigen - das zählt
     // hier bewusst noch als "treu" (spürbar positiv), statt neutral/bestraft zu
-    // werden. Erst ab 5+ Wechseln kippt der Faktor ins Negative, die alte harte
-    // Grenze von -20 bleibt als Untergrenze für echte Nomaden erhalten.
-    { label: "Vereinstreue", points: clamp(28 - player.clubChangesCount * 6, -20, 30) },
-    { label: "Familie", points: (player.relationshipStatus === "verheiratet" ? 10 : 0) + player.children * 5 },
-    { label: "Verletzungshistorie", points: player.totalInjuryWeeks >= 60 ? -30 : player.totalInjuryWeeks <= 10 ? 15 : 0 },
+    // werden. Erst ab 5+ Wechseln kippt der Faktor ins Negative.
+    { label: "Vereinstreue", points: clamp(50 - player.clubChangesCount * 10, -35, 55) },
+    { label: "Familie", points: (player.relationshipStatus === "verheiratet" ? 35 : 0) + player.children * 18 },
+    { label: "Verletzungshistorie", points: player.totalInjuryWeeks >= 60 ? -70 : player.totalInjuryWeeks <= 10 ? 40 : 0 },
     {
       label: "Charakter & Image",
       points: Math.round(
-        (player.traits.arbeitsmoral - 50 + (player.traits.disziplin - 50) + (player.traits.medienimage - 50) + (player.traits.fuehrung - 50)) / 2
+        1.6 * (player.traits.arbeitsmoral - 50 + (player.traits.disziplin - 50) + (player.traits.medienimage - 50) + (player.traits.fuehrung - 50))
       ),
     },
   ];
+  if (legendaryBonus > 0) {
+    factors.push({ label: "Legendäre Saison(s)", points: legendaryBonus });
+  }
 
   const score = Math.round(factors.reduce((s, f) => s + f.points, 0));
 
   let tier = "Vereinsspieler";
-  if (score >= 1600) tier = "Weltklasse-Legende";
-  else if (score >= 1000) tier = "Nationale Ikone";
-  else if (score >= 600) tier = "Publikumsliebling";
-  else if (score >= 300) tier = "Solider Profi";
+  if (score >= 1400) tier = "Weltklasse-Legende";
+  else if (score >= 850) tier = "Nationale Ikone";
+  else if (score >= 500) tier = "Publikumsliebling";
+  else if (score >= 220) tier = "Solider Profi";
 
   return { score, tier, factors };
 }

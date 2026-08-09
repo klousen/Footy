@@ -37,6 +37,10 @@ export function loadGame(): GameState | null {
       state.player.definingMoment ??= null;
       state.player.edeljokerLocked ??= false;
       state.player.formSlumpSeasons ??= 0;
+      // Ältere Spielstände kennen die Entwicklungstrajektorie noch nicht (siehe
+      // `Player.developmentTrajectory`) - 1.0 (neutral) als bestmögliche Annäherung,
+      // damit ein bereits laufender Spielstand nicht rückwirkend zum Bust/Wunderkind wird.
+      state.player.developmentTrajectory ??= 1.0;
       // Ältere Spielstände kennen das Heimatland noch nicht - als bestmögliche
       // Annäherung das aktuelle Land nehmen (nur relevant für künftige Rückkehr-Erkennung).
       state.player.homeCountryId ??= state.player.country;
@@ -50,6 +54,7 @@ export function loadGame(): GameState | null {
           minutesPlayed: s.minutesPlayed ?? 0,
           possibleMinutes: s.possibleMinutes ?? 0,
           capsThisSeason: s.capsThisSeason ?? 0,
+          performanceScore: s.performanceScore ?? s.avgRating * 10,
         }));
       }
     }
