@@ -107,6 +107,23 @@ function rollDevelopmentTrajectory(wonderkind: boolean): number {
 }
 
 /**
+ * Verdeckter Produktions-Zuverlässigkeits-Hebel (siehe `Player.productionReliability`) -
+ * BEWUSST über einen komplett eigenen, unabhängigen Zufallswurf ermittelt (keine
+ * Ableitung aus Potenzial/Trajektorie/Attributen), damit er strukturell NICHT mit
+ * der OVR-Entwicklung korreliert - genau das macht "hoher OVR, aber chronisch
+ * enttäuschende Leistung" bzw. "niedrigerer OVR, aber außergewöhnliche Leistung"
+ * erst möglich (siehe `productionFactor` in `simulateSeason`). Symmetrisch um 1.0
+ * (glockenförmig via Summe dreier Gleichverteilungen, wie `rollDevelopmentTrajectory`),
+ * da hier - anders als bei der Entwicklung - kein struktureller Grund für einen
+ * abweichenden Mittelwert besteht (Über- und Unterperformance sollen beide echte,
+ * nicht künstlich unterdrückte Ausschläge sein).
+ */
+function rollProductionReliability(): number {
+  const avg = (rng() + rng() + rng()) / 3; // 0..1, glockenförmig um 0.5
+  return clamp(0.4 + avg * 1.2, 0.4, 1.6); // ~0.4 .. 1.6, Mittel 1.0
+}
+
+/**
  * Attribut-Profile ("Archetypen") - sorgen dafür, dass zwei Spieler mit
  * identischem Start-OVR trotzdem unterschiedlich aussehen können (Techniker vs.
  * Athlet vs. Spielmacher), statt dass die Attribute nur unabhängig um denselben
@@ -178,6 +195,7 @@ export function createPlayer(
     }
   }
   const developmentTrajectory = rollDevelopmentTrajectory(wonderkind);
+  const productionReliability = rollProductionReliability();
 
   // Start-Attribute: jeder Jungspieler würfelt unabhängig für jeden Wert (echte
   // Varianz von Spieler zu Spieler), plus ein bewusst kleiner, ans Potenzial
@@ -233,6 +251,7 @@ export function createPlayer(
       potential,
       growthCarry: {},
       developmentTrajectory,
+      productionReliability,
       morale: 70,
       fitness: 90,
       reputation: 2,
@@ -1023,25 +1042,67 @@ export function simulateSeason(
       : 0;
   // Tore und Vorlagen fließen direkt in die Durchschnittsnote ein - wer pro Spiel
   // spürbar zum Torerfolg beiträgt, bekommt das auch in der Bewertung honoriert,
-  // nicht nur in der separaten Tore/Vorlagen-Statistik. Vorlagen zählen etwas
-  // weniger als Tore (0.7x), reine Nullen (v.a. Verteidiger) bekommen dadurch
-  // keinen Abzug - nur echte Scorer werden zusätzlich belohnt. Torhüter haben ihr
-  // eigenes Pendant (weiße Weste pro Spiel + Paradenquote statt Torbeteiligung),
-  // Verteidiger verhinderte Großchancen, Mittelfeld Ballgewinne/Schlüsselpässe
-  // (siehe `bigChancesPrevented`/`progressiveActions` oben, für die jeweilige
-  // Position ist immer nur EINE der beiden ungleich 0) - eine Innenverteidiger-
-  // oder Mittelfeld-Saison ohne ein einziges Tor kann trotzdem spürbar zur
-  // Durchschnittsnote beitragen, wenn die eigene Kernrolle stark ausgefüllt wurde.
-  // GLEICHES Gewicht wie `productionPerMatch` (nicht mehr abgeschwächt wie zuvor,
-  // Bugreport: Verteidiger/Mittelfeld erreichten die Bewertungs-Obergrenze selbst
-  // bei Bestleistung nie annähernd, Angreifer schon bei normaler Form) - eine
-  // Bestleistung in der eigenen Rolle soll unabhängig von der Position ungefähr
-  // gleich viel wert sein.
+  // nicht nur in der separaten Tore/Vorlagen-Statistik.
   const productionPerMatch = matches > 0 ? (goals + assists * 0.7) / matches : 0;
-  const secondaryActionsPerMatch = matches > 0 ? (bigChancesPrevented + progressiveActions) / matches : 0;
-  const productionFactor = isGoalkeeper
-    ? clamp((matches > 0 ? cleanSheets / matches : 0) * 2.1 + (savePercentage - 63) / 55 + penaltiesSaved * 0.05, 0, 1.1)
-    : clamp(productionPerMatch * 1.3 + secondaryActionsPerMatch * 1.1, 0, 1.1);
+  // Verteidiger verhinderte Großchancen, Mittelfeld Ballgewinne/Schlüsselpässe (siehe
+  // `bigChancesPrevented`/`progressiveActions` oben, für die jeweilige Position ist
+  // immer nur EINE der beiden ungleich 0).
+  const bigChancesPerMatch = matches > 0 ? bigChancesPrevented / matches : 0;
+  const progressiveActionsPerMatch = matches > 0 ? progressiveActions / matches : 0;
+
+  // Primär-/Sekundärkanal je Position (Bugreport: ZM bekam vorher STRUKTURELL zwei
+  // volle Produktionskanäle gleichzeitig - moderater `attackWeight` (0.55) UND die
+  // volle `progressiveActions`-Metrik -, während IV/AV/FS/ST jeweils nur einen
+  // einzigen nennenswerten Kanal hatten, siehe Diagnose-Backtest: ZM-Performance-
+  // Score lag spürbar über allen anderen Positionen). Jede Position bekommt jetzt
+  // GENAU EINEN vollgewichteten Primärkanal, passend zur eigentlichen Rolle, plus
+  // einen deutlich abgeschwächten Sekundärkanal - kein Doppelzählungs-Vorteil mehr.
+  // IV/AV: Defensivarbeit ist der Kern der Rolle, Torbeteiligung nur "nice to have".
+  // ZM: Ballgewinne/Schlüsselpässe sind der Kern (Spielgestaltung), Tore/Vorlagen nur
+  // ein Bonus obendrauf - NICHT mehr gleichgewichtig neben `progressiveActions`.
+  // FS/ST: unverändert reine Torbeteiligungs-Rolle (keine Zweitmetrik vorhanden).
+  let primaryPerMatch: number;
+  let secondaryPerMatch: number;
+  let secondaryWeight: number;
+  if (player.position === "IV") {
+    primaryPerMatch = bigChancesPerMatch;
+    secondaryPerMatch = productionPerMatch;
+    secondaryWeight = 0.25;
+  } else if (player.position === "AV") {
+    primaryPerMatch = bigChancesPerMatch;
+    secondaryPerMatch = productionPerMatch;
+    secondaryWeight = 0.45;
+  } else if (player.position === "ZM") {
+    primaryPerMatch = progressiveActionsPerMatch;
+    secondaryPerMatch = productionPerMatch;
+    secondaryWeight = 0.5;
+  } else {
+    // FS, ST (TW läuft über die eigene Formel unten)
+    primaryPerMatch = productionPerMatch;
+    secondaryPerMatch = 0;
+    secondaryWeight = 0;
+  }
+  // Erwartungswert (reliabilityUNabhängig, siehe `productionReliability` unten) -
+  // "was ein Spieler dieses Niveaus in dieser Rolle normalerweise produziert".
+  // Bleibt strukturell nicht-negativ (baut auf realen, nicht-negativen Zählgrößen
+  // auf) - das ist bewusst so, echte Unterperformance kommt NICHT aus einer
+  // künstlich negativen Erwartung, sondern aus der Abweichung davon (siehe unten).
+  const positionProductionRaw = isGoalkeeper
+    ? clamp((matches > 0 ? cleanSheets / matches : 0) * 2.1 + (savePercentage - 63) / 55 + penaltiesSaved * 0.05, -0.6, 1.1)
+    : clamp(primaryPerMatch * 1.3 + secondaryPerMatch * secondaryWeight, 0, 1.1);
+
+  // Produktions-Zuverlässigkeit (siehe `Player.productionReliability`, unabhängig
+  // von OVR/Potenzial/Trajektorie gewürfelt) - bei GENAU 1.0 (Bevölkerungs-
+  // mittelwert) ist dieser Shift 0, `productionFactor` bleibt also für den
+  // "typischen" Spieler exakt wie zuvor (keine Regression der bisherigen
+  // Kalibrierung). Erst eine deutlich abweichende Zuverlässigkeit verschiebt den
+  // Faktor spürbar - bei niedrigen Werten so weit, dass er auch bei ordentlichen
+  // rohen Zählgrößen INS NEGATIVE kippen kann: genau das ermöglicht einen hohen
+  // OVR bei chronisch enttäuschender Leistung (Actual Production bleibt hinter der
+  // Erwartung zurück), ohne die tatsächlich gezeigten Tore/Vorlagen/Zweikampfwerte
+  // künstlich gegen 0 zu drücken.
+  const reliabilityShift = (player.productionReliability - 1) * 1.7;
+  const productionFactor = clamp(positionProductionRaw + reliabilityShift, -1.1, 1.1);
   // "Sommermärchen-Delle" (siehe "sommermaerchen_delle_1"): ein spürbarer, aber
   // vorübergehender Leistungsdämpfer nach einem großen Erfolgshöhepunkt - klingt
   // über die Saisons ab (siehe `ageUpPlayer`), statt die Karriere dauerhaft zu prägen.
@@ -1053,12 +1114,11 @@ export function simulateSeason(
   // Positionsabhängig normalisierte Leistungsbewertung (0-100, siehe `SeasonStats.
   // performanceScore`) - Grundlage für Peak-/Legacy-Berechnung, damit "wie groß war
   // die Karriere" nicht nur über Tore/Vorlagen läuft. 50 = Liga-Durchschnitt, jeder
-  // Punkt Ø-Bewertung über/unter 6.0 zählt 10 Punkte, `productionFactor` (siehe oben -
-  // für JEDE Position gleich stark gewichtete, positionseigene Standout-Metrik:
-  // Tore/Vorlagen, verhinderte Großchancen, Ballgewinne/Schlüsselpässe oder
-  // Paradenquote/weiße Weste) gibt zusätzlich bis zu 22 Punkte oben drauf - ein
-  // Innenverteidiger mit Weltklasse-Zweikampfwerten kann so denselben Höchstwert
-  // erreichen wie ein Stürmer mit Weltklasse-Torquote.
+  // Punkt Ø-Bewertung über/unter 6.0 zählt 10 Punkte, `productionFactor` (siehe oben)
+  // bis zu ±22 Punkte oben drauf bzw. abgezogen - ein Innenverteidiger mit
+  // Weltklasse-Zweikampfwerten kann so denselben Höchstwert erreichen wie ein
+  // Stürmer mit Weltklasse-Torquote, UND ein Spieler mit hohem OVR, aber niedriger
+  // `productionReliability`, kann trotz ordentlicher Rohwerte spürbar unter 50 fallen.
   const performanceScore = clamp(Math.round(50 + (avgRating - 6) * 10 + productionFactor * 20), 0, 100);
 
   // Niedrige Disziplin erhöht die Kartenwahrscheinlichkeit spürbar, hohe senkt sie

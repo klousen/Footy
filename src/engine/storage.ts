@@ -41,6 +41,9 @@ export function loadGame(): GameState | null {
       // `Player.developmentTrajectory`) - 1.0 (neutral) als bestmögliche Annäherung,
       // damit ein bereits laufender Spielstand nicht rückwirkend zum Bust/Wunderkind wird.
       state.player.developmentTrajectory ??= 1.0;
+      // Ältere Spielstände kennen die Produktions-Zuverlässigkeit noch nicht (siehe
+      // `Player.productionReliability`) - 1.0 (neutral) als bestmögliche Annäherung.
+      state.player.productionReliability ??= 1.0;
       // Ältere Spielstände kennen das Heimatland noch nicht - als bestmögliche
       // Annäherung das aktuelle Land nehmen (nur relevant für künftige Rückkehr-Erkennung).
       state.player.homeCountryId ??= state.player.country;

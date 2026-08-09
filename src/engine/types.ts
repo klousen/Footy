@@ -547,6 +547,18 @@ export interface Player {
    * weiterhin über Arbeitsmoral/Trainingsumfeld/Kaderrolle, siehe `ageUpPlayer`).
    */
   developmentTrajectory: number;
+  /**
+   * Verdeckter, bei der Charaktererstellung EINMAL gewürfelter und danach fester
+   * Multiplikator/Verschiebungshebel auf die tatsächliche Matchproduktion (siehe
+   * `productionFactor` in careerEngine.ts) - BEWUSST unabhängig von OVR, Potenzial
+   * und `developmentTrajectory` gewürfelt (eigener, unkorrelierter Zufallswurf).
+   * Der Hebel dafür, dass ein hoher OVR über mehrere Saisons hinweg trotzdem
+   * chronisch unter den Erwartungen bleiben kann (niedriger Wert) bzw. ein
+   * niedrigerer OVR dauerhaft über Erwarten liefert (hoher Wert) - siehe Vorgabe
+   * "OVR und Performance NICHT koppeln". Wirkt NICHT auf Attributwachstum/OVR
+   * selbst (dort weiterhin nur `developmentTrajectory`, siehe `ageUpPlayer`).
+   */
+  productionReliability: number;
   morale: number; // 0-100
   fitness: number; // 0-100
   reputation: number; // 0-100 (Bekanntheit)
