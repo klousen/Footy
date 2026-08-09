@@ -246,8 +246,17 @@ export function describeSeasonNarrative(stats: SeasonStats, state: CareerNarrati
   if (state.activeThread?.stage === "REBUILD") {
     return { headline: "Zurück auf dem Platz", text: "Nach wenig Einsatzzeit hast du dir wieder eine größere Rolle erarbeitet." };
   }
-  if (stats.performanceScore - stats.overallRating > 15) {
-    return { headline: "Mehr als erwartet", text: "Deine Leistungen lagen deutlich über dem Niveau, das deine Gesamtstärke vermuten ließ." };
+  // WICHTIG: `performanceScore` (siehe careerEngine.ts `simulateSeason`) ist bereits
+  // eine eigenständige, um 50 zentrierte Skala (avgRating + productionFactor,
+  // bewusst UNABHÄNGIG vom OVR normalisiert - siehe dortiger Kommentar: ein 45er-
+  // und ein 90er-Spieler erreichen bei gleich guter Leistung denselben Wert). Ein
+  // Vergleich `performanceScore - overallRating` (frühere Version) war daher
+  // strukturell irreführend: praktisch JEDER junge/niedrig bewertete Spieler mit
+  // einer nur durchschnittlichen Saison hätte hier fälschlich "übertroffen"
+  // gemeldet, weil `performanceScore` fast immer deutlich über einem niedrigen OVR
+  // liegt. Richtig ist der Vergleich GEGEN DIE EIGENE 50er-Neutrallinie der Skala.
+  if (stats.performanceScore >= 72 && state.performanceTrend !== "falling") {
+    return { headline: "Mehr als erwartet", text: "Deine Leistungen lagen deutlich über dem Ligadurchschnitt für deine Rolle." };
   }
   if (state.performanceTrend === "rising" && player.age >= 27) {
     return { headline: "Späte Entwicklung", text: "Deine Entwicklung hat zuletzt noch einmal deutlich an Fahrt gewonnen." };
