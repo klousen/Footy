@@ -173,7 +173,17 @@ export function SeasonSummary({
       <div className="panel">
         <div className="score-header">
           <h3>Saison-Bilanz</h3>
-          <span className="score-badge">{stats.score} Pkt. · {stats.scoreTier}</span>
+          {/* Tier zuerst (der eigentlich verständliche Teil - Punktzahl allein hat
+              keinen erkennbaren Referenzrahmen), Punktzahl nur noch als kleine,
+              abgesetzte Zusatzangabe für alle, die die Rohzahl sehen wollen. Siehe
+              Bugreport "OVR Score 64 ... Saisonbilanz 62 Pkt ... das ist verwirrend" -
+              zwei gleich große Zahlen direkt nebeneinander lasen sich wie zwei
+              konkurrierende Urteile, obwohl nur eines (OVR) wirklich für sich
+              stehen kann. */}
+          <span className="score-badge">
+            {stats.scoreTier}
+            <span className="score-badge-points"> · {stats.score} Pkt.</span>
+          </span>
         </div>
         {seasonNarrative && (
           <p className="narrative-momentum-headline">

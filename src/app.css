@@ -1209,6 +1209,11 @@ input:focus {
   margin: 0;
 }
 
+.score-badge-points {
+  font-weight: 400;
+  opacity: 0.7;
+}
+
 .score-badge {
   font-size: 0.75rem;
   font-weight: 600;
