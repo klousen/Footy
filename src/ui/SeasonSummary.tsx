@@ -1,10 +1,108 @@
-import type { LoanNarrativeState, Player, SeasonStats } from "../engine/types";
+import type { LoanNarrativeState, NarrativeTrend, Player, SeasonStats } from "../engine/types";
 import { overallRatingFromAttributes } from "../engine/types";
 import { computeCareerNarrativeState, overallRating } from "../engine/careerEngine";
 import { computeLoanSummaryTier } from "../engine/loanStory";
 import { describeSeasonNarrative, formatMoney, overallTier, turningPointForSeason, TREND_LABEL } from "./labels";
 import { LeagueTableSnapshot } from "./LeagueTableSnapshot";
 import { StatBox } from "./StatBox";
+
+// Sparkline-Geometrie (siehe footy-karriere-mockup.html ".spark-svg", viewBox
+// "0 0 200 30") - fixe Innenabstände, damit die Start-/End-Kreise (r=2.5) am
+// Rand nicht abgeschnitten werden.
+const SPARK_X0 = 4;
+const SPARK_X1 = 196;
+const SPARK_Y_TOP = 4;
+const SPARK_Y_BOTTOM = 26;
+
+/** Baut die Punkte einer Mehrjahres-Sparkline aus den rohen Werten - bewusst
+ * PRO METRIK lokal auf min/max normalisiert (nicht auf eine feste absolute
+ * Skala), damit auch kleine reale Schwankungen (z.B. Gesamtstärke 62→64)
+ * sichtbar bleiben, statt in einer riesigen theoretischen Spannweite
+ * unterzugehen. Bei identischen Werten (max===min) ergibt sich eine flache
+ * Linie in der Mitte statt einer Division durch 0. */
+function buildSparkline(values: number[]): { points: string; start: [number, number]; end: [number, number] } {
+  const n = values.length;
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  const span = max - min;
+  const coords: [number, number][] = values.map((v, i) => {
+    const x = n > 1 ? SPARK_X0 + ((SPARK_X1 - SPARK_X0) * i) / (n - 1) : (SPARK_X0 + SPARK_X1) / 2;
+    const norm = span > 0 ? (v - min) / span : 0.5;
+    const y = SPARK_Y_BOTTOM - norm * (SPARK_Y_BOTTOM - SPARK_Y_TOP);
+    return [x, y];
+  });
+  return {
+    points: coords.map(([x, y]) => `${x.toFixed(1)},${y.toFixed(1)}`).join(" "),
+    start: coords[0],
+    end: coords[coords.length - 1],
+  };
+}
+
+const TREND_COLOR: Record<NarrativeTrend, string> = {
+  rising: "var(--green)",
+  falling: "#D98080",
+  stable: "var(--gold-bright)",
+};
+
+const TREND_PILL_CLASS: Record<NarrativeTrend, string> = {
+  rising: "pos",
+  falling: "neg",
+  stable: "zero",
+};
+
+/** Ein Verlaufsblock (Performance/Einsatzzeit/Gesamtstärke) im Saison-Bilanz-
+ * Panel - Kopfzeile (Name + Skalen-Hinweis + Trend-Pill), echte Sparkline
+ * statt Pfeil-Kette, Einzelwerte klein darunter. Siehe Bugreports "Das ist
+ * intransparent" (Werte ohne Einordnung) und die Design-Vorgabe
+ * "Positions-Badge & Saison-Bilanz" (einheitliche Trend-Darstellung). */
+function TrendBlock({
+  label,
+  hint,
+  trend,
+  values,
+  suffix = "",
+}: {
+  label: string;
+  hint: string;
+  trend: NarrativeTrend;
+  values: number[];
+  suffix?: string;
+}) {
+  const spark = buildSparkline(values);
+  const color = TREND_COLOR[trend];
+  return (
+    <div className="trend-block">
+      <div className="trend-head">
+        <div>
+          <span className="n">{label}</span> <span className="hint">{hint}</span>
+        </div>
+        <span className={`trend-pill ${TREND_PILL_CLASS[trend]}`}>{TREND_LABEL[trend]}</span>
+      </div>
+      <div className="spark-row">
+        <svg className="spark-svg" viewBox="0 0 200 30" preserveAspectRatio="none">
+          <polyline
+            points={spark.points}
+            fill="none"
+            stroke={color}
+            strokeWidth="2"
+            strokeLinecap="round"
+            vectorEffect="non-scaling-stroke"
+          />
+          <circle cx={spark.start[0]} cy={spark.start[1]} r="2.5" fill={color} />
+          <circle cx={spark.end[0]} cy={spark.end[1]} r="2.5" fill={color} />
+        </svg>
+      </div>
+      <div className="spark-vals">
+        {values.map((v, i) => (
+          <span key={i}>
+            {v}
+            {suffix}
+          </span>
+        ))}
+      </div>
+    </div>
+  );
+}
 
 export function SeasonSummary({
   stats,
@@ -49,7 +147,7 @@ export function SeasonSummary({
     <div className="screen summary-screen">
       <h2>{stats.seasonLabel} - Rückblick</h2>
       <p className="muted">
-        {player.name} bei {stats.club} ({stats.leagueName})
+        {player.name} <span className="pos-badge">{player.position}</span> bei {stats.club} ({stats.leagueName})
       </p>
 
       {turningPoint && (
@@ -186,59 +284,49 @@ export function SeasonSummary({
           </span>
         </div>
         {seasonNarrative && (
-          <p className="narrative-momentum-headline">
-            {seasonNarrative.headline} <span className="muted narrative-momentum-headline-sub">- {seasonNarrative.text}</span>
+          <p className="bilanz-lead">
+            <b>{seasonNarrative.headline}</b> — {seasonNarrative.text}
           </p>
         )}
-        <ul className="score-factors score-factors-detailed">
+        <div className="bfactor-list">
           {stats.scoreFactors.map((f, i) => (
-            <li key={i}>
-              <div className="score-factor-main">
-                <span>{f.label}</span>
-                <span className={f.points >= 0 ? "factor-positive" : "factor-negative"}>
-                  {f.points > 0 ? "+" : ""}
-                  {f.points}
-                </span>
+            <div className="bfactor-row" key={i}>
+              <div>
+                <div className="n">{f.label}</div>
+                {f.detail && <div className="sub">{f.detail}</div>}
               </div>
-              {f.detail && <span className="score-factor-detail">{f.detail}</span>}
-            </li>
-          ))}
-        </ul>
-        {recentTrendSeasons.length >= 3 && (
-          <div className="season-trend-lines">
-            <p className="trend-lines-heading muted">
-              Verlauf · Alter {recentTrendSeasons[0].age}–{recentTrendSeasons[recentTrendSeasons.length - 1].age}
-            </p>
-            <div className="trend-line">
-              <div className="trend-line-head">
-                <span>
-                  Performance <span className="trend-line-hint">(0-100 · 50 = Liga-Schnitt für deine Rolle)</span>
-                </span>
-                <span className={`trend-badge trend-badge-${narrativeState.performanceTrend}`}>{TREND_LABEL[narrativeState.performanceTrend]}</span>
-              </div>
-              <span className="trend-line-values">{recentTrendSeasons.map((s) => Math.round(s.performanceScore)).join(" → ")}</span>
-            </div>
-            <div className="trend-line">
-              <div className="trend-line-head">
-                <span>
-                  Einsatzzeit <span className="trend-line-hint">(Anteil deiner Teamminuten)</span>
-                </span>
-                <span className={`trend-badge trend-badge-${narrativeState.playingTimeTrend}`}>{TREND_LABEL[narrativeState.playingTimeTrend]}</span>
-              </div>
-              <span className="trend-line-values">
-                {recentTrendSeasons.map((s) => `${Math.round((s.possibleMinutes > 0 ? s.minutesPlayed / s.possibleMinutes : 0) * 100)}%`).join(" → ")}
+              <span className={`delta ${f.points > 0 ? "pos" : f.points < 0 ? "neg" : "zero"}`}>
+                {f.points > 0 ? "+" : ""}
+                {f.points}
               </span>
             </div>
-            <div className="trend-line">
-              <div className="trend-line-head">
-                <span>
-                  Gesamtstärke <span className="trend-line-hint">(Skill-Rating 1-99)</span>
-                </span>
-                <span className={`trend-badge trend-badge-${narrativeState.clubLevelTrend}`}>{TREND_LABEL[narrativeState.clubLevelTrend]}</span>
-              </div>
-              <span className="trend-line-values">{recentTrendSeasons.map((s) => s.overallRating).join(" → ")}</span>
+          ))}
+        </div>
+        {recentTrendSeasons.length >= 3 && (
+          <>
+            <div className="trend-section-label">
+              Verlauf · Alter {recentTrendSeasons[0].age}–{recentTrendSeasons[recentTrendSeasons.length - 1].age}
             </div>
-          </div>
+            <TrendBlock
+              label="Performance"
+              hint="(0-100 · 50 = Liga-Schnitt für deine Rolle)"
+              trend={narrativeState.performanceTrend}
+              values={recentTrendSeasons.map((s) => Math.round(s.performanceScore))}
+            />
+            <TrendBlock
+              label="Einsatzzeit"
+              hint="(Anteil deiner Teamminuten)"
+              trend={narrativeState.playingTimeTrend}
+              values={recentTrendSeasons.map((s) => Math.round((s.possibleMinutes > 0 ? s.minutesPlayed / s.possibleMinutes : 0) * 100))}
+              suffix="%"
+            />
+            <TrendBlock
+              label="Gesamtstärke"
+              hint="(Skill-Rating 1-99)"
+              trend={narrativeState.clubLevelTrend}
+              values={recentTrendSeasons.map((s) => s.overallRating)}
+            />
+          </>
         )}
       </div>
 

@@ -1242,23 +1242,6 @@ input:focus {
   padding-bottom: 6px;
 }
 
-.score-factors-detailed li {
-  display: flex;
-  flex-direction: column;
-  align-items: stretch;
-  gap: 2px;
-}
-
-.score-factor-main {
-  display: flex;
-  justify-content: space-between;
-}
-
-.score-factor-detail {
-  font-size: 0.76rem;
-  color: var(--muted);
-}
-
 .score-factors li:last-child {
   border-bottom: none;
   padding-bottom: 0;
@@ -1276,6 +1259,154 @@ input:focus {
   font-family: var(--font-mono);
   font-weight: 600;
   font-variant-numeric: tabular-nums;
+}
+
+/* ---------------- Saison-Bilanz v2 (einheitliche Faktoren + Trends) ----------------
+   Siehe Design-Vorgabe "Positions-Badge & Saison-Bilanz" / footy-karriere-mockup.html
+   ".bfactor-row"/".trend-*"/".spark-*" - ersetzt die reinen Pfeil-Ketten
+   ("71 → 71 → 77 → 76") durch echte Sparklines + Trend-Pills. */
+
+.bilanz-lead {
+  font-size: 0.78rem;
+  line-height: 1.55;
+  color: var(--muted);
+  margin: 0 0 10px;
+}
+
+.bilanz-lead b {
+  color: var(--gold-bright);
+  font-weight: 700;
+}
+
+.bfactor-list {
+  display: flex;
+  flex-direction: column;
+}
+
+.bfactor-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.bfactor-row:last-of-type {
+  border-bottom: none;
+}
+
+.bfactor-row .n {
+  font-size: 0.81rem;
+  color: var(--text);
+}
+
+.bfactor-row .sub {
+  font-size: 0.66rem;
+  color: var(--muted);
+  margin-top: 1px;
+}
+
+.bfactor-row .delta {
+  font-family: var(--font-mono);
+  font-weight: 700;
+  font-size: 1rem;
+  flex: none;
+  margin-left: 10px;
+}
+
+.bfactor-row .delta.pos {
+  color: var(--green);
+}
+
+.bfactor-row .delta.neg {
+  color: #d98080;
+}
+
+.bfactor-row .delta.zero {
+  color: var(--muted);
+}
+
+.trend-section-label {
+  font-family: var(--font-display);
+  font-size: 0.75rem;
+  letter-spacing: 0.1em;
+  color: var(--gold-bright);
+  text-transform: uppercase;
+  font-weight: 700;
+  margin: 12px 0 10px;
+  border-top: 1px solid var(--line);
+  padding-top: 12px;
+}
+
+.trend-block {
+  margin-bottom: 6px;
+}
+
+.trend-block:last-child {
+  margin-bottom: 0;
+}
+
+.trend-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 4px;
+}
+
+.trend-head .n {
+  font-size: 0.78rem;
+  color: var(--text);
+}
+
+.trend-head .hint {
+  font-size: 0.63rem;
+  color: var(--muted);
+}
+
+.trend-pill {
+  font-family: var(--font-mono);
+  font-weight: 600;
+  font-size: 0.69rem;
+  padding: 1px 8px;
+  border-radius: 10px;
+  flex: none;
+  white-space: nowrap;
+}
+
+.trend-pill.pos {
+  color: var(--green);
+  background: rgba(78, 158, 110, 0.15);
+}
+
+.trend-pill.neg {
+  color: #d98080;
+  background: rgba(139, 58, 58, 0.18);
+}
+
+.trend-pill.zero {
+  color: var(--muted);
+  background: rgba(159, 179, 168, 0.1);
+}
+
+.spark-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.spark-svg {
+  flex: 1;
+  height: 18px;
+  display: block;
+}
+
+.spark-vals {
+  display: flex;
+  justify-content: space-between;
+  font-family: var(--font-mono);
+  font-size: 0.63rem;
+  color: var(--muted);
+  margin-top: 0;
 }
 
 /* ---------------- Karriereverlauf (Vereins-Zugehörigkeiten) ---------------- */
@@ -1502,63 +1633,20 @@ input:focus {
   font-size: 0.85rem;
 }
 
-.season-trend-lines {
-  margin-top: 10px;
-  padding-top: 10px;
-  border-top: 1px solid var(--line);
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
+/* ---------------- Positions-Badge (neben Spielername) ---------------- */
 
-.trend-lines-heading {
-  font-size: 0.76rem;
-  text-transform: uppercase;
+.pos-badge {
+  display: inline-block;
+  vertical-align: middle;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 0.7rem;
   letter-spacing: 0.04em;
-  margin: 0;
-}
-
-.trend-line {
-  font-size: 0.8rem;
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
-}
-
-.trend-line-head {
-  display: flex;
-  justify-content: space-between;
-  align-items: baseline;
-  gap: 8px;
-}
-
-.trend-line-hint {
-  font-size: 0.72rem;
-  color: var(--muted);
-  font-weight: 400;
-}
-
-.trend-line-values {
-  color: var(--muted);
-  font-variant-numeric: tabular-nums;
-}
-
-.trend-badge {
-  font-size: 0.74rem;
-  font-weight: 600;
-  white-space: nowrap;
-}
-
-.trend-badge-rising {
-  color: var(--green);
-}
-
-.trend-badge-falling {
-  color: var(--red);
-}
-
-.trend-badge-stable {
-  color: var(--muted);
+  color: var(--gold-bright);
+  border: 1px solid var(--gold);
+  border-radius: 3px;
+  padding: 1px 6px;
+  margin-left: 2px;
 }
 
 /* ---------------- Season summary ---------------- */

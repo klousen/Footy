@@ -51,7 +51,9 @@ export function Dashboard({
       <p className="season-kicker">Vor {upcomingSeasonLabel}</p>
       <div className="player-header">
         <div>
-          <h2>{player.name}</h2>
+          <h2>
+            {player.name} <span className="pos-badge">{player.position}</span>
+          </h2>
           <p className="muted">
             {POSITION_LABEL[player.position]} · {player.age} Jahre · {player.club.name} · {leagueName} (
             {league.flag} {league.countryName})

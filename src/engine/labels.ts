@@ -171,8 +171,8 @@ export interface NarrativeMomentumText {
  * (`computeCareerNarrativeState`/`trendFrom`), die auch die Dashboard-/Saison-
  * Erzähltexte antreibt, statt eine zweite, abweichende Bewertung einzuführen. */
 export const TREND_LABEL: Record<NarrativeTrend, string> = {
-  rising: "↗ steigend",
-  falling: "↘ fallend",
+  rising: "▲ steigend",
+  falling: "▼ fallend",
   stable: "→ stabil",
 };
 
