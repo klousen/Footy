@@ -1,4 +1,4 @@
-import type { AttributeKey, RelationshipStatus, TraitKey } from "./types";
+import type { AttributeKey, CareerPhenotype, RelationshipStatus, TraitKey, TransferDecisionType } from "./types";
 
 export const ATTRIBUTE_LABEL: Record<AttributeKey, string> = {
   technik: "Technik",
@@ -73,6 +73,54 @@ export const SQUAD_ROLE_RANK: Record<string, number> = {
   Ergänzungsspieler: 2,
   Rotation: 3,
   Stammspieler: 4,
+};
+
+/** Anzeige-Labels für `CareerPhenotype` (siehe "CAREER NARRATIVE & DECISION IMPACT
+ * SYSTEM" Teil C, `detectCareerPhenotype` in careerEngine.ts). */
+export const CAREER_PHENOTYPE_LABEL: Record<CareerPhenotype, string> = {
+  WONDERKIND_DELIVERED: "Eingelöstes Versprechen",
+  WONDERKIND_BUST: "Verpasstes Talent",
+  LATE_BLOOMER: "Spätzünder",
+  STEADY_PROFESSIONAL: "Verlässlicher Profi",
+  ONE_CLUB_LEGEND: "Ein-Klub-Legende",
+  JOURNEYMAN: "Wandervogel",
+  NATIONAL_TEAM_ICON: "Nationalmannschafts-Ikone",
+  NATIONAL_TEAM_SNUB: "Übersehenes Talent",
+  TROPHY_COLLECTOR: "Titelsammler",
+  NEARLY_MAN: "Fast-Mann",
+  INJURY_PRONE_SURVIVOR: "Kämpfer gegen Verletzungspech",
+  LATE_CAREER_RESURGENCE: "Zweiter Frühling",
+  BOOM_OR_BUST_MOVER: "Alles-oder-nichts-Wechsler",
+  CEILING_BREAKER: "Über sich hinausgewachsen",
+};
+
+export const CAREER_PHENOTYPE_DESCRIPTION: Record<CareerPhenotype, string> = {
+  WONDERKIND_DELIVERED: "Das Jugendtalent hat sich bestätigt - aus dem frühen Versprechen wurde echte Weltklasse.",
+  WONDERKIND_BUST: "Das Talent war unübersehbar - der ganz große Durchbruch ist trotzdem ausgeblieben.",
+  LATE_BLOOMER: "Ein schwacher Karrierestart, dann eine echte Leistungsexplosion in der zweiten Karrierehälfte.",
+  STEADY_PROFESSIONAL: "Über die ganze Karriere hinweg solide, konstant, ohne große Ausschläge nach oben oder unten.",
+  ONE_CLUB_LEGEND: "Der gesamten aktiven Laufbahn treu geblieben - ein echtes Vereins-Urgestein.",
+  JOURNEYMAN: "Viele Stationen, viele Neuanfänge - eine Karriere mit ständig wechselnden Vereinen.",
+  NATIONAL_TEAM_ICON: "Über Jahre hinweg fester Bestandteil der Nationalmannschaft.",
+  NATIONAL_TEAM_SNUB: "Elite-Niveau erreicht - eine Berufung zur Nationalmannschaft blieb trotzdem aus.",
+  TROPHY_COLLECTOR: "Eine der ganz großen Titel-Sammlungen des Fußballs.",
+  NEARLY_MAN: "Elite-Niveau erreicht, aber die ganz großen Titel fehlen in der Sammlung.",
+  INJURY_PRONE_SURVIVOR: "Trotz langer Verletzungsgeschichte eine bemerkenswerte Karriere hingelegt.",
+  LATE_CAREER_RESURGENCE: "Ein später Vereinswechsel brachte noch einmal spürbaren Aufschwung.",
+  BOOM_OR_BUST_MOVER: "Eine Karriere voller großer, riskanter Entscheidungen - mal ging es steil bergauf, mal spürbar bergab.",
+  CEILING_BREAKER: "Hat die eigenen Erwartungen in einzelnen Bereichen sogar übertroffen.",
+};
+
+/** Anzeige-Labels für `TransferDecisionType` (siehe `classifyTransferDecision` in
+ * careerEngine.ts). */
+export const TRANSFER_DECISION_LABEL: Record<TransferDecisionType, string> = {
+  UPWARD_MOVE: "Aufstiegswechsel",
+  LATERAL_MOVE: "Seitlicher Wechsel",
+  DOWNWARD_MOVE: "Schritt zurück",
+  PLAYING_TIME_MOVE: "Wechsel für Spielzeit",
+  PRESTIGE_RISK_MOVE: "Prestige-Risiko",
+  FINANCIAL_MOVE: "Finanziell motivierter Wechsel",
+  STABILITY_DECISION: "Verbleib",
 };
 
 /**

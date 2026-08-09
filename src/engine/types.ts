@@ -665,6 +665,110 @@ export interface Player {
    * Leihangebots gesetzt und nach der finalen "bleiben/zurück/abwarten"-
    * Entscheidung wieder auf `null` zurückgesetzt. */
   loanNarrative: LoanNarrativeState | null;
+  /** Protokoll aller ECHTEN Wechsel-/Verbleib-Entscheidungen an einem Vereinsangebot
+   * (siehe `TransferDecisionEntry`) - die minimale Zusatz-Persistenz, die
+   * `computeCareerNarrativeState`/`detectCareerPhenotype` (careerEngine.ts) brauchen,
+   * um Entscheidungs-Impact und prägende Momente am Karriereende nachzuzeichnen, ohne
+   * die eigentliche Angebots-/Transferlogik anzufassen. Wird ausschließlich in
+   * `applyClubOfferChoice` befüllt, bei "bleiben"/"kämpfen" ebenso wie bei einem
+   * echten Wechsel (siehe `TransferDecisionType` "STABILITY_DECISION"). */
+  transferDecisions: TransferDecisionEntry[];
+}
+
+/**
+ * Grobe Klassifikation EINER Vereinsangebots-Entscheidung (siehe Vorgabe
+ * "CAREER NARRATIVE & DECISION IMPACT SYSTEM", Abschnitt Transfer-Klassifikation) -
+ * rein diagnostisch/narrativ, beeinflusst KEINE Spiellogik (Angebote, Gehalt,
+ * Kaderrolle etc. laufen unverändert über die bestehende Formel in
+ * `buildClubOfferEvent`/`applyClubOfferChoice`). Heuristik siehe `classifyTransferDecision`
+ * in careerEngine.ts - kalibriert/validiert über eine 1500-Karrieren-Diagnose-Simulation.
+ */
+export type TransferDecisionType =
+  | "UPWARD_MOVE"
+  | "LATERAL_MOVE"
+  | "DOWNWARD_MOVE"
+  | "PLAYING_TIME_MOVE"
+  | "PRESTIGE_RISK_MOVE"
+  | "FINANCIAL_MOVE"
+  | "STABILITY_DECISION";
+
+/** EIN Eintrag im `Player.transferDecisions`-Protokoll. */
+export interface TransferDecisionEntry {
+  season: number;
+  age: number;
+  type: TransferDecisionType;
+  fromClub: string;
+  toClub: string; // identisch zu `fromClub` bei STABILITY_DECISION
+  /** Sprung der (international vergleichbaren) Vereinsstärke - siehe `displayClubStrength`. */
+  strengthDelta: number;
+  /** Index in `Player.seasonHistory`, AB DEM die Entscheidung wirkt (die nächste
+   * simulierte Saison) - Basis für die spätere Vorher/Nachher-Auswertung in
+   * `computeCareerNarrativeState`. */
+  seasonHistoryIndex: number;
+}
+
+/** EIN `TransferDecisionEntry` angereichert um den gemessenen Vorher/Nachher-Impact
+ * (siehe `computeCareerNarrativeState` in careerEngine.ts) - Performance-Fenster
+ * (bis zu 2 Saisons) VOR bzw. NACH der Entscheidung, `perfImpact` als Differenz
+ * (erwartungswert-relativ über den Trend VOR der Entscheidung, nicht naiv die
+ * nächste einzelne Saison). `null`, wenn das jeweilige Fenster leer ist (z.B. die
+ * allererste Saison der Karriere, oder die Entscheidung liegt noch keine Saison
+ * zurück). */
+export interface DecisionImpact extends TransferDecisionEntry {
+  prePerf: number | null;
+  postPerf: number | null;
+  perfImpact: number | null;
+}
+
+/** Karriere-Erzählzustand (siehe "CAREER NARRATIVE & DECISION IMPACT SYSTEM") - rein
+ * ABGELEITET aus `seasonHistory`/`transferDecisions`/`nationalTeamCaps`/aktuellen
+ * Attributen (KEIN eigenes Persistenz-Feld, siehe `computeCareerNarrativeState`), am
+ * Karriereende (oder jederzeit während der laufenden Karriere) neu berechenbar. */
+export interface CareerNarrativeState {
+  decisionImpacts: DecisionImpact[];
+  /** Die Entscheidung mit dem größten ABSOLUTEN Performance-Impact (positiv ODER
+   * negativ) - "die prägende Entscheidung der Karriere". `null` ohne auswertbare
+   * Entscheidung. */
+  definingDecision: DecisionImpact | null;
+  /** Attribute, die AKTUELL über ihrem `potential`-Wert liegen (siehe Vorgabe Teil F,
+   * Mechanismus: `applyEffects`/`scaleDecisionAttributeDelta` deckeln Entscheidungs-
+   * Effekte NUR bei 1-99, nicht am Potential - siehe careerEngine.ts). */
+  ceilingBreaks: { attribute: AttributeKey; overAmount: number }[];
+  /** Elite-Niveau (Peak-Gesamtstärke >= 80) erreicht, aber nie/kaum für die
+   * Nationalmannschaft berufen (siehe Vorgabe Teil E: laut Diagnose unabhängig von
+   * Leistung/Einsatzzeit - reines Berufungs-Losglück über viele unabhängige
+   * Saison-Ziehungen). */
+  nationalTeamSnub: boolean;
+  peakOverall: number;
+}
+
+/**
+ * Karriere-Phänotyp (siehe "CAREER NARRATIVE & DECISION IMPACT SYSTEM" Teil C) - rein
+ * beschreibend/narrativ, NIEMALS Eingabe für Spiellogik (Wachstum/Performance/Angebote/
+ * Legacy bleiben unverändert). `LATE_BLOOMER` verlangt einen ECHTEN Leistungs-
+ * Turnaround (siehe `detectCareerPhenotype`), nicht nur einen späten OVR-Peak -
+ * genau der "falsch-positive Typ D" aus der Diagnose (später OVR-Peak trotz
+ * durchgehend schwacher Leistung) zählt explizit NICHT als Late Bloomer.
+ */
+export type CareerPhenotype =
+  | "WONDERKIND_DELIVERED"
+  | "WONDERKIND_BUST"
+  | "LATE_BLOOMER"
+  | "STEADY_PROFESSIONAL"
+  | "ONE_CLUB_LEGEND"
+  | "JOURNEYMAN"
+  | "NATIONAL_TEAM_ICON"
+  | "NATIONAL_TEAM_SNUB"
+  | "TROPHY_COLLECTOR"
+  | "NEARLY_MAN"
+  | "INJURY_PRONE_SURVIVOR"
+  | "LATE_CAREER_RESURGENCE"
+  | "BOOM_OR_BUST_MOVER"
+  | "CEILING_BREAKER";
+
+export interface CareerPhenotypeResult {
+  primary: CareerPhenotype;
+  secondary: CareerPhenotype[];
 }
 
 /** Protokoll-Eintrag EINER der drei Leih-Entscheidungen (siehe `Player.loanNarrative`)

@@ -1388,6 +1388,39 @@ input:focus {
   font-size: 0.78rem;
 }
 
+/* ---------------- Karriere-Phänotyp (siehe CareerEnd) ---------------- */
+
+.phenotype-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.phenotype-chip {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 5px 12px;
+  font-size: 0.78rem;
+  border: 1px solid var(--line);
+  color: var(--muted);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.phenotype-chip-primary {
+  border-color: rgba(201, 162, 39, 0.5);
+  color: var(--gold-bright);
+  background: rgba(201, 162, 39, 0.08);
+  font-weight: 600;
+}
+
+.defining-decision {
+  margin-top: 8px;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
 /* ---------------- Season summary ---------------- */
 
 .mini-log {

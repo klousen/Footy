@@ -1,6 +1,13 @@
 import type { Achievement, Player, ScoreFactor } from "../engine/types";
-import { buildClubTenures } from "../engine/careerEngine";
-import { formatMoney, formatTrophyList, RELATIONSHIP_LABEL } from "./labels";
+import { buildClubTenures, computeCareerNarrativeState, detectCareerPhenotype } from "../engine/careerEngine";
+import {
+  CAREER_PHENOTYPE_DESCRIPTION,
+  CAREER_PHENOTYPE_LABEL,
+  formatMoney,
+  formatTrophyList,
+  RELATIONSHIP_LABEL,
+  TRANSFER_DECISION_LABEL,
+} from "./labels";
 import { ShareCard } from "./ShareCard";
 import { OverallScoreChart } from "./OverallScoreChart";
 
@@ -37,6 +44,12 @@ export function CareerEnd({
       ? Math.round(gkSeasons.reduce((s, h) => s + h.savePercentage * h.matches, 0) / gkSeasons.reduce((s, h) => s + h.matches, 0))
       : 0;
 
+  // Karriere-Erzählzustand + Phänotyp - siehe "CAREER NARRATIVE & DECISION IMPACT
+  // SYSTEM": rein abgeleitet aus bereits vorhandenen Daten, keine eigene Persistenz
+  // (siehe `computeCareerNarrativeState`/`detectCareerPhenotype` in careerEngine.ts).
+  const narrativeState = computeCareerNarrativeState(player);
+  const phenotype = detectCareerPhenotype(player);
+
   return (
     <div className="screen career-end-screen">
       <div className="hero">
@@ -47,6 +60,31 @@ export function CareerEnd({
       </div>
 
       <p className="epilogue">{epilogue}</p>
+
+      <div className="panel">
+        <h3>Karrierebogen</h3>
+        <div className="phenotype-chips">
+          <span className="phenotype-chip phenotype-chip-primary" title={CAREER_PHENOTYPE_DESCRIPTION[phenotype.primary]}>
+            {CAREER_PHENOTYPE_LABEL[phenotype.primary]}
+          </span>
+          {phenotype.secondary.map((p) => (
+            <span key={p} className="phenotype-chip" title={CAREER_PHENOTYPE_DESCRIPTION[p]}>
+              {CAREER_PHENOTYPE_LABEL[p]}
+            </span>
+          ))}
+        </div>
+        <p className="muted">{CAREER_PHENOTYPE_DESCRIPTION[phenotype.primary]}</p>
+        {narrativeState.definingDecision && narrativeState.definingDecision.perfImpact !== null && (
+          <p className="defining-decision">
+            <strong>Prägende Entscheidung:</strong> {TRANSFER_DECISION_LABEL[narrativeState.definingDecision.type]} mit{" "}
+            {narrativeState.definingDecision.age} Jahren ({narrativeState.definingDecision.fromClub} →{" "}
+            {narrativeState.definingDecision.toClub}) -{" "}
+            {narrativeState.definingDecision.perfImpact > 0
+              ? "die Leistung entwickelte sich danach spürbar besser als erwartet."
+              : "die Leistung fiel danach spürbar hinter die eigene Erwartung zurück."}
+          </p>
+        )}
+      </div>
 
       <ShareCard player={player} legacyScore={legacyScore} legacyTier={legacyTier} achievements={achievements} />
 

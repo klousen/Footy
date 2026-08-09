@@ -44,6 +44,10 @@ export function loadGame(): GameState | null {
       // Ältere Spielstände kennen die Produktions-Zuverlässigkeit noch nicht (siehe
       // `Player.productionReliability`) - 1.0 (neutral) als bestmögliche Annäherung.
       state.player.productionReliability ??= 1.0;
+      // Ältere Spielstände kennen das Transferentscheidungs-Protokoll noch nicht
+      // (siehe `Player.transferDecisions`) - leer als bestmögliche Annäherung, kein
+      // rückwirkendes Nacherfinden vergangener Entscheidungen möglich.
+      state.player.transferDecisions ??= [];
       // Ältere Spielstände kennen das Heimatland noch nicht - als bestmögliche
       // Annäherung das aktuelle Land nehmen (nur relevant für künftige Rückkehr-Erkennung).
       state.player.homeCountryId ??= state.player.country;

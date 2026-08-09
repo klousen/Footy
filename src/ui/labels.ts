@@ -11,5 +11,8 @@ export {
   TRAIT_LABEL,
   TRAIT_ORDER,
   overallTier,
+  CAREER_PHENOTYPE_LABEL,
+  CAREER_PHENOTYPE_DESCRIPTION,
+  TRANSFER_DECISION_LABEL,
 } from "../engine/labels";
 export type { OverallTier } from "../engine/labels";

@@ -2,10 +2,14 @@ import type {
   Achievement,
   Attributes,
   AttributeKey,
+  CareerNarrativeState,
+  CareerPhenotype,
+  CareerPhenotypeResult,
   CareerStage,
   ChoiceFeedback,
   ClubState,
   ClubTenure,
+  DecisionImpact,
   EventChoice,
   GameEvent,
   GameState,
@@ -20,6 +24,7 @@ import type {
   SeasonStats,
   SquadRole,
   TraitKey,
+  TransferDecisionType,
 } from "./types";
 import { isNearRetirement, overallRatingFromAttributes } from "./types";
 import { clamp } from "./data";
@@ -313,6 +318,7 @@ export function createPlayer(
       formSlumpSeasons: 0,
       secondSpringSeasons: 0,
       loanNarrative: null,
+      transferDecisions: [],
     },
   };
 }
@@ -1888,6 +1894,79 @@ export function squadRoleLabel(role: SquadRole, position: Position): string {
 }
 
 /**
+ * Grobe, rein narrativ/diagnostisch genutzte Klassifikation EINER Vereinsangebots-
+ * Entscheidung (siehe `TransferDecisionType`) - beeinflusst KEINE Spiellogik, dient
+ * ausschließlich `Player.transferDecisions` (siehe `computeCareerNarrativeState`/
+ * `detectCareerPhenotype`). Schwellen über eine 1500-Karrieren-Diagnose-Simulation
+ * kalibriert (siehe "CAREER NARRATIVE & DECISION IMPACT SYSTEM" Teil A): ein
+ * Vereinsstärke-Sprung von 12+ zählt als klar wahrnehmbarer Auf-/Abstieg, unter 6
+ * bei gleichzeitig spürbar besserer Kaderrolle als reiner Spielzeit-Wechsel, ein
+ * großer Sprung MIT Rollenrisiko als Prestige-Risiko.
+ */
+function classifyTransferDecision(
+  reason: string,
+  isStay: boolean,
+  strengthDelta: number,
+  roleRankDelta: number,
+  wageDeltaPct: number | null
+): TransferDecisionType {
+  if (isStay) return "STABILITY_DECISION";
+  if (reason === "loan") return "PLAYING_TIME_MOVE";
+  if (Math.abs(strengthDelta) < 6 && roleRankDelta >= 1) return "PLAYING_TIME_MOVE";
+  if (strengthDelta >= 12) {
+    return roleRankDelta <= -2 ? "PRESTIGE_RISK_MOVE" : "UPWARD_MOVE";
+  }
+  if (strengthDelta <= -12) return "DOWNWARD_MOVE";
+  if (Math.abs(strengthDelta) < 12 && Math.abs(roleRankDelta) < 1 && wageDeltaPct !== null && wageDeltaPct >= 0.4) {
+    return "FINANCIAL_MOVE";
+  }
+  return "LATERAL_MOVE";
+}
+
+/** Protokolliert EINE abgeschlossene Vereinsangebots-Entscheidung in
+ * `Player.transferDecisions` (siehe dort) - aufgerufen von `applyClubOfferChoice`
+ * NACHDEM der eigentliche Wechsel/Verbleib schon vollzogen ist, mit dem VORHER
+ * gültigen Verein/Kaderrolle/Gehalt als Vergleichsbasis. Rein additiv/beobachtend,
+ * keine Rückwirkung auf Spiellogik. */
+function recordTransferDecision(
+  player: Player,
+  reason: string,
+  isStay: boolean,
+  fromClubName: string,
+  toClubName: string,
+  oldRole: SquadRole,
+  offerCard: OfferCardData | undefined,
+  oldWage: number
+) {
+  if (!offerCard || reason === "loan-return") return;
+  const strengthDelta = (offerCard.strength ?? 0) - (offerCard.strengthPrev ?? offerCard.strength ?? 0);
+  // `offerCard.roleLabel` ist bereits Torwart-übersetzt ("Nummer 1"/"Nummer 2", siehe
+  // `goalkeeperRoleLabel`) - hier auf dieselbe Rangskala wie `SQUAD_ROLE_RANK` gemappt.
+  const roleLabelRank: Record<string, number> = {
+    Stammspieler: SQUAD_ROLE_RANK["Stammspieler"],
+    "Nummer 1": SQUAD_ROLE_RANK["Stammspieler"],
+    Rotation: SQUAD_ROLE_RANK["Rotation"],
+    Ergänzungsspieler: SQUAD_ROLE_RANK["Ergänzungsspieler"],
+    Ersatzbank: SQUAD_ROLE_RANK["Ersatzbank"],
+    "Nummer 2": SQUAD_ROLE_RANK["Ersatzbank"],
+    Nachwuchstorwart: SQUAD_ROLE_RANK["Ausbildungsspieler"],
+  };
+  const candidateRank = offerCard.roleLabel in roleLabelRank ? roleLabelRank[offerCard.roleLabel] : SQUAD_ROLE_RANK[oldRole];
+  const roleRankDelta = candidateRank - SQUAD_ROLE_RANK[oldRole];
+  const wageDeltaPct = offerCard.wageDelta !== undefined && oldWage > 0 ? offerCard.wageDelta / oldWage : null;
+  const type = classifyTransferDecision(reason, isStay, strengthDelta, roleRankDelta, wageDeltaPct);
+  player.transferDecisions.push({
+    season: player.seasonHistory.length + 1,
+    age: player.age,
+    type,
+    fromClub: fromClubName,
+    toClub: toClubName,
+    strengthDelta: Math.round(strengthDelta * 10) / 10,
+    seasonHistoryIndex: player.seasonHistory.length,
+  });
+}
+
+/**
  * Wie `squadRoleForOverall`, aber für die laufende Kaderrolle beim AKTUELLEN
  * Verein (siehe `resolveClubSituation`): reine Gesamtstärke vs. Vereinsstärke
  * ignorierte bislang komplett, wie man beim Trainer dasteht und ob man gerade
@@ -2897,6 +2976,12 @@ export function applyClubOfferChoice(
   foreignLeagues: Partial<Record<CountryId, LeagueState>>
 ): ClubOfferResult {
   const reason = event.templateId.slice(CLUB_OFFER_PREFIX.length) as ClubOfferReason;
+  // Für `Player.transferDecisions` (siehe `recordTransferDecision`) - VOR jeder
+  // Mutation eingefroren, da Kaderrolle/Gehalt/Vereinsname unten überschrieben werden.
+  const decisionOldRole = player.contract.squadRole;
+  const decisionOldWage = player.contract.wagePerYear;
+  const decisionOldClubName = player.club.name;
+  const decisionOfferCard = event.choices.find((c) => c.id === choiceId)?.offerCard;
 
   // Die finale Entscheidung nach dem narrativen Leihjahr (siehe loanStory.ts) -
   // beendet den exklusiven Event-State IMMER, unabhängig davon, welche der drei
@@ -2924,6 +3009,7 @@ export function applyClubOfferChoice(
     player.clubChangesCount += 1;
     const text = `${player.name} bleibt dauerhaft bei ${player.club.name} - aus der Leihe wird ein fester Wechsel.`;
     player.log.push({ season: 0, age: player.age, text, kind: "positive" });
+    recordTransferDecision(player, "loan-keep", false, decisionOldClubName, player.club.name, decisionOldRole, decisionOfferCard, decisionOldWage);
     return {
       feedback: {
         choiceId,
@@ -2947,6 +3033,7 @@ export function applyClubOfferChoice(
     player.wantsTransfer = false;
     const text = `${player.name} bleibt ${player.club.name} treu.`;
     player.log.push({ season: 0, age: player.age, text, kind: "positive" });
+    recordTransferDecision(player, reason, true, decisionOldClubName, player.club.name, decisionOldRole, decisionOfferCard, decisionOldWage);
     return { feedback: { choiceId, text, kind: "positive", deltaLines: ["Vereinsbeziehung +10", "Moral +5"] } };
   }
 
@@ -2974,6 +3061,7 @@ export function applyClubOfferChoice(
     player.wantsTransfer = false;
     const text = `${player.name} unterschreibt treu beim eigenen Jugendverein ${player.club.name} den ersten Profivertrag.`;
     player.log.push({ season: 0, age: player.age, text, kind: "milestone" });
+    recordTransferDecision(player, reason, true, decisionOldClubName, player.club.name, decisionOldRole, decisionOfferCard, decisionOldWage);
     return {
       feedback: {
         choiceId,
@@ -2996,6 +3084,7 @@ export function applyClubOfferChoice(
     player.wantsTransfer = false;
     const text = `${player.name} kämpft entschlossen um eine zweite Chance bei ${player.club.name}.`;
     player.log.push({ season: 0, age: player.age, text, kind: "positive" });
+    recordTransferDecision(player, reason, true, decisionOldClubName, player.club.name, decisionOldRole, decisionOfferCard, decisionOldWage);
     return {
       feedback: { choiceId, text, kind: "positive", deltaLines: ["Vereinsbeziehung +15", "Moral +8", "Bankphasen-Druck sinkt"] },
     };
@@ -3277,6 +3366,7 @@ export function applyClubOfferChoice(
     }
   }
 
+  recordTransferDecision(player, reason, false, decisionOldClubName, chosen.city, decisionOldRole, decisionOfferCard, decisionOldWage);
   return {
     feedback: { choiceId, text, kind, deltaLines },
     newActiveLeague,
@@ -3507,6 +3597,146 @@ const WEALTH_TIERS: { id: string; label: string; description: string; threshold:
   { id: "multimillionaer", label: "Multimillionär", description: "Über 8 Mio. € Karrierevermögen erwirtschaftet.", threshold: 8_000_000 },
   { id: "millionaer", label: "Selfmade-Millionär", description: "Über 2 Mio. € Karrierevermögen erwirtschaftet.", threshold: 2_000_000 },
 ];
+
+function avg(values: number[]): number {
+  return values.length === 0 ? 0 : values.reduce((a, b) => a + b, 0) / values.length;
+}
+
+/**
+ * Karriere-Erzählzustand (siehe `CareerNarrativeState`) - REIN ABGELEITET aus
+ * bereits vorhandenen Daten (`seasonHistory`/`transferDecisions`/`nationalTeamCaps`/
+ * aktuellen Attributen), kein eigenes Persistenz-Feld, keine Rückwirkung auf
+ * Spiellogik. Kann jederzeit (laufende Karriere oder am Karriereende) neu berechnet
+ * werden - siehe Vorgabe "CAREER NARRATIVE & DECISION IMPACT SYSTEM" Teil B.
+ *
+ * Der Vorher/Nachher-Vergleich je Entscheidung (`DecisionImpact`) folgt exakt der in
+ * der 1500-Karrieren-Diagnose (Teil A) validierten Methodik: bis zu 2 Saisons VOR
+ * bzw. NACH der Entscheidung gemittelt (kein naiver Einzelsaison-Vergleich), der
+ * Trend VOR der Entscheidung (halbe Steigung) als Erwartungswert-Basis für den
+ * tatsächlichen `perfImpact`.
+ */
+export function computeCareerNarrativeState(player: Player): CareerNarrativeState {
+  const hist = player.seasonHistory;
+  const decisionImpacts: DecisionImpact[] = player.transferDecisions.map((d) => {
+    const preStart = Math.max(0, d.seasonHistoryIndex - 2);
+    const pre = hist.slice(preStart, d.seasonHistoryIndex);
+    const post = hist.slice(d.seasonHistoryIndex, d.seasonHistoryIndex + 2);
+    const prePerf = pre.length > 0 ? avg(pre.map((s) => s.performanceScore)) : null;
+    const postPerf = post.length > 0 ? avg(post.map((s) => s.performanceScore)) : null;
+    let perfImpact: number | null = null;
+    if (prePerf !== null && postPerf !== null) {
+      const preSlope = pre.length >= 2 ? pre[pre.length - 1].performanceScore - pre[0].performanceScore : 0;
+      perfImpact = postPerf - (prePerf + preSlope * 0.5);
+    }
+    return { ...d, prePerf, postPerf, perfImpact };
+  });
+
+  const withImpact = decisionImpacts.filter((d) => d.perfImpact !== null);
+  const definingDecision =
+    withImpact.length > 0
+      ? withImpact.reduce((best, d) => (Math.abs(d.perfImpact!) > Math.abs(best.perfImpact!) ? d : best))
+      : null;
+
+  const ceilingBreaks = ATTRIBUTE_KEYS.filter((key) => player.attributes[key] > player.potential[key]).map((key) => ({
+    attribute: key,
+    overAmount: player.attributes[key] - player.potential[key],
+  }));
+
+  const peakOverall = hist.length > 0 ? Math.max(...hist.map((s) => s.overallRating)) : overallRating(player);
+  const nationalTeamSnub = peakOverall >= 80 && player.nationalTeamCaps === 0;
+
+  return { decisionImpacts, definingDecision, ceilingBreaks, nationalTeamSnub, peakOverall };
+}
+
+/**
+ * Erkennt den (die) prägenden Karriere-Phänotyp(en) einer (idealerweise beendeten,
+ * funktioniert aber auch für eine laufende) Karriere - siehe `CareerPhenotype`. Rein
+ * beschreibend, greift in KEINE Spiellogik ein. Prioritätsreihenfolge unten grob nach
+ * Seltenheit/Aussagekraft gestaffelt: der erste zutreffende Check wird `primary`, alle
+ * weiteren zutreffenden (nicht offensichtlich redundanten) Checks landen in
+ * `secondary`. Schwellen über dieselbe 1500-Karrieren-Diagnose kalibriert wie
+ * `computeCareerNarrativeState`.
+ */
+export function detectCareerPhenotype(player: Player): CareerPhenotypeResult {
+  const hist = player.seasonHistory;
+  const narrative = computeCareerNarrativeState(player);
+  const matches: CareerPhenotype[] = [];
+
+  const careerAvgPerf = hist.length > 0 ? avg(hist.map((s) => s.performanceScore)) : 50;
+  const third = Math.max(1, Math.floor(hist.length / 3));
+  const early = hist.slice(0, third);
+  const late = hist.slice(Math.max(third, hist.length - third));
+  // Bewusst NUR `performanceScore` (Leistung), kein reiner OVR-Vergleich - genau der
+  // "falsch-positive Typ D" aus der Diagnose (später OVR-Peak trotz durchgehend
+  // schwacher Leistung) darf hier NICHT als Late Bloomer durchrutschen.
+  const earlyPerf = early.length > 0 ? avg(early.map((s) => s.performanceScore)) : null;
+  const latePerf = late.length > 0 ? avg(late.map((s) => s.performanceScore)) : null;
+
+  // LATE_BLOOMER: ECHTER Leistungs-Turnaround (nicht nur später OVR-Peak, siehe
+  // Doc-Kommentar `CareerPhenotype` - der "falsch-positive Typ D" aus der Diagnose
+  // bleibt hier bewusst außen vor).
+  if (hist.length >= 6 && earlyPerf !== null && latePerf !== null && earlyPerf < 45 && latePerf > 55) {
+    matches.push("LATE_BLOOMER");
+  }
+
+  // WONDERKIND_DELIVERED/BUST: `developmentTrajectory` > 1.0 ist mathematisch nur bei
+  // einem Wunderkind-Bonus (siehe `rollDevelopmentTrajectory`/`createPlayer`) erreichbar
+  // - ein zuverlässiger (wenn auch unvollständiger) Proxy, ohne die Trajektorie-Logik
+  // selbst anzufassen.
+  if (player.developmentTrajectory > 1.0) {
+    matches.push(narrative.peakOverall >= 82 && careerAvgPerf >= 55 ? "WONDERKIND_DELIVERED" : "WONDERKIND_BUST");
+  }
+
+  if (player.clubChangesCount === 0 && hist.length >= 5) matches.push("ONE_CLUB_LEGEND");
+  if (player.clubChangesCount >= 5) matches.push("JOURNEYMAN");
+
+  if (player.nationalTeamCaps >= 40) matches.push("NATIONAL_TEAM_ICON");
+  if (narrative.nationalTeamSnub) matches.push("NATIONAL_TEAM_SNUB");
+
+  const bigTitles = player.careerTotals.trophies.filter((t) => t === "Meisterschale" || t === "Champions Cup" || t === "Europa Cup").length;
+  if (bigTitles >= 3) matches.push("TROPHY_COLLECTOR");
+  if (narrative.peakOverall >= 80 && bigTitles === 0) matches.push("NEARLY_MAN");
+
+  if (player.totalInjuryWeeks >= 60 && narrative.peakOverall >= 70) matches.push("INJURY_PRONE_SURVIVOR");
+
+  // LATE_CAREER_RESURGENCE: ein DOWNWARD_MOVE/LATERAL_MOVE nach dem 30. Geburtstag,
+  // dem ein spürbarer Leistungssprung folgte - der "Ich bin noch nicht fertig"-Moment.
+  const lateCareerBoost = narrative.decisionImpacts.find(
+    (d) => d.age >= 30 && (d.type === "DOWNWARD_MOVE" || d.type === "LATERAL_MOVE") && d.perfImpact !== null && d.perfImpact > 8
+  );
+  if (lateCareerBoost) matches.push("LATE_CAREER_RESURGENCE");
+
+  // BOOM_OR_BUST_MOVER: mindestens eine Entscheidung mit sehr großem Ausschlag in
+  // beide Richtungen - ein Spieler, dessen Karriere sich an einzelnen mutigen (oder
+  // riskanten) Wechseln entscheidet, statt gleichmäßig zu verlaufen.
+  const hasBoom = narrative.decisionImpacts.some((d) => d.perfImpact !== null && d.perfImpact > 15);
+  const hasBust = narrative.decisionImpacts.some((d) => d.perfImpact !== null && d.perfImpact < -15);
+  if (hasBoom && hasBust) matches.push("BOOM_OR_BUST_MOVER");
+
+  if (narrative.ceilingBreaks.length > 0) matches.push("CEILING_BREAKER");
+
+  // STEADY_PROFESSIONAL: durchgehend nah am Liga-Durchschnitt, kein Ausreißer nach
+  // oben oder unten - der ruhige Gegenpol zu Wonderkind/Late-Bloomer/Boom-or-Bust.
+  if (
+    hist.length >= 6 &&
+    earlyPerf !== null &&
+    latePerf !== null &&
+    Math.abs(earlyPerf - 50) < 12 &&
+    Math.abs(latePerf - 50) < 12 &&
+    !hasBoom &&
+    !hasBust
+  ) {
+    matches.push("STEADY_PROFESSIONAL");
+  }
+
+  if (matches.length === 0) {
+    // Fallback: nie ganz ohne Phänotyp - je nach grobem Karriereniveau.
+    matches.push(narrative.peakOverall >= 70 ? "STEADY_PROFESSIONAL" : "NEARLY_MAN");
+  }
+
+  const [primary, ...secondary] = matches;
+  return { primary, secondary };
+}
 
 export function computeAchievements(player: Player): Achievement[] {
   const t = player.careerTotals;

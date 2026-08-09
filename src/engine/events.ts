@@ -6558,6 +6558,207 @@ export const EVENT_TEMPLATES: EventTemplate[] = [
       ),
     }),
   })),
+
+  // ---------------------------------------------------------------------
+  // CAREER NARRATIVE & DECISION IMPACT (siehe careerEngine.ts
+  // `computeCareerNarrativeState`/`detectCareerPhenotype`) - ein kleiner, bewusst
+  // eng umrissener Pool rein REFLEKTIVER Ereignisse, die an die neu getrackten
+  // Signale andocken (Transferentscheidungs-Protokoll, Potential-Ceiling,
+  // Nationalmannschafts-Snub). Ausdrücklich NICHT selbsterfüllend: keines dieser
+  // Ereignisse verändert Länderspiel-Berufungen, Kaderrolle oder Attribute
+  // spürbar - sie kommentieren/verarbeiten einen bereits eingetretenen Zustand,
+  // erzwingen ihn nicht. Laufen wie jedes andere Template über die normale
+  // gewichtete Zufallsauswahl (`pickSeasonTemplateIds`) - rein probabilistisch,
+  // nie garantiert.
+  // ---------------------------------------------------------------------
+  {
+    id: "narrative_berufungsfrust",
+    category: "nationalmannschaft",
+    minAge: 24,
+    maxAge: 34,
+    weight: 1.5,
+    unique: true,
+    // Elite-Niveau, gutes Ansehen, aber bislang nie berufen - siehe Diagnose Teil E:
+    // bei diesem Spielerprofil ist das laut 1500-Karrieren-Backtest KEINE Frage von
+    // Leistung/Einsatzzeit, sondern reines Berufungs-Losglück über viele unabhängige
+    // Saison-Ziehungen (siehe `nationalTeamCallUpChance`) - das Event verändert diese
+    // Chance bewusst NICHT, sondern verarbeitet nur den Frust darüber.
+    condition: (p) => {
+      if (p.nationalTeamCaps > 0) return false;
+      if (p.reputation < 55) return false;
+      const overall = overallRatingFromAttributes(p.attributes, p.position);
+      return overall >= 75;
+    },
+    build: (p) => ({
+      category: "nationalmannschaft",
+      title: "Nie berufen",
+      description: `Trotz starker Form bei ${club(p)} und mittlerweile ordentlichem Ansehen - eine Einladung zur Nationalmannschaft ist bislang ausgeblieben. Andere, objektiv nicht bessere Spieler wurden längst berufen.`,
+      choices: [
+        {
+          id: "motiviert",
+          label: "Es als zusätzlichen Ansporn nehmen",
+          detail: "Fokus auf das, was du beeinflussen kannst - deine Leistung beim Verein.",
+          effects: {
+            traitDeltas: { arbeitsmoral: 3 },
+            morale: 3,
+            logText: "nimmt die ausbleibende Nationalmannschafts-Berufung als zusätzlichen Ansporn.",
+            logKind: "info",
+          },
+        },
+        {
+          id: "groll",
+          label: "Öffentlich Unverständnis äußern",
+          detail: "Erleichtert kurzfristig, sorgt aber für Gesprächsstoff - nicht nur positiven.",
+          effects: {
+            traitDeltas: { medienimage: -3 },
+            morale: 2,
+            logText: "äußert öffentlich Unverständnis über die ausbleibende Nationalmannschafts-Berufung.",
+            logKind: "negative",
+          },
+        },
+      ],
+    }),
+  },
+  {
+    id: "narrative_kaltes_wasser",
+    category: "transfer",
+    minAge: 17,
+    maxAge: 37,
+    weight: 1.5,
+    // Kürzlich (letzte abgeschlossene Saison) ein spürbar größerer/riskanterer
+    // Wechsel (siehe `Player.transferDecisions`), aber (noch) kein gesicherter
+    // Platz beim neuen Verein - der "beweisen musst du dich noch"-Moment.
+    condition: (p) => {
+      const last = p.transferDecisions[p.transferDecisions.length - 1];
+      if (!last) return false;
+      const recentEnough = p.seasonHistory.length - last.seasonHistoryIndex <= 1;
+      if (!recentEnough) return false;
+      if (last.type !== "UPWARD_MOVE" && last.type !== "PRESTIGE_RISK_MOVE") return false;
+      return p.contract.squadRole === "Rotation" || p.contract.squadRole === "Ergänzungsspieler" || p.contract.squadRole === "Ersatzbank";
+    },
+    build: (p) => ({
+      category: "transfer",
+      title: "Der Sprung ins kalte Wasser",
+      description: `Der Wechsel zu ${club(p)} war ein mutiger Schritt nach oben - jetzt heißt es, sich gegen eine stärkere Konkurrenz erst noch durchzusetzen, statt automatisch gesetzt zu sein.`,
+      choices: [
+        {
+          id: "geduldig",
+          label: "Geduldig auf die Chance hinarbeiten",
+          detail: "Kein schneller Durchbruch, aber solide Basis für den langen Weg.",
+          effects: {
+            traitDeltas: { disziplin: 2, arbeitsmoral: 2 },
+            clubRelation: 3,
+            logText: "arbeitet nach dem Wechsel geduldig auf seine/ihre Chance hin.",
+            logKind: "info",
+          },
+        },
+        {
+          id: "ungeduldig",
+          label: "Offen mehr Einsatzzeit einfordern",
+          detail: "Kann Druck erzeugen - beim Trainer kommt das nicht immer gut an.",
+          effects: {
+            clubRelation: -4,
+            traitDeltas: { fuehrung: 2 },
+            logText: "fordert nach dem Wechsel offen mehr Einsatzzeit ein.",
+            logKind: "negative",
+          },
+        },
+      ],
+    }),
+  },
+  {
+    id: "narrative_spaete_reife",
+    category: "meilenstein",
+    minAge: 27,
+    maxAge: 36,
+    weight: 1,
+    unique: true,
+    // Klarer Leistungs-Turnaround: die letzten beiden Saisons spürbar besser als der
+    // Karriereschnitt davor, UND dieser Schnitt lag klar unter Liga-Durchschnitt -
+    // derselbe strikte Maßstab wie `detectCareerPhenotype`s "LATE_BLOOMER" (kein
+    // reiner später OVR-Peak, siehe dortiger Kommentar zum "falsch-positiven Typ D").
+    condition: (p) => {
+      if (p.seasonHistory.length < 5) return false;
+      const recent = p.seasonHistory.slice(-2);
+      const earlier = p.seasonHistory.slice(0, -2);
+      if (recent.length < 2 || earlier.length < 3) return false;
+      const recentAvg = recent.reduce((a, s) => a + s.performanceScore, 0) / recent.length;
+      const earlierAvg = earlier.reduce((a, s) => a + s.performanceScore, 0) / earlier.length;
+      return earlierAvg < 46 && recentAvg > earlierAvg + 12;
+    },
+    build: (p) => ({
+      category: "meilenstein",
+      title: "Späte Reife",
+      description: `Über weite Strecken der Karriere war ${p.name} bestenfalls Durchschnitt - in den letzten Spielzeiten bei ${club(p)} ist plötzlich eine ganz andere Konstanz zu erkennen.`,
+      choices: [
+        {
+          id: "geniessen",
+          label: "Den späten Aufschwung bewusst genießen",
+          detail: "Ein ruhiger, zufriedener Blick auf die eigene Entwicklung.",
+          effects: {
+            morale: 6,
+            traitDeltas: { medienimage: 2 },
+            logText: "genießt sichtlich den späten sportlichen Aufschwung.",
+            logKind: "positive",
+          },
+        },
+        {
+          id: "weitermachen",
+          label: "Direkt weiter nach vorne blicken",
+          detail: "Kein Innehalten - der Blick geht sofort auf das nächste Ziel.",
+          effects: {
+            traitDeltas: { arbeitsmoral: 2 },
+            logText: "blickt nach dem späten Aufschwung ohne Umschweife direkt aufs nächste Ziel.",
+            logKind: "info",
+          },
+        },
+      ],
+    }),
+  },
+  {
+    id: "narrative_grenzen_gesprengt",
+    category: "meilenstein",
+    minAge: 16,
+    maxAge: 40,
+    weight: 1,
+    unique: true,
+    // Mindestens ein Attribut liegt aktuell über dem eigentlichen `potential` (siehe
+    // `applyEffects`/`scaleDecisionAttributeDelta` in careerEngine.ts - Entscheidungs-
+    // Effekte deckeln nur bei 1-99, nicht am Potential) - ein seltener, bislang rein
+    // beiläufiger Nebeneffekt einzelner Entscheidungen, hier erstmals als eigener
+    // Moment gewürdigt statt unbemerkt zu bleiben.
+    condition: (p) =>
+      (Object.keys(p.attributes) as (keyof typeof p.attributes)[]).some((key) => p.attributes[key] > p.potential[key]),
+    build: (p) => ({
+      category: "meilenstein",
+      title: "Über das erwartete Limit hinaus",
+      description: `Trainer und Scouts staunen: In einzelnen Bereichen zeigt ${p.name} inzwischen mehr, als selbst die optimistischsten Einschätzungen aus der Jugend für möglich gehalten hätten.`,
+      choices: [
+        {
+          id: "bescheiden",
+          label: "Bescheiden bleiben",
+          detail: "Kein großes Aufheben - einfach weiterarbeiten.",
+          effects: {
+            traitDeltas: { disziplin: 2 },
+            clubRelation: 2,
+            logText: "reagiert bescheiden darauf, die eigenen Erwartungen übertroffen zu haben.",
+            logKind: "positive",
+          },
+        },
+        {
+          id: "stolz",
+          label: "Offen stolz darauf sein",
+          detail: "Ein Statement-Moment - mediales Echo inklusive.",
+          effects: {
+            reputation: 3,
+            traitDeltas: { medienimage: 2 },
+            logText: "zeigt sich offen stolz darauf, die eigenen Erwartungen übertroffen zu haben.",
+            logKind: "positive",
+          },
+        },
+      ],
+    }),
+  },
 ];
 
 export function getTemplateById(id: string): EventTemplate | undefined {
