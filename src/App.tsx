@@ -21,7 +21,7 @@ import {
   decideNarrativeEventInjection,
   dueStorylineTemplateIds,
   finalizeYouthClub,
-  insertAt,
+  insertWithinBudget,
   isClubOfferEvent,
   overallRating,
   pickPostCareerPath,
@@ -140,32 +140,42 @@ export default function App() {
     // Nur IDs vormerken - der eigentliche Event-Text wird erst beim Anzeigen gebaut
     // (siehe buildEventFromId), damit er immer den dann aktuellen Verein zeigt.
     let ids = pickSeasonTemplateIds(game.player, used, recentTemplateSeasons, nextSeasonNumber);
+    // Saison-Budget (siehe "EVENT-POOL INTEGRATION" Abschnitt 1/8): die von
+    // `pickSeasonTemplateIds` zufällig gewürfelte Basis-Größe (3-5) bleibt für
+    // die GESAMTE Saison verbindlich - Storyline-Fortsetzungen/Vereinsangebote/
+    // narrative Events/Sommerpause zählen ab jetzt ALS eines dieser Slots
+    // (siehe `insertWithinBudget`), statt zusätzlich addiert zu werden. `guaranteed`
+    // sammelt alle bereits garantiert eingeplanten IDs, damit sich die folgenden
+    // Injektionen nicht gegenseitig wieder verdrängen.
+    const seasonEventBudget = ids.length;
+    const guaranteedIds = new Set<string>();
 
     // "Hard Priority" für narrative Ereignisse (siehe "EVENT-POOL INTEGRATION"
     // Abschnitt 4/5): bei einem echten, anhaltenden Karriere-Wendepunkt wird EIN
-    // bereits gezogener Slot GEGEN das passende narrative Event GETAUSCHT - die
-    // Basis-Ziehung (3-5, siehe `pickSeasonTemplateIds`) wächst dadurch NICHT,
-    // es wird kein sechstes Event hinzugefügt. Läuft VOR den unten unveränderten,
-    // additiven Storyline-/Vereinsangebots-/Sommerpausen-Injektionen.
+    // Slot GEZIELT für das passende narrative Event reserviert, statt es dem
+    // reinen Zufall der gewichteten Auswahl zu überlassen.
     const narrativeInjectionId = decideNarrativeEventInjection(game.player, used, recentTemplateSeasons, nextSeasonNumber);
-    if (narrativeInjectionId && ids.length > 0 && !ids.includes(narrativeInjectionId)) {
-      ids = [...ids.slice(0, -1), narrativeInjectionId];
+    if (narrativeInjectionId) {
+      ids = insertWithinBudget(ids, narrativeInjectionId, ids.length, guaranteedIds, seasonEventBudget);
       recentTemplateSeasons[narrativeInjectionId] = nextSeasonNumber;
     }
 
     // Fällige Storyline-Fortsetzungen werden garantiert eingeplant, nicht zufällig gezogen.
     for (const storyId of dueStorylineTemplateIds(game.player, nextSeasonNumber)) {
-      ids = insertAt(ids, storyId, Math.min(1, ids.length));
+      ids = insertWithinBudget(ids, storyId, Math.min(1, ids.length), guaranteedIds, seasonEventBudget);
     }
 
     // Wechsel sollen realistisch an echte Transferfenster gebunden sein, nicht an
     // eine beliebige Stelle mitten in der Saison: Angebote nach Profidebüt/starker
     // Form kommen im Sommer (ganz am Saisonanfang, vor allen anderen Ereignissen),
     // Bankdruck-Angebote erst im Winterfenster (nach der gedachten Hinrunde).
+    // Transferangebote bleiben dabei Bestandteil des normalen Eventpools (siehe
+    // "EVENT-POOL INTEGRATION" Abschnitt 8), zählen also ebenfalls als einer der
+    // `seasonEventBudget`-Slots statt zusätzlich addiert zu werden.
     const offerReason = decideClubOfferInjection(game.player);
     if (offerReason) {
       const insertIndex = offerReason === "pressure" ? Math.ceil(ids.length / 2) : 0;
-      ids = insertAt(ids, clubOfferTemplateId(offerReason), insertIndex);
+      ids = insertWithinBudget(ids, clubOfferTemplateId(offerReason), insertIndex, guaranteedIds, seasonEventBudget);
     }
 
     // Sommerpause: NICHT jede Saison (siehe `shouldTriggerVacationEvent` - feste
@@ -176,9 +186,10 @@ export default function App() {
     // statt mittendrin. Während eines laufenden Leihjahres wird sie automatisch
     // verworfen, sobald das Leihangebot angenommen wird (siehe `handleChoice`,
     // das die Event-Queue dann komplett durch die drei Leih-Entscheidungen
-    // ersetzt) - keine zusätzliche Prüfung hier nötig.
+    // ersetzt) - keine zusätzliche Prüfung hier nötig. Niedrigste Priorität aller
+    // Injektionen - zählt ebenfalls zum Saison-Budget statt es zu sprengen.
     if (shouldTriggerVacationEvent(game.player)) {
-      ids = [...ids, VACATION_TEMPLATE_ID];
+      ids = insertWithinBudget(ids, VACATION_TEMPLATE_ID, ids.length, guaranteedIds, seasonEventBudget);
     }
 
     if (ids.length === 0) {

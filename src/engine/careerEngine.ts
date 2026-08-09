@@ -3148,6 +3148,48 @@ export function insertAt<T>(arr: T[], item: T, index: number): T[] {
   return [...arr.slice(0, i), item, ...arr.slice(i)];
 }
 
+/**
+ * Wie `insertAt`, hält die Saison danach aber im bestehenden 3-5-Event-Budget
+ * (siehe "EVENT-POOL INTEGRATION" Abschnitt 1/8: Transferangebote/Storyline-
+ * Fortsetzungen/narrative Events zählen ALS eines der 3-5 Slots, statt
+ * zusätzlich addiert zu werden - Beispiel Abschnitt 8: "Nicht: 4 normale Events
+ * + 1 Transfer + 1 Narrative Event, wenn dadurch 6 Events entstehen würden").
+ * Entfernt dafür bei Bedarf ein bereits vorhandenes, NICHT geschütztes
+ * ("organisches", aus der zufälligen Basis-Ziehung stammendes) Element -
+ * `guaranteed` sammelt alle bereits garantiert eingeplanten IDs (Storyline/
+ * Angebot/narrative Hard-Priority/Sommerpause), damit spätere Aufrufe
+ * einander nicht gegenseitig verdrängen. Bleiben nur noch geschützte Elemente
+ * übrig (sehr seltener Grenzfall mehrerer gleichzeitiger Wendepunkte in
+ * derselben Saison), wird ausnahmsweise über das Budget hinaus eingefügt,
+ * statt bereits garantierten Inhalt wieder zu verwerfen.
+ */
+export function insertWithinBudget(
+  ids: string[],
+  id: string,
+  index: number,
+  guaranteed: Set<string>,
+  maxTotal: number
+): string[] {
+  if (ids.includes(id)) {
+    guaranteed.add(id);
+    return ids;
+  }
+  let next = insertAt(ids, id, index);
+  guaranteed.add(id);
+  while (next.length > maxTotal) {
+    let removeIdx = -1;
+    for (let i = next.length - 1; i >= 0; i--) {
+      if (!guaranteed.has(next[i])) {
+        removeIdx = i;
+        break;
+      }
+    }
+    if (removeIdx < 0) break; // Grenzfall: alles geschützt, Budget ausnahmsweise überschritten.
+    next = [...next.slice(0, removeIdx), ...next.slice(removeIdx + 1)];
+  }
+  return next;
+}
+
 /** Ergebnis einer `club_offer`-Entscheidung - enthält zusätzlich die neue aktive
  * Liga, falls der Wechsel ins Ausland führte (siehe `GameState.foreignLeagues`). */
 export interface ClubOfferResult {
