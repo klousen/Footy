@@ -18,6 +18,7 @@ import {
   computeLegacy,
   createPlayer,
   decideClubOfferInjection,
+  decideNarrativeEventInjection,
   dueStorylineTemplateIds,
   finalizeYouthClub,
   insertAt,
@@ -139,6 +140,18 @@ export default function App() {
     // Nur IDs vormerken - der eigentliche Event-Text wird erst beim Anzeigen gebaut
     // (siehe buildEventFromId), damit er immer den dann aktuellen Verein zeigt.
     let ids = pickSeasonTemplateIds(game.player, used, recentTemplateSeasons, nextSeasonNumber);
+
+    // "Hard Priority" für narrative Ereignisse (siehe "EVENT-POOL INTEGRATION"
+    // Abschnitt 4/5): bei einem echten, anhaltenden Karriere-Wendepunkt wird EIN
+    // bereits gezogener Slot GEGEN das passende narrative Event GETAUSCHT - die
+    // Basis-Ziehung (3-5, siehe `pickSeasonTemplateIds`) wächst dadurch NICHT,
+    // es wird kein sechstes Event hinzugefügt. Läuft VOR den unten unveränderten,
+    // additiven Storyline-/Vereinsangebots-/Sommerpausen-Injektionen.
+    const narrativeInjectionId = decideNarrativeEventInjection(game.player, used, recentTemplateSeasons, nextSeasonNumber);
+    if (narrativeInjectionId && ids.length > 0 && !ids.includes(narrativeInjectionId)) {
+      ids = [...ids.slice(0, -1), narrativeInjectionId];
+      recentTemplateSeasons[narrativeInjectionId] = nextSeasonNumber;
+    }
 
     // Fällige Storyline-Fortsetzungen werden garantiert eingeplant, nicht zufällig gezogen.
     for (const storyId of dueStorylineTemplateIds(game.player, nextSeasonNumber)) {

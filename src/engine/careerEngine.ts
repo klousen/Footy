@@ -3092,6 +3092,56 @@ export function decideClubOfferInjection(player: Player): ClubOfferReason | null
   return null;
 }
 
+/**
+ * "Hard Priority" für narrative Ereignisse (siehe "EVENT-POOL INTEGRATION"
+ * Abschnitt 4/5) - reserviert bei einem ECHTEN, mehrere Saisons anhaltenden
+ * Karriere-Wendepunkt (TURNING_POINT) gezielt einen Slot für ein passendes
+ * narratives Event, statt es dem reinen Zufall der gewichteten Auswahl (siehe
+ * `EventTemplate.dynamicWeight`, das nur die "soft priority" abdeckt) zu
+ * überlassen. Greift bewusst SELTEN (nur bei anhaltenden, nicht bei jeder
+ * kleinen Schwankung) - der Aufrufer (App.tsx `handleStartSeason`) ERSETZT
+ * damit einen der bereits von `pickSeasonTemplateIds` gezogenen Slots, statt
+ * einen zusätzlichen sechsten hinzuzufügen (Basis-Ziehung bleibt bei 3-5).
+ */
+export function decideNarrativeEventInjection(
+  player: Player,
+  usedTemplateIds: Set<string>,
+  recentTemplateSeasons: Record<string, number>,
+  seasonNumber: number
+): string | null {
+  const eligible = (id: string): boolean => {
+    const t = getTemplateById(id);
+    if (!t) return false;
+    if (player.age < t.minAge || player.age > t.maxAge) return false;
+    if (t.unique && usedTemplateIds.has(id)) return false;
+    const last = recentTemplateSeasons[id];
+    if (last !== undefined && seasonNumber - last < TEMPLATE_HARD_MIN_GAP) return false;
+    return t.condition ? t.condition(player) : true;
+  };
+
+  const thread = player.activeNarrativeThread;
+  if (thread) {
+    const seasonsSinceMove = player.seasonHistory.length - thread.seasonHistoryIndex;
+    // Anhaltende Anpassungsschwierigkeiten (mindestens 2 Saisons) nach einem
+    // großen Wechsel - genau der Fall, den Abschnitt 4/5 als Beispiel nennt.
+    if (thread.stage === "STRUGGLE" && seasonsSinceMove >= 2 && eligible("narrative_kaltes_wasser")) {
+      return "narrative_kaltes_wasser";
+    }
+    // Der Wiederaufbau nach einer schwierigen Phase ist selbst ein Wendepunkt -
+    // verdient denselben garantierten Slot wie der negative Fall.
+    if (thread.stage === "REBUILD" && eligible("narrative_platz_gefunden")) {
+      return "narrative_platz_gefunden";
+    }
+  }
+  // Eine lange Nationalmannschafts-Kandidatur-Serie (siehe
+  // `Player.nationalTeamCandidacySeasons`) ohne Berufung ist ebenfalls ein
+  // echter Wendepunkt-Kandidat, nicht nur eine Randnotiz.
+  if (player.nationalTeamCandidacySeasons >= 5 && eligible("narrative_berufungsfrust")) {
+    return "narrative_berufungsfrust";
+  }
+  return null;
+}
+
 /** Setzt ein Element an eine bestimmte Position (geklemmt auf die Array-Länge). */
 export function insertAt<T>(arr: T[], item: T, index: number): T[] {
   const i = clamp(index, 0, arr.length);
