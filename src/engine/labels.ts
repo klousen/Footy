@@ -2,6 +2,7 @@ import type {
   AttributeKey,
   CareerNarrativeState,
   CareerPhenotype,
+  NarrativeTrend,
   Player,
   RelationshipStatus,
   SeasonStats,
@@ -162,6 +163,18 @@ export interface NarrativeMomentumText {
   headline: string;
   text: string;
 }
+
+/** Kurzes, natürlichsprachliches Etikett für einen `NarrativeTrend`-Wert (siehe
+ * Bugreport "Performance: 52 → 61 → 66 → 63 ... Das ist intransparent" - die
+ * Saison-Verlaufszeilen zeigten bisher NUR die rohen Zahlen ohne Einordnung, ob
+ * das nun gut oder schlecht ist. Nutzt bewusst dieselbe Klassifikation
+ * (`computeCareerNarrativeState`/`trendFrom`), die auch die Dashboard-/Saison-
+ * Erzähltexte antreibt, statt eine zweite, abweichende Bewertung einzuführen. */
+export const TREND_LABEL: Record<NarrativeTrend, string> = {
+  rising: "↗ steigend",
+  falling: "↘ fallend",
+  stable: "→ stabil",
+};
 
 /**
  * Dashboard-Baustein "Karriereverlauf" (siehe Vorgabe Abschnitt 9+10, hier bewusst

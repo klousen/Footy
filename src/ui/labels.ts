@@ -18,5 +18,6 @@ export {
   describeCareerMomentum,
   describeSeasonNarrative,
   turningPointForSeason,
+  TREND_LABEL,
 } from "../engine/labels";
 export type { OverallTier, NarrativeMomentumText } from "../engine/labels";

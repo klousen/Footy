@@ -2,7 +2,7 @@ import type { LoanNarrativeState, Player, SeasonStats } from "../engine/types";
 import { overallRatingFromAttributes } from "../engine/types";
 import { computeCareerNarrativeState, overallRating } from "../engine/careerEngine";
 import { computeLoanSummaryTier } from "../engine/loanStory";
-import { describeSeasonNarrative, formatMoney, overallTier, turningPointForSeason } from "./labels";
+import { describeSeasonNarrative, formatMoney, overallTier, turningPointForSeason, TREND_LABEL } from "./labels";
 import { LeagueTableSnapshot } from "./LeagueTableSnapshot";
 import { StatBox } from "./StatBox";
 
@@ -196,15 +196,38 @@ export function SeasonSummary({
         </ul>
         {recentTrendSeasons.length >= 3 && (
           <div className="season-trend-lines">
-            <p className="muted trend-line">
-              Performance: {recentTrendSeasons.map((s) => Math.round(s.performanceScore)).join(" → ")}
+            <p className="trend-lines-heading muted">
+              Verlauf · Alter {recentTrendSeasons[0].age}–{recentTrendSeasons[recentTrendSeasons.length - 1].age}
             </p>
-            <p className="muted trend-line">
-              Einsatzzeit: {recentTrendSeasons.map((s) => `${Math.round((s.possibleMinutes > 0 ? s.minutesPlayed / s.possibleMinutes : 0) * 100)}%`).join(" → ")}
-            </p>
-            <p className="muted trend-line">
-              Gesamtstärke: {recentTrendSeasons.map((s) => s.overallRating).join(" → ")}
-            </p>
+            <div className="trend-line">
+              <div className="trend-line-head">
+                <span>
+                  Performance <span className="trend-line-hint">(0-100 · 50 = Liga-Schnitt für deine Rolle)</span>
+                </span>
+                <span className={`trend-badge trend-badge-${narrativeState.performanceTrend}`}>{TREND_LABEL[narrativeState.performanceTrend]}</span>
+              </div>
+              <span className="trend-line-values">{recentTrendSeasons.map((s) => Math.round(s.performanceScore)).join(" → ")}</span>
+            </div>
+            <div className="trend-line">
+              <div className="trend-line-head">
+                <span>
+                  Einsatzzeit <span className="trend-line-hint">(Anteil deiner Teamminuten)</span>
+                </span>
+                <span className={`trend-badge trend-badge-${narrativeState.playingTimeTrend}`}>{TREND_LABEL[narrativeState.playingTimeTrend]}</span>
+              </div>
+              <span className="trend-line-values">
+                {recentTrendSeasons.map((s) => `${Math.round((s.possibleMinutes > 0 ? s.minutesPlayed / s.possibleMinutes : 0) * 100)}%`).join(" → ")}
+              </span>
+            </div>
+            <div className="trend-line">
+              <div className="trend-line-head">
+                <span>
+                  Gesamtstärke <span className="trend-line-hint">(Skill-Rating 1-99)</span>
+                </span>
+                <span className={`trend-badge trend-badge-${narrativeState.clubLevelTrend}`}>{TREND_LABEL[narrativeState.clubLevelTrend]}</span>
+              </div>
+              <span className="trend-line-values">{recentTrendSeasons.map((s) => s.overallRating).join(" → ")}</span>
+            </div>
           </div>
         )}
       </div>

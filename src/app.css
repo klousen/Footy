@@ -1501,11 +1501,59 @@ input:focus {
   margin-top: 10px;
   padding-top: 10px;
   border-top: 1px solid var(--line);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.trend-lines-heading {
+  font-size: 0.76rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin: 0;
 }
 
 .trend-line {
   font-size: 0.8rem;
-  margin: 2px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.trend-line-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.trend-line-hint {
+  font-size: 0.72rem;
+  color: var(--muted);
+  font-weight: 400;
+}
+
+.trend-line-values {
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.trend-badge {
+  font-size: 0.74rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.trend-badge-rising {
+  color: var(--green);
+}
+
+.trend-badge-falling {
+  color: var(--red);
+}
+
+.trend-badge-stable {
+  color: var(--muted);
 }
 
 /* ---------------- Season summary ---------------- */
