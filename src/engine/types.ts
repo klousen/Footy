@@ -773,9 +773,13 @@ export interface Player {
    * Kaderrollen-Verschlechterung (siehe `resolveClubSituation`) - garantiert ein
    * Reaktions-Event ("Die Kaderrolle wackelt", siehe `decideRoleChallengeInjection`)
    * in der kommenden Saison, statt die Degradierung unwidersprochen hinzunehmen.
-   * `null` außerhalb einer solchen offenen Situation. Wird beim Einplanen des
-   * Events wieder auf `null` gesetzt (siehe `handleStartSeason` in App.tsx) -
-   * unabhängig davon, welche der drei Antwortmöglichkeiten gewählt wird. */
+   * `null` außerhalb einer solchen offenen Situation. Wird ERST zurückgesetzt,
+   * sobald die Antwort tatsächlich gewählt wurde (siehe `applyChoice`) - NICHT
+   * schon beim garantierten Einplanen in `handleStartSeason` (App.tsx), da
+   * `buildEventFromId` die `condition` beim tatsächlichen Anzeigen erneut prüft
+   * und ein zu frühes Zurücksetzen den Slot sonst sofort gegen die neutrale
+   * "Ruhige Woche"-Ersatzfüllung tauschen würde. Gilt unabhängig davon, welche
+   * der drei Antwortmöglichkeiten gewählt wird. */
   roleChallengePending: SquadRole | null;
   /** Wurde bereits Kapitän der Nationalmannschaft (schaltet u.a. ein Achievement frei). */
   nationalTeamCaptain: boolean;

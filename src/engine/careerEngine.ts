@@ -1230,16 +1230,50 @@ export function simulateSeason(
   const redCards = rng() < 0.05 * (matches / 30) * cardFactor ? 1 : 0;
 
   // Tabellenplatz: Vereinsstärke + etwas Zufall, moduliert leicht durch eigene Form.
-  // Nenner bewusst auf 93 (statt der rohen Skala bis 100) gesetzt: bei einem Nenner
-  // von 100 bräuchte es praktisch Vereinsstärke 90+ MIT Idealglück, um überhaupt auf
-  // Tabellenplatz 1-2 zu landen - damit wäre der Titelkampf faktisch nur den 2-3
-  // absolut stärksten Vereinen der gesamten Liga vorbehalten. Mit 93 reicht ein
-  // wirklich starker (nicht zwingend DER stärkste) Verein plus etwas Losglück, um
-  // an der Tabellenspitze mitzuspielen - realistischer für die Titelchancen-Formel
-  // unten (`coeffDominance`/`leaguePosition`).
+  //
+  // Bugreport "61% aller Kaderrollen-Verschlechterungen kommen daher, dass der
+  // Verein stärker wird - hängt das mit meinem Spielstil zusammen?": zwei
+  // unabhängige Korrekturen, beide per Backtest verifiziert (siehe
+  // Diagnose-Skripte, im Commit dokumentiert):
+  //
+  // (1) Kleinerer Effekt: der Formmodifikator war auf `avgRating - 6.5`
+  // zentriert, die tatsächliche Ø-avgRating über 24.000 simulierte Saisons
+  // liegt aber bei ~6.75 (die Bewertungsformel selbst ist leicht positiv
+  // verzerrt) - auf den empirisch gemessenen Wert zentriert, macht den
+  // Formmodifikator wieder mittelwertneutral.
+  //
+  // (2) HAUPTURSACHE, per isoliertem Test bestätigt (Ø +5.65 Plätze
+  // strukturell zu gut für Liga-1-Vereine, +0 für Liga 2, VÖLLIG unabhängig
+  // von avgRating/Zufall): der frühere feste Nenner 93 unterstellte implizit
+  // eine Stärkespanne von fast 0-99 über die GESAMTE Liga - real bewegt sich
+  // Liga 1 aber nur im Band 60-92, Liga 2 nur in 32-56 (siehe
+  // `strengthForRank` in leagueEngine.ts). Ein Liga-1-Verein mittlerer
+  // Stärke (~76) landete dadurch strukturell auf Tabellenplatz ~4 statt
+  // realistisch ~9 - JEDER Liga-1-Verein bekam so einen unverdienten
+  // Tabellenplatz-Bonus, der über `computeClubResultDrift` in einen
+  // einseitigen Aufwärtsdrift NUR der eigenen Vereinsstärke floss (alle
+  // übrigen Ligavereine laufen über rein rangbasiertes, symmetrisches
+  // Zufallsrauschen in `simulateTable` - der Bonus traf ausschließlich den
+  // eigenen, "verankerten" Verein). Jetzt relativ zur TATSÄCHLICHEN
+  // Stärkespanne der eigenen Liga-Ebene berechnet statt eines pauschalen
+  // Nenners - ein Verein an der Spitze SEINER Liga-Ebene landet weiterhin
+  // (mit etwas Losglück durch `strengthNoise`) ganz oben, ein Verein in der
+  // Mitte landet jetzt aber auch wirklich in der Mitte statt künstlich
+  // im oberen Drittel.
+  const AVG_RATING_NEUTRAL_POINT = 6.75;
+  const tierClubs = player.club.tier === 1 ? league.tier1 : league.tier2;
+  const tierStrengths = tierClubs.map((c) => c.strength);
+  const tierMax = tierStrengths.length > 0 ? Math.max(...tierStrengths) : clubStrength;
+  const tierMin = tierStrengths.length > 0 ? Math.min(...tierStrengths) : clubStrength;
+  const tierSpan = Math.max(1, tierMax - tierMin);
+  const totalClubsInTier = Math.max(2, tierClubs.length);
   const strengthNoise = (rng() - 0.5) * 20;
-  const effectiveStrength = clubStrength + strengthNoise + (avgRating - 6.5) * 2;
-  const leaguePosition = clamp(Math.round(18 - (effectiveStrength / 93) * 17), 1, 18);
+  const effectiveStrength = clubStrength + strengthNoise + (avgRating - AVG_RATING_NEUTRAL_POINT) * 2;
+  const leaguePosition = clamp(
+    Math.round(1 + ((tierMax - effectiveStrength) / tierSpan) * (totalClubsInTier - 1)),
+    1,
+    totalClubsInTier
+  );
 
   // Tabellen-Ausschnitt für den Saisonrückblick (3 Vereine über/unter dem eigenen,
   // siehe `buildTableSnapshot`) - die Spielanzahl ergibt sich dort aus einer
