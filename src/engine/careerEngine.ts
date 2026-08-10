@@ -682,7 +682,7 @@ function applyEffects(player: Player, effects: EventChoice["effects"], season: n
       club: player.club.name,
       yearsLeft: 2,
       wagePerYear: Math.max(6000, Math.round(wage * 0.6)),
-      squadRole: squadRoleForOverall(overall, player.club.strength, player.position),
+      squadRole: squadRoleForOverall(overall, player.club.strength, player.position, player.age),
     };
   }
   if (effects.definingMoment) player.definingMoment = effects.definingMoment;
@@ -1928,8 +1928,35 @@ function transferEffectiveOverall(player: Player, overall: number, oldClubStreng
  * zu strikte 0-Schwelle würde sonst realistische Nummer-1-Torhüter knapp
  * unterhalb der Vereinsstärke fälschlich auf die Bank verbannen.
  */
-function squadRoleForOverall(overall: number, clubStrength: number, position: Position): SquadRole {
-  const diff = overall - clubStrength;
+/**
+ * ROOKIE TRANSITION (17→18, siehe Feature-Vorgabe "ROOKIE TRANSITION 17 → 18"):
+ * ein frisch aus der Akademie kommender 18-Jähriger wird sonst 1:1 wie ein
+ * etablierter Profi an der VOLLEN Vereinsstärke gemessen (`squadRoleForOverall`)
+ * - obwohl er real noch Jahre von seinem Potenzial entfernt ist. Das drückt ihn
+ * strukturell zu oft auf die Bank, rein WEIL er jung ist, nicht weil er
+ * schlecht ist (siehe Diagnose "OVR-Entwicklung vs. Erstverein-Wahl": ein
+ * Rookie bei einem starken Jugendverein schnitt in der Simulation spürbar
+ * schlechter ab als bei einem schwachen, exakt über diesen Mechanismus).
+ *
+ * Rührt bewusst NUR an der Kaderrollen-/Konkurrenzbewertung (verschiebt die
+ * VERGLEICHSGRÖSSE `clubStrength`, nie den Spieler selbst) - KEINE Änderung an
+ * OVR/Potential/Base-Roll/developmentTrajectory/Attributen. Linear auslaufend,
+ * kein harter Sprung: 18 volle Schonfrist, 19 halbiert, 20 ein Viertel, ab 21
+ * komplett normale Logik (0) - "ein 18-Jähriger soll als junger Profi
+ * behandelt werden, nicht wie ein etablierter Profi" - der Vereinsunterschied
+ * bleibt relevant, wird nur nicht mehr ungefiltert an einen kompletten Rookie
+ * angelegt.
+ */
+function rookieAllowance(age: number): number {
+  if (age <= 18) return 8;
+  if (age === 19) return 4;
+  if (age === 20) return 2;
+  return 0;
+}
+
+function squadRoleForOverall(overall: number, clubStrength: number, position: Position, age: number): SquadRole {
+  const effectiveClubStrength = clubStrength - rookieAllowance(age);
+  const diff = overall - effectiveClubStrength;
   if (position === "TW") {
     return diff >= -3 ? "Stammspieler" : "Ersatzbank";
   }
@@ -2159,8 +2186,11 @@ function currentSquadRole(player: Player, clubStrength: number): SquadRole {
   const formFactor = lastStats ? (lastStats.avgRating - 6.5) * 1.8 : 0; // ca. -10 .. +6
   // Dieselben gelockerten Schwellen wie `squadRoleForOverall` (siehe dortiger
   // Kommentar) - Konsistenz zwischen Angebots-Vorschau und tatsächlicher
-  // laufender Kaderrolle.
-  const roleScore = overall - clubStrength + relationFactor + formFactor;
+  // laufender Kaderrolle. Dieselbe ROOKIE-TRANSITION-Schonfrist (siehe
+  // `rookieAllowance`) gilt auch hier für die laufende Saison-für-Saison-
+  // Neubewertung, nicht nur einmalig beim Profidebüt - ein 19-/20-Jähriger soll
+  // sich über diese Jahre erkennbar (aber abnehmend) leichter festsetzen können.
+  const roleScore = overall - clubStrength + relationFactor + formFactor + rookieAllowance(player.age);
   if (player.position === "TW") {
     return roleScore >= -3 ? "Stammspieler" : "Ersatzbank";
   }
@@ -2906,7 +2936,7 @@ function buildClubOfferEvent(
     // richtige Frage, kein Länder-Vergleich).
     const candStrengthForTransfer = displayClubStrength(cand.club.strength, cand.countryId);
     const transferOverall = transferEffectiveOverall(player, overall, currentStrengthDisplay);
-    const promisedRole = squadRoleForOverall(transferOverall, candStrengthForTransfer, player.position);
+    const promisedRole = squadRoleForOverall(transferOverall, candStrengthForTransfer, player.position, player.age);
     // Das Einsatzminuten-Versprechen eines NEUEN Vereins ist nie hundertprozentig
     // sicher - je größer der Sprung zwischen eigener Stärke und Vereinsniveau,
     // desto eher bleibt die versprochene Rolle nur ein Lippenbekenntnis (siehe
@@ -2975,14 +3005,14 @@ function buildClubOfferEvent(
     choices.push({
       id: "stay-debut",
       label: `Profivertrag bei ${player.club.name} unterschreiben`,
-      detail: `Bleib deinem Jugendverein treu · Rolle voraussichtlich ${squadRoleLabel(squadRoleForOverall(overall, currentStrength, player.position), player.position)} · Gehalt ca. ${formatMoney(stayWagePreview)}/Jahr · Vertrauensbonus durch die vertraute Umgebung`,
+      detail: `Bleib deinem Jugendverein treu · Rolle voraussichtlich ${squadRoleLabel(squadRoleForOverall(overall, currentStrength, player.position, player.age), player.position)} · Gehalt ca. ${formatMoney(stayWagePreview)}/Jahr · Vertrauensbonus durch die vertraute Umgebung`,
       effects: {},
       offerCard: {
         headline: `Bei ${player.club.name} bleiben`,
         league: leagueNameForTier(league, player.club.tier),
         strength: currentStrengthDisplay,
         wage: stayWagePreview,
-        roleLabel: squadRoleLabel(squadRoleForOverall(overall, currentStrength, player.position), player.position),
+        roleLabel: squadRoleLabel(squadRoleForOverall(overall, currentStrength, player.position, player.age), player.position),
         roleSub: "Vertrauensbonus durch die vertraute Umgebung",
         typeLabel: "Bleiben",
         isStay: true,
@@ -3388,7 +3418,7 @@ export function applyClubOfferChoice(
       player.country,
       clubLeagueRank(player.club.clubId, player.club.tier, league)
     );
-    const newRole = squadRoleForOverall(overall, player.club.strength, player.position);
+    const newRole = squadRoleForOverall(overall, player.club.strength, player.position, player.age);
     player.contract = { club: player.club.name, yearsLeft: 3, wagePerYear: wage, squadRole: newRole };
     player.clubRelation = 75;
     player.morale = clamp(player.morale + 10, 0, 100);
@@ -3472,7 +3502,7 @@ export function applyClubOfferChoice(
   // vergleichbare Skala wie in `buildClubOfferEvent` (siehe `displayClubStrength`
   // dort), altes UND neues Land jeweils mit dem eigenen Länderansehen normiert.
   const transferOverall = transferEffectiveOverall(player, overall, displayClubStrength(oldStrength, oldCountryId));
-  const promisedRole = squadRoleForOverall(transferOverall, displayClubStrength(chosen.strength, wageCountryId), player.position);
+  const promisedRole = squadRoleForOverall(transferOverall, displayClubStrength(chosen.strength, wageCountryId), player.position, player.age);
   // Das in der Angebots-Vorschau gezeigte Einsatzminuten-Versprechen (siehe
   // `buildClubOfferEvent`) wird hier tatsächlich ausgewürfelt: je größer der
   // Sprung zwischen eigener Stärke und Vereinsniveau, desto eher bleibt es ein

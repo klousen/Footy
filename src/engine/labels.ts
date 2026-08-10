@@ -255,6 +255,31 @@ export function describeCareerMomentum(state: CareerNarrativeState, player: Play
     }
   }
 
+  // ROOKIE TRANSITION (18-20, siehe Feature-Vorgabe "ROOKIE TRANSITION 17 → 18"):
+  // eigene, altersspezifische Dashboard-Texte für die ersten Profijahre - 18 ist
+  // ein reiner Meilenstein-Hinweis (immer gezeigt, wertfrei), 19/20 nur bei
+  // tatsächlich dazu passenden Daten (Einsatzzeit), sonst übernimmt das generische
+  // Trend-System unten. KEIN automatisches "Durchbruch" allein aufgrund des
+  // Alters (Vorgabe Abschnitt 8/9) - deshalb hier ausschließlich auf echte
+  // `seasonHistory`-Werte gestützt, nie nur auf `player.age`.
+  const lastSeason = player.seasonHistory[player.seasonHistory.length - 1];
+  if (lastSeason && lastSeason.age >= 18 && lastSeason.age <= 20) {
+    const playTimeRatio = lastSeason.possibleMinutes > 0 ? lastSeason.minutesPlayed / lastSeason.possibleMinutes : 0;
+    if (lastSeason.age === 18) {
+      return playTimeRatio >= 0.35
+        ? { headline: "Dein erster Schritt in den Profifußball", text: "Deine erste Saison im Profikader liegt hinter dir - und direkt mit spürbarer Einsatzzeit." }
+        : { headline: "Dein erster Schritt in den Profifußball", text: "Deine erste Saison im Profikader liegt hinter dir - die große Rolle war es noch nicht, aber der Anfang ist gemacht." };
+    }
+    if (playTimeRatio >= 0.45 && state.performanceTrend !== "falling") {
+      return { headline: "Aus dem Nachwuchsspieler wird ein Profi", text: "Du beginnst, dich im Profikader festzusetzen." };
+    }
+    if (playTimeRatio < 0.25) {
+      return { headline: "Der Sprung fällt dir schwer", text: "Der Sprung in den Profifußball fällt dir bislang schwer - noch fehlt dir die regelmäßige Spielpraxis." };
+    }
+    // Mittleres Feld ohne klare Tendenz: kein erzwungener Text, das generische
+    // Trend-System unten übernimmt (siehe Vorgabe: "nicht jede Saison zwanghaft").
+  }
+
   const perfRising = state.performanceTrend === "rising";
   const perfFalling = state.performanceTrend === "falling" || state.playingTimeTrend === "falling";
   if (perfRising) {
@@ -314,6 +339,26 @@ export function describeSeasonNarrative(stats: SeasonStats, state: CareerNarrati
   // nötig) - Nutzerentscheidung: auch live im Saisonrückblick zeigen.
   if (player.transferDecisions.at(-1)?.isHomecoming && player.transferDecisions.at(-1)?.season === player.seasonHistory.length) {
     return { headline: "Wieder daheim", text: "Die Rückkehr zu einem Verein aus früheren Jahren ist geschafft." };
+  }
+  // ROOKIE TRANSITION (18-20, siehe Feature-Vorgabe "ROOKIE TRANSITION 17 → 18"):
+  // eigene Saisonrückblick-Texte für die ersten Profijahre, dieselbe Logik wie in
+  // `describeCareerMomentum` (18 = wertfreier Meilenstein, 19/20 nur bei
+  // tatsächlich dazu passender Einsatzzeit - kein automatisches "Durchbruch"
+  // allein aufgrund des Alters).
+  if (stats.age >= 18 && stats.age <= 20) {
+    const playTimeRatio = stats.possibleMinutes > 0 ? stats.minutesPlayed / stats.possibleMinutes : 0;
+    if (stats.age === 18) {
+      return playTimeRatio >= 0.35
+        ? { headline: "Dein erster Schritt in den Profifußball", text: "Deine erste Saison im Profikader - und direkt mit spürbarer Einsatzzeit." }
+        : { headline: "Dein erster Schritt in den Profifußball", text: "Deine erste Saison im Profikader liegt hinter dir - die große Rolle war es noch nicht, aber der Anfang ist gemacht." };
+    }
+    if (playTimeRatio >= 0.45 && state.performanceTrend !== "falling") {
+      return { headline: "Du setzt dich durch", text: "Du beginnst, dich im Profikader festzusetzen." };
+    }
+    if (playTimeRatio < 0.25) {
+      return { headline: "Der Sprung fällt dir schwer", text: "Der Sprung in den Profifußball fällt dir bislang schwer - noch fehlt dir die regelmäßige Spielpraxis." };
+    }
+    // Mittleres Feld: kein erzwungener Text, generisches System unten übernimmt.
   }
   // WICHTIG: `performanceScore` (siehe careerEngine.ts `simulateSeason`) ist bereits
   // eine eigenständige, um 50 zentrierte Skala (avgRating + productionFactor,
