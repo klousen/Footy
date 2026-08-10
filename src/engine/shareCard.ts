@@ -490,7 +490,7 @@ export function drawShareCard(canvas: HTMLCanvasElement, data: ShareCardData): v
         [String(data.cleanSheets), "Weiße Westen"],
         [`${data.savePercentage}%`, "Bälle"],
         [String(data.trophies), "Titel"],
-        [String(data.caps), "Länd."],
+        [String(data.caps), "Länderspiele"],
         [String(data.legacyScore), "Legacy"],
       ]
     : [
@@ -498,7 +498,7 @@ export function drawShareCard(canvas: HTMLCanvasElement, data: ShareCardData): v
         [String(data.goals), "Tore"],
         [String(data.assists), "Vorl."],
         [String(data.trophies), "Titel"],
-        [String(data.caps), "Länd."],
+        [String(data.caps), "Länderspiele"],
         [String(data.legacyScore), "Legacy"],
       ];
   const statRowH = 96;

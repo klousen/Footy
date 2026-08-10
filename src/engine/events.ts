@@ -1,4 +1,4 @@
-import type { AttributeKey, EventChoice, EventTemplate, Player } from "./types";
+import type { AttributeKey, EventChoice, EventTemplate, Player, RelationshipStatus } from "./types";
 import { detectClubHomecoming, isNearRetirement, overallRatingFromAttributes } from "./types";
 import { clamp, FEMALE_FIRST_NAMES, FIRST_NAMES, LAST_NAMES } from "./data";
 import { LOAN_DECISIONS } from "./loanStory";
@@ -29,6 +29,27 @@ export const HOMECOMING_TEMPLATE_ID = "heimkehr_verein";
 
 // Hilfsfunktion für lesbaren Vereinsnamen im Text
 const club = (p: Player) => p.club.name;
+
+/**
+ * Passende Trennungs-Sprache je nach Beziehungsstatus VOR der Trennung (siehe
+ * Nutzer-Feedback: "hat sich getrennt" liest sich bei Verheirateten/Verlobten
+ * falsch) - eine Ehe endet in einer Scheidung, eine Verlobung wird gelöst, nur
+ * eine "normale" Beziehung wird schlicht beendet. Nimmt bewusst den Status VOR
+ * dem Effekt entgegen (`p.relationshipStatus` beim `build()`-Aufruf, also vor
+ * `relationshipStatus: "single"`), nicht danach.
+ */
+function breakupPastPhrase(status: RelationshipStatus): string {
+  if (status === "verheiratet") return "hat sich scheiden lassen";
+  if (status === "verlobt") return "hat die Verlobung gelöst";
+  return "hat sich getrennt";
+}
+/** Wie `breakupPastPhrase`, aber mit Partnernamen eingebettet (für Sätze wie
+ * "hat sich von X getrennt"/"hat die Verlobung mit X gelöst"). */
+function breakupFromPhrase(status: RelationshipStatus, name: string): string {
+  if (status === "verheiratet") return `hat sich von ${name} scheiden lassen`;
+  if (status === "verlobt") return `hat die Verlobung mit ${name} gelöst`;
+  return `hat sich von ${name} getrennt`;
+}
 
 // Hilfsfunktion: zufälliger Vorname für neue Beziehungen. Der Spieler selbst
 // wird immer mit einem Namen aus FIRST_NAMES erzeugt (siehe `createPlayer`) -
@@ -1553,40 +1574,49 @@ export const EVENT_TEMPLATES: EventTemplate[] = [
       const busySchedule = lastSeason ? lastSeason.matches >= 12 : false;
       return busyRole || busySchedule;
     },
-    build: (p) => ({
-      category: "beziehung",
-      title: "Stress in der Beziehung",
-      description: `Die vielen Reisen, Trainingslager und der Rummel um deine Person belasten die Beziehung mit ${p.partnerName ?? "deiner Partnerin/deinem Partner"}.`,
-      choices: [
-        {
-          id: "zeit",
-          label: "Bewusst Zeit investieren",
-          effects: { morale: 4, fitness: -3, logText: "hat gezielt Zeit in die Beziehung investiert.", logKind: "positive" },
-        },
-        {
-          id: "schleifen",
-          label: "Erstmal weiterlaufen lassen",
-          effects: {},
-          followUpChance: {
-            chance: 0.55,
-            success: { morale: 2, logText: "hat die Beziehungskrise ohne große Aussprache überstanden.", logKind: "info" },
-            failure: {
+    build: (p) => {
+      const status = p.relationshipStatus;
+      return {
+        category: "beziehung",
+        title: "Stress in der Beziehung",
+        description: `Die vielen Reisen, Trainingslager und der Rummel um deine Person belasten die Beziehung mit ${p.partnerName ?? "deiner Partnerin/deinem Partner"}.`,
+        choices: [
+          {
+            id: "zeit",
+            label: "Bewusst Zeit investieren",
+            effects: { morale: 4, fitness: -3, logText: "hat gezielt Zeit in die Beziehung investiert.", logKind: "positive" },
+          },
+          {
+            id: "schleifen",
+            label: "Erstmal weiterlaufen lassen",
+            effects: {},
+            followUpChance: {
+              chance: 0.55,
+              success: { morale: 2, logText: "hat die Beziehungskrise ohne große Aussprache überstanden.", logKind: "info" },
+              failure: {
+                relationshipStatus: "single",
+                partnerName: null,
+                morale: -10,
+                reputation: -2,
+                logText: `${breakupPastPhrase(status)} - die Beziehung ist an der Belastung durch die Karriere zerbrochen.`,
+                logKind: "negative",
+              },
+            },
+          },
+          {
+            id: "trennen",
+            label: "Die Beziehung beenden",
+            effects: {
               relationshipStatus: "single",
               partnerName: null,
-              morale: -10,
-              reputation: -2,
-              logText: "hat sich getrennt - die Beziehung ist an der Belastung durch die Karriere zerbrochen.",
+              morale: -6,
+              logText: `${breakupPastPhrase(status)}, um sich auf die Karriere zu konzentrieren.`,
               logKind: "negative",
             },
           },
-        },
-        {
-          id: "trennen",
-          label: "Die Beziehung beenden",
-          effects: { relationshipStatus: "single", partnerName: null, morale: -6, logText: "hat die Beziehung beendet, um sich auf die Karriere zu konzentrieren.", logKind: "negative" },
-        },
-      ],
-    }),
+        ],
+      };
+    },
   },
   {
     id: "beziehung_auslandswechsel_risiko",
@@ -1606,6 +1636,7 @@ export const EVENT_TEMPLATES: EventTemplate[] = [
     build: (p) => {
       const realName = p.partnerName;
       const name = realName ?? "deine Partnerin/dein Partner";
+      const status = p.relationshipStatus;
       return {
         category: "beziehung",
         title: "Fernbeziehung oder Umzug?",
@@ -1644,7 +1675,7 @@ export const EVENT_TEMPLATES: EventTemplate[] = [
                 // "beziehung_alte_liebe_zurueck").
                 exPartnerName: realName,
                 morale: -9,
-                logText: `Die Fernbeziehung mit ${name} ist an der Distanz zum neuen Auslandsverein zerbrochen.`,
+                logText: `${breakupPastPhrase(status)} - die Fernbeziehung mit ${name} ist an der Distanz zum neuen Auslandsverein zerbrochen.`,
                 logKind: "negative",
               },
             },
@@ -1658,7 +1689,7 @@ export const EVENT_TEMPLATES: EventTemplate[] = [
               partnerName: null,
               exPartnerName: realName,
               morale: -5,
-              logText: `hat sich vor dem Auslandswechsel einvernehmlich von ${name} getrennt.`,
+              logText: `${breakupFromPhrase(status, name)} - einvernehmlich, vor dem Auslandswechsel.`,
               logKind: "negative",
             },
           },
@@ -1680,6 +1711,8 @@ export const EVENT_TEMPLATES: EventTemplate[] = [
     condition: (p) => p.relationshipStatus === "in_beziehung" || p.relationshipStatus === "verlobt" || p.relationshipStatus === "verheiratet",
     build: (p) => {
       const name = p.partnerName ?? "deiner Partnerin/deinem Partner";
+      const status = p.relationshipStatus;
+      const bondNoun = status === "verheiratet" ? "Ehe" : status === "verlobt" ? "Verlobung" : "Beziehung";
       return {
         category: "beziehung",
         title: "Der Funke fehlt",
@@ -1702,7 +1735,7 @@ export const EVENT_TEMPLATES: EventTemplate[] = [
                 relationshipStatus: "single",
                 partnerName: null,
                 morale: -4,
-                logText: `hat die eigene Lustlosigkeit offen angesprochen - das Gespräch hat nur bestätigt, dass es vorbei ist mit ${name}.`,
+                logText: `hat die eigene Lustlosigkeit offen angesprochen - das Gespräch hat nur bestätigt: die ${bondNoun} mit ${name} ist am Ende.`,
                 logKind: "negative",
               },
             },
@@ -1716,7 +1749,7 @@ export const EVENT_TEMPLATES: EventTemplate[] = [
               partnerName: null,
               morale: -4,
               traitDeltas: { disziplin: 1 },
-              logText: `hat sich eingestanden, selbst nicht mehr voll bei der Sache zu sein, und sich ehrlich von ${name} getrennt.`,
+              logText: `hat sich eingestanden, selbst nicht mehr voll bei der Sache zu sein, und ${breakupFromPhrase(status, name)}.`,
               logKind: "negative",
             },
           },
@@ -1736,7 +1769,7 @@ export const EVENT_TEMPLATES: EventTemplate[] = [
                 partnerName: null,
                 morale: -9,
                 reputation: -1,
-                logText: `hat die eigene Lustlosigkeit einfach ignoriert, bis die Beziehung mit ${name} daran zerbrochen ist.`,
+                logText: `hat die eigene Lustlosigkeit einfach ignoriert, bis die ${bondNoun} mit ${name} daran zerbrochen ist.`,
                 logKind: "negative",
               },
             },
