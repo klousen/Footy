@@ -194,6 +194,16 @@ export default function App() {
     setGame({ ...game, screen: "create" });
   }
 
+  // Zurück-Button auf der Länderauswahl: sofort ohne Rückfrage zum Titelmenü,
+  // da hier noch kein Spieler existiert - der Slot wurde für diesen (noch
+  // leeren) Versuch gerade erst reserviert (siehe `startNewCareerInSlot`) und
+  // wird deshalb wieder freigegeben, statt als "Spielstand" (ohne Spieler)
+  // liegen zu bleiben und fälschlich "Karriere fortsetzen" im Titelmenü zu zeigen.
+  function handleBackFromCountry() {
+    if (activeSlotId) deleteSlot(activeSlotId);
+    goToTitle();
+  }
+
   function handleCreatePlayer(name: string, position: Position, focus: AttributeKey) {
     if (!pendingCountry) return;
     const { player, league, offers } = createPlayer(name, position, focus, pendingCountry);
@@ -523,8 +533,11 @@ export default function App() {
     }
   }
 
+  // "Neue Karriere starten" nach Karriereende führt zurück ins Titelmenü statt
+  // direkt in die Länderauswahl - der reguläre Weg über 'title'/'slot-select'
+  // entscheidet dann (Free-Tier-Bestätigungsdialog bzw. Slot-Auswahl bei Pass).
   function handleNewCareerAfterEnd() {
-    startNewCareerInSlot(activeSlotId ?? "slot-1");
+    goToTitle();
   }
 
   // Der "Return"-Button oben rechts fragt erst nach, statt die Karriere sofort zu
@@ -607,7 +620,7 @@ export default function App() {
       {game.screen === "leaderboard" && (
         <LeaderboardScreen entries={loadRankingArchive()} hasCareerPass={careerPass} onBack={goToTitle} onUpgrade={handlePaywallPlaceholder} />
       )}
-      {game.screen === "country" && <SelectCountry onSelect={handleSelectCountry} />}
+      {game.screen === "country" && <SelectCountry onSelect={handleSelectCountry} onBack={handleBackFromCountry} />}
       {game.screen === "create" && <CreatePlayer onCreate={handleCreatePlayer} />}
       {game.screen === "youthOffer" && game.player && game.leagueState && (
         <YouthClubOffer

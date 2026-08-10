@@ -339,6 +339,14 @@ p {
   font-size: 0.8rem;
 }
 
+/* Zurück-Button vor der Länderauswahl (siehe SelectCountry.tsx) - `.screen`
+   ist eine Flex-Spalte ohne explizites `align-items`, würde den Button also
+   sonst über die volle Breite strecken statt ihn als kompakten Link oben
+   links zu zeigen. */
+.back-link {
+  align-self: flex-start;
+}
+
 /* Investitionen-Button (Dashboard, siehe footy-karriere-mockup.html) - Outline-
    Style statt gefüllt, damit er sich klar vom primären "Neue Saison beginnen"
    unterscheidet: an der richtigen Stelle im Design, aber optisch sekundär,

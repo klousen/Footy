@@ -1,8 +1,11 @@
 import { COUNTRIES, type CountryId } from "../engine/leagues";
 
-export function SelectCountry({ onSelect }: { onSelect: (id: CountryId) => void }) {
+export function SelectCountry({ onSelect, onBack }: { onSelect: (id: CountryId) => void; onBack: () => void }) {
   return (
     <div className="screen create-screen">
+      <button type="button" className="btn btn-ghost btn-small back-link" onClick={onBack}>
+        ← Zurück
+      </button>
       <h2>In welchem Land beginnt deine Karriere?</h2>
       <p className="muted">
         Aktuell wählbar sind die zehn UEFA-Länder mit dem höchsten Länderkoeffizienten. Liga 1 und
