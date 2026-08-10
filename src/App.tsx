@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Analytics } from "@vercel/analytics/react";
 import type { AttributeKey, ClubState, EventChoice, GameState, Position } from "./engine/types";
 import { emptyState } from "./engine/initialState";
 import { loadGame, saveGame, clearSave, hasSave as hasSaveOnDisk } from "./engine/storage";
@@ -534,6 +535,7 @@ export default function App() {
           onNewCareer={handleNewCareerAfterEnd}
         />
       )}
+      <Analytics />
     </div>
   );
 }
