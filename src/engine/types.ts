@@ -77,15 +77,57 @@ export const HOMECOMING_MIN_AGE = 25;
 /** "Mehr als 2 Jahre" in den frühen Jahren (18-25) = mindestens 3 Saisons dort. */
 export const HOMECOMING_MIN_EARLY_CAREER_SEASONS = 3;
 
+/** Wie stark die Bindung an die frühere Station war (siehe `detectClubHomecoming`) -
+ * rein NARRATIV (Textwahl bei Event/Karriereende/Dashboard-Threads), beeinflusst
+ * bewusst KEINE Spielwerte (siehe ADD-ON-Vorgabe Abschnitt 6: "nicht linear immer
+ * größere Gameplay-Boni"). Primär aus der Dauer der früheren Station abgeleitet
+ * (>= `HOMECOMING_MIN_EARLY_CAREER_SEASONS` = "normal", ab 4 Saisons "stark", ab 6
+ * "sehr stark"), eine sehr lange Abwesenheit (>= 8 Jahre) hebt die Stufe zusätzlich
+ * um eine Stufe an (gedeckelt bei "sehr stark") - siehe Vorgabe-Beispieltabelle
+ * Abschnitt 3, an die eigene (strengere) Mindestschwelle von 3 statt 2 Saisons
+ * angepasst. */
+export type HomecomingStrengthTier = "normal" | "stark" | "sehr stark";
+
+/** Strukturierte Heimkehr-Information (siehe ADD-ON-Vorgabe Abschnitt 2/9) - einmal
+ * berechnet in `detectClubHomecoming`, danach überall (Event-Text, `Player.homecomings`,
+ * `CareerNarrativeState.homecoming`, Karriereende) weiterverwendet statt mehrfach neu
+ * hergeleitet. */
+export interface HomecomingInfo {
+  clubId: string;
+  clubName: string;
+  /** Alter beim Beginn der FRÜHEREN Station bei diesem Verein (erste Saison dort). */
+  firstSpellStartAge: number;
+  /** Alter beim Ende der FRÜHEREN Station (letzte Saison dort vor der Rückkehr). */
+  firstSpellEndAge: number;
+  /** Gesamtzahl Saisons der früheren Station (nicht nur der Teil im 18-25-Fenster). */
+  firstSpellSeasons: number;
+  /** Vereinsstärke (0-100) in der letzten Saison der früheren Station. */
+  previousClubStrength: number;
+  /** Aktuelle Vereinsstärke zum Zeitpunkt der Rückkehr. */
+  currentClubStrength: number;
+  returnAge: number;
+  yearsAway: number;
+  strengthTier: HomecomingStrengthTier;
+}
+
+function homecomingStrengthTier(firstSpellSeasons: number, yearsAway: number): HomecomingStrengthTier {
+  let tier: HomecomingStrengthTier = firstSpellSeasons >= 6 ? "sehr stark" : firstSpellSeasons >= 4 ? "stark" : "normal";
+  if (yearsAway >= 8 && tier === "normal") tier = "stark";
+  return tier;
+}
+
 /**
  * Erkennt eine echte "Heimkehr" zu einem Verein, an dem der Spieler in frühen
  * Jahren (18-25) schon einmal mehr als 2 Saisons gespielt hat und zu dem er
  * jetzt (Alter >= `HOMECOMING_MIN_AGE`) zurückkehrt - unabhängig davon, ob
- * dazwischen noch weitere Stationen lagen. `null`, wenn keine Heimkehr
- * vorliegt, sonst die Anzahl Jahre seit der zuletzt dort verbrachten Saison
- * (auch spätere, nicht mehr "frühe" Saisons an diesem Verein zählen für den
- * Zeitpunkt mit, damit "X Jahre später" auch stimmt, wenn der Spieler über
- * das 25. Lebensjahr hinaus dortgeblieben ist, bevor er ihn verließ).
+ * dazwischen noch weitere Stationen lagen. `null`, wenn keine Heimkehr vorliegt,
+ * sonst die vollständige `HomecomingInfo` (u.a. Anzahl Jahre seit der zuletzt
+ * dort verbrachten Saison - auch spätere, nicht mehr "frühe" Saisons an diesem
+ * Verein zählen für den Zeitpunkt mit, damit "X Jahre später" auch stimmt, wenn
+ * der Spieler über das 25. Lebensjahr hinaus dortgeblieben ist, bevor er ihn
+ * verließ). `currentClubStrength` erwartet die Zielvereinsstärke als Parameter
+ * (zum Zeitpunkt der Prüfung ist `player.club` ggf. noch der ALTE Verein, siehe
+ * Aufrufer in `applyClubOfferChoice`).
  *
  * Lebt bewusst hier in types.ts statt in careerEngine.ts (wie `isNearRetirement`
  * oben) - sowohl `applyClubOfferChoice` (careerEngine.ts, Wechsel-Auflösung) als
@@ -93,17 +135,29 @@ export const HOMECOMING_MIN_EARLY_CAREER_SEASONS = 3;
  * Berechnung, ein zirkulärer Import events.ts -> careerEngine.ts ist aber nicht
  * möglich.
  */
-export function detectClubHomecoming(player: Player, targetClubId: string): number | null {
+export function detectClubHomecoming(player: Player, targetClubId: string, currentClubStrength?: number): HomecomingInfo | null {
   if (player.age < HOMECOMING_MIN_AGE) return null;
   const seasonsThere = player.seasonHistory.filter((s) => s.clubId === targetClubId);
   if (seasonsThere.length === 0) return null;
   const earlyCareerSeasons = seasonsThere.filter((s) => s.age >= 18 && s.age <= 25);
   if (earlyCareerSeasons.length < HOMECOMING_MIN_EARLY_CAREER_SEASONS) return null;
-  const lastAgeThere = Math.max(...seasonsThere.map((s) => s.age));
-  const yearsSince = player.age - lastAgeThere;
+  const lastSeasonThere = seasonsThere.reduce((a, b) => (b.age > a.age ? b : a));
+  const firstSeasonThere = seasonsThere.reduce((a, b) => (b.age < a.age ? b : a));
+  const yearsSince = player.age - lastSeasonThere.age;
   // Gerade erst dort gewesen (z.B. Leih-Rückkehr im selben Zug) - kein echtes "wieder".
   if (yearsSince < 1) return null;
-  return yearsSince;
+  return {
+    clubId: targetClubId,
+    clubName: lastSeasonThere.club,
+    firstSpellStartAge: firstSeasonThere.age,
+    firstSpellEndAge: lastSeasonThere.age,
+    firstSpellSeasons: seasonsThere.length,
+    previousClubStrength: lastSeasonThere.clubStrength,
+    currentClubStrength: currentClubStrength ?? lastSeasonThere.clubStrength,
+    returnAge: player.age,
+    yearsAway: yearsSince,
+    strengthTier: homecomingStrengthTier(seasonsThere.length, yearsSince),
+  };
 }
 
 export const POSITION_WEIGHTS: Record<Position, Attributes> = {
@@ -277,6 +331,9 @@ export interface SeasonStats {
    * robust gegen Namensgleichheit über Ländergrenzen hinweg. Grundlage für
    * `detectClubHomecoming` (siehe unten). */
   clubId: string;
+  /** Vereinsstärke (0-100) während dieser Saison - Grundlage für den
+   * "damals/heute"-Vergleich in `HomecomingInfo` (siehe `detectClubHomecoming`). */
+  clubStrength: number;
   /** Gesamtstärke während dieser Saison (vor dem Wachstum am Saisonende). */
   overallRating: number;
   /** Attribut-/Charakterwerte zu Saisonbeginn (vor den Events dieser Saison) - reiner
@@ -478,6 +535,13 @@ export interface NarrativeThread {
   /** Saison-Index (in `seasonHistory`), AB DEM der Thread beobachtet wird - i.d.R.
    * identisch mit dem `seasonHistoryIndex` der auslösenden Entscheidung. */
   seasonHistoryIndex: number;
+  /** True, wenn die AUSLÖSENDE Entscheidung eine Heimkehr war (siehe
+   * `TransferDecisionEntry.isHomecoming`) - steuert eigene, tonal passende
+   * Textvarianten in `describeCareerMomentum`/`describeSeasonNarrative` (ADD-ON-
+   * Vorgabe "Heimkehrer": eine Rückkehr zu vertrautem Umfeld soll sich nicht wie
+   * ein Sprung ins Ungewisse lesen). Direkt am Thread gespeichert statt bei jeder
+   * Textgenerierung erneut in `transferDecisions` nachzuschlagen. */
+  isHomecoming?: boolean;
 }
 
 /** Abgeschlossener/aussagekräftiger Narrative-Moment (siehe `Player.narrativeHistory`) -
@@ -797,6 +861,19 @@ export interface Player {
   activeNarrativeThread: NarrativeThread | null;
   /** Kompakte Historie prägender Narrative-Momente (siehe `NarrativeHistoryEntry`). */
   narrativeHistory: NarrativeHistoryEntry[];
+  /** Alle erkannten Heimkehren dieser Karriere (siehe `detectClubHomecoming`,
+   * ADD-ON-Vorgabe "Heimkehrer" Abschnitt 2/9) - meist 0 oder 1 Eintrag, in seltenen
+   * Fällen (mehrfacher Vereinswechsel-Kreislauf) auch mehr. Strukturierte
+   * Ergänzung zu `narrativeHistory` (dort nur ein kompakter Text-Eintrag) -
+   * Grundlage für `CareerNarrativeState.homecoming`, den `HOMECOMER`-Phänotyp und
+   * die ausführliche Karriereende-Erzählung. */
+  homecomings: HomecomingInfo[];
+  /** Saison (siehe `seasonHistory.length`-Zählweise), in der ein bestimmter früherer
+   * Verein zuletzt ein Angebot gemacht hat (siehe `pastClubCandidate` in
+   * careerEngine.ts) - verhindert, dass derselbe Ex-Verein jede Saison erneut anklopft
+   * (ADD-ON-Vorgabe Abschnitt 18: "sie kennen dich" statt "sie wollen dich jedes Jahr
+   * zurück"). Key = `Club.clubId`. */
+  pastClubOfferCooldowns: Record<string, number>;
 }
 
 /**
@@ -829,6 +906,12 @@ export interface TransferDecisionEntry {
    * simulierte Saison) - Basis für die spätere Vorher/Nachher-Auswertung in
    * `computeCareerNarrativeState`. */
   seasonHistoryIndex: number;
+  /** True, wenn dieser Wechsel eine erkannte Heimkehr war (siehe `detectClubHomecoming`,
+   * `Player.homecomings`) - ADD-ON-Vorgabe Abschnitt 20: bewusst KEIN eigener
+   * `TransferDecisionType`, sondern ein Zusatzflag auf der bestehenden Klassifikation
+   * (meist `STABILITY_DECISION`/`LATERAL_MOVE`/`DOWNWARD_MOVE`, je nach Stärke-Sprung),
+   * damit keine redundante Klassifikation neben der vorhandenen Architektur entsteht. */
+  isHomecoming?: boolean;
 }
 
 /** EIN `TransferDecisionEntry` angereichert um den gemessenen Vorher/Nachher-Impact
@@ -883,6 +966,12 @@ export interface CareerNarrativeState {
   /** Durchreichung von `Player.activeNarrativeThread` - hier gebündelt, damit die UI
    * nur EINE Quelle (`computeCareerNarrativeState`) abfragen muss. */
   activeThread: NarrativeThread | null;
+  /** Die ZULETZT erkannte Heimkehr (siehe `Player.homecomings`/`detectClubHomecoming`,
+   * ADD-ON-Vorgabe "Heimkehrer" Abschnitt 9) - `null`, wenn noch keine stattfand.
+   * Mehrere Heimkehren in einer Karriere sind selten, aber möglich - hier bewusst nur
+   * die letzte (für Dashboard/SeasonSummary-Texte relevant), die volle Liste steht in
+   * `Player.homecomings` (Grundlage für Karriereende/Phänotyp). */
+  homecoming: HomecomingInfo | null;
 }
 
 /**

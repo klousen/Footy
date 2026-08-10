@@ -6514,12 +6514,28 @@ export const EVENT_TEMPLATES: EventTemplate[] = [
     weight: 0,
     storylineOnly: true,
     build: (p) => {
-      const years = detectClubHomecoming(p, p.club.clubId) ?? 0;
+      // `currentClubStrength` explizit mitgeben: `p.club` ist zum Aufrufzeitpunkt in
+      // App.tsx/applyClubOfferChoice bereits der NEUE (alte) Verein, hier beim Bauen
+      // des Events also exakt das, was wir wollen (siehe `detectClubHomecoming`-
+      // Doc-Kommentar in types.ts).
+      const info = detectClubHomecoming(p, p.club.clubId, p.club.strength);
+      const years = info?.yearsAway ?? 0;
       const yearsLabel = years === 1 ? "ein Jahr später" : `${years} Jahre später`;
+      // Beschreibung nach narrativer Stärke gestaffelt (ADD-ON-Vorgabe Abschnitt 3:
+      // "nicht jede Rückkehr muss automatisch ein Karrierehighlight sein") - `normal`
+      // bleibt schlicht, `sehr stark` bekommt die volle "damals/heute"-Erzählung mit
+      // echten Zahlen aus `HomecomingInfo`.
+      const description = !info
+        ? `${club(p)} - ${p.name} ist nach einiger Zeit wieder zurück. Wie gehst du mit der Rückkehr um?`
+        : info.strengthTier === "normal"
+        ? `${club(p)} - ${p.name} kehrt ${yearsLabel} zurück, nachdem die Wege sich für eine Weile getrennt hatten. Wie gehst du mit der Rückkehr um?`
+        : info.strengthTier === "stark"
+        ? `${club(p)} - vertraute Straßen, ein vertrautes Stadion. Zwischen ${info.firstSpellStartAge} und ${info.firstSpellEndAge} hat ${p.name} hier ${info.firstSpellSeasons} Saisons verbracht, jetzt - ${yearsLabel} - ist die Rückkehr geschafft. Wie gehst du damit um?`
+        : `${club(p)} - Gesichter, die sich noch an die frühen Jahre erinnern. Zwischen ${info.firstSpellStartAge} und ${info.firstSpellEndAge} hat ${p.name} hier ${info.firstSpellSeasons} prägende Saisons verbracht. Jetzt, ${yearsLabel} und als deutlich erfahrenerer Spieler, ist ${p.name} wieder da, wo alles einmal begann. Wie gehst du mit diesem Moment um?`;
       return {
         category: "meilenstein",
         title: `Heimkehr, ${yearsLabel}`,
-        description: `${club(p)} - vertraute Straßen, ein vertrautes Stadion, Gesichter, die sich noch an die frühen Jahre erinnern. Nach der Zeit anderswo ist ${p.name} wieder da, wo die Karriere einmal begann. Wie gehst du mit der Rückkehr um?`,
+        description,
         choices: [
           {
             id: "genuss",

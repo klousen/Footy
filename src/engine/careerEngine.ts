@@ -326,6 +326,8 @@ export function createPlayer(
       nationalTeamCandidacySeasons: 0,
       activeNarrativeThread: null,
       narrativeHistory: [],
+      homecomings: [],
+      pastClubOfferCooldowns: {},
     },
   };
 }
@@ -1423,6 +1425,7 @@ export function simulateSeason(
     age: player.age,
     club: player.club.name,
     clubId: player.club.clubId,
+    clubStrength: player.club.strength,
     overallRating: overall,
     attributesAtSeasonStart: { ...player.attributesAtSeasonStart },
     traitsAtSeasonStart: { ...player.traitsAtSeasonStart },
@@ -2011,7 +2014,8 @@ function recordTransferDecision(
   toClubName: string,
   oldRole: SquadRole,
   offerCard: OfferCardData | undefined,
-  oldWage: number
+  oldWage: number,
+  isHomecoming = false
 ) {
   if (!offerCard || reason === "loan-return") return undefined;
   const strengthDelta = (offerCard.strength ?? 0) - (offerCard.strengthPrev ?? offerCard.strength ?? 0);
@@ -2038,6 +2042,7 @@ function recordTransferDecision(
     toClub: toClubName,
     strengthDelta: Math.round(strengthDelta * 10) / 10,
     seasonHistoryIndex: player.seasonHistory.length,
+    isHomecoming,
   };
   player.transferDecisions.push(entry);
   return entry;
@@ -2054,13 +2059,20 @@ function recordTransferDecision(
  */
 function maybeStartNarrativeThread(player: Player, entry: TransferDecisionEntry | undefined) {
   if (!entry || player.activeNarrativeThread) return;
-  if (entry.type !== "UPWARD_MOVE" && entry.type !== "PRESTIGE_RISK_MOVE") return;
+  // Auslöser: entweder ein klar riskanter Aufstiegswechsel ODER eine erkannte
+  // Heimkehr (siehe `entry.isHomecoming`, ADD-ON-Vorgabe "Heimkehrer" Abschnitt
+  // 21/22 - "Heimkehr als Ausgangspunkt für Narrative, nicht als Ergebnis": auch
+  // eine Heimkehr kann sich als Erfolg, solide Phase oder Enttäuschung entwickeln,
+  // das entscheidet wie gewohnt erst `advanceNarrativeThread` anhand der
+  // tatsächlichen Einsatzzeit-/Performance-Entwicklung der folgenden Saison(en)).
+  if (entry.type !== "UPWARD_MOVE" && entry.type !== "PRESTIGE_RISK_MOVE" && !entry.isHomecoming) return;
   player.activeNarrativeThread = {
     type: "BIG_MOVE_ADAPTATION",
     startedSeason: entry.season,
     startedAge: entry.age,
     stage: "ADAPTATION",
     seasonHistoryIndex: entry.seasonHistoryIndex,
+    isHomecoming: entry.isHomecoming,
   };
 }
 
@@ -2124,7 +2136,7 @@ function advanceNarrativeThread(player: Player, stats: SeasonStats) {
       season: currentIdx,
       age: player.age,
       type: "BIG_MOVE_BREAKTHROUGH",
-      label: "Durchbruch nach dem großen Schritt",
+      label: thread.isHomecoming ? "Die Heimkehr hat sich ausgezahlt" : "Durchbruch nach dem großen Schritt",
     });
     player.activeNarrativeThread = null;
   }
@@ -2614,6 +2626,39 @@ interface OfferCandidate {
   leagueRank?: number;
 }
 
+/** Mindestabstand (in Saisons), bevor DERSELBE Ex-Verein erneut als Kandidat
+ * infrage kommt (ADD-ON-Vorgabe "Heimkehrer" Abschnitt 18: "sie kennen dich" statt
+ * "sie wollen dich jedes Jahr zurück") - unabhängig davon, ob das damalige Angebot
+ * angenommen oder abgelehnt wurde (siehe `pastClubOfferChance`-Aufrufer unten, der
+ * die Cooldown-Uhr bei JEDER tatsächlichen Kandidatur neu startet). */
+const PAST_CLUB_OFFER_COOLDOWN_SEASONS = 4;
+
+/** Wie viel stärker ein früherer Verein aktuell maximal sein darf, damit ein
+ * Angebot noch sportlich plausibel bleibt (ADD-ON-Vorgabe Abschnitt 15/17:
+ * "Bekanntheit ersetzt nicht sportliche Eignung") - auf derselben international
+ * vergleichbaren Skala wie `displayClubStrength`. Bewusst nur nach OBEN begrenzt:
+ * ein inzwischen stärkerer Spieler, der von einem heute schwächeren Ex-Verein
+ * umworben wird, ist immer plausibel. */
+const PAST_CLUB_MAX_PLAUSIBLE_GAP = 20;
+
+/** Grundlage für die Kandidaten-Gewichtung (siehe `pastClubCandidate`) - mehr
+ * Saisons, eine jüngere Vergangenheit und eine sportlich erfolgreichere Zeit dort
+ * wiegen schwerer (ADD-ON-Vorgabe Abschnitt 16: `clubFamiliarity = previousYears
+ * × recencyFactor × relationshipFactor`). NICHT als sichtbarer Spielerwert
+ * gespeichert, rein aus `ClubTenure` abgeleitet. */
+function clubFamiliarity(player: Player, tenure: ClubTenure): number {
+  const yearsSinceLeft = Math.max(0, player.age - tenure.toAge);
+  // Lange zurückliegende Stationen bleiben relevant, aber deutlich abgeschwächt -
+  // nie ganz auf 0 (eine Jugendstation soll nicht irrelevant werden, siehe
+  // Abschnitt 3 "Jugend/Frühkarriere + 5 Jahre später Rückkehr -> stark").
+  const recencyFactor = clamp(1 - yearsSinceLeft / 20, 0.3, 1);
+  // `ClubTenure.avgScore` (Ø Saison-Bilanz-Score dort, siehe `computeSeasonScore`)
+  // als Näherung für "wie gut lief es dort" - 100 Punkte entsprechen ungefähr
+  // einer soliden Saison (siehe `SCORE_TIER_THRESHOLDS`).
+  const relationshipFactor = clamp(0.7 + tenure.avgScore / 200, 0.7, 1.3);
+  return tenure.seasons * recencyFactor * relationshipFactor;
+}
+
 /**
  * Sucht unter den früheren Vereinen mit einer echten, mehrjährigen Vergangenheit
  * (siehe `buildClubTenures`, mehr als 2 Saisons - "sie kennen einen ja", dieselbe
@@ -2622,33 +2667,50 @@ interface OfferCandidate {
  * im Karriereherbst - nur dort, wo der Verein noch in einer bekannten Liga (aktuelle
  * oder gecachte Auslandsliga) auffindbar ist. Vereinsnamen sind innerhalb eines
  * Landes eindeutig (siehe `disambiguateCities` in leagues.ts), ein reiner
- * Namensabgleich genügt daher.
+ * Namensabgleich genügt daher. Gewichtet die Auswahl nach `clubFamiliarity` statt
+ * gleichverteilt zu würfeln, respektiert den Cooldown desselben Vereins und
+ * verwirft sportlich unplausible Kandidaten (siehe Konstanten oben).
  */
 function pastClubCandidate(
   player: Player,
   activeLeague: LeagueState,
-  foreignLeagues: Partial<Record<CountryId, LeagueState>>
+  foreignLeagues: Partial<Record<CountryId, LeagueState>>,
+  overall: number
 ): OfferCandidate | null {
   const tenures = buildClubTenures(player).filter((t) => t.seasons > 2 && t.club !== player.club.name);
   if (tenures.length === 0) return null;
-  const pick = tenures[Math.floor(rng() * tenures.length)];
+  const weights = tenures.map((t) => clubFamiliarity(player, t));
+  const totalWeight = weights.reduce((a, b) => a + b, 0);
+  let r = rng() * totalWeight;
+  let idx = 0;
+  for (; idx < weights.length; idx++) {
+    r -= weights[idx];
+    if (r <= 0) break;
+  }
+  const pick = tenures[Math.min(idx, tenures.length - 1)];
   const knownLeagues: [CountryId, LeagueState][] = [
     [activeLeague.countryId, activeLeague],
     ...(Object.entries(foreignLeagues) as [CountryId, LeagueState][]),
   ];
   for (const [countryId, lg] of knownLeagues) {
     const club = [...lg.tier1, ...lg.tier2].find((c) => c.city === pick.club);
-    if (club && club.id !== player.club.clubId) {
-      return {
-        club,
-        countryId,
-        countryName: lg.countryName,
-        flag: lg.flag,
-        leagueLabel: leagueNameForTier(lg, club.tier),
-        isForeign: countryId !== player.country,
-        leagueRank: clubLeagueRank(club.id, club.tier, lg),
-      };
-    }
+    if (!club || club.id === player.club.clubId) continue;
+    const currentSeasonNumber = player.seasonHistory.length + 1;
+    const lastOffered = player.pastClubOfferCooldowns[club.id];
+    if (lastOffered !== undefined && currentSeasonNumber - lastOffered < PAST_CLUB_OFFER_COOLDOWN_SEASONS) return null;
+    if (displayClubStrength(club.strength, countryId) - overall > PAST_CLUB_MAX_PLAUSIBLE_GAP) return null;
+    // Cooldown startet mit JEDER tatsächlichen Kandidatur, unabhängig vom späteren
+    // Ausgang (angenommen oder abgelehnt) - siehe Konstanten-Kommentar oben.
+    player.pastClubOfferCooldowns[club.id] = currentSeasonNumber;
+    return {
+      club,
+      countryId,
+      countryName: lg.countryName,
+      flag: lg.flag,
+      leagueLabel: leagueNameForTier(lg, club.tier),
+      isForeign: countryId !== player.country,
+      leagueRank: clubLeagueRank(club.id, club.tier, lg),
+    };
   }
   return null;
 }
@@ -2818,7 +2880,7 @@ function buildClubOfferEvent(
   // (aber gedeckelter) Wahrscheinlichkeit einen der sonst zufällig gewählten
   // Kandidaten (siehe `pastClubCandidate`/`pastClubOfferChance`).
   if (reason !== "pro-debut" && reason !== "lockruf" && rng() < pastClubOfferChance(player.age)) {
-    const past = pastClubCandidate(player, league, foreignLeagues);
+    const past = pastClubCandidate(player, league, foreignLeagues, overall);
     if (past && candidates.length > 0 && !candidates.some((c) => c.club.id === past.club.id)) {
       candidates[Math.floor(rng() * candidates.length)] = past;
     }
@@ -3392,8 +3454,9 @@ export function applyClubOfferChoice(
   // `detectClubHomecoming` in types.ts) - unabhängig vom Wechselgrund. Bewusst
   // VOR der Club-Zuweisung unten geprüft (liest nur `seasonHistory`/`age`,
   // Reihenfolge ist also egal), damit der Rest der Funktion `chosen.id` schon
-  // kennt.
-  const clubHomecomingYears = detectClubHomecoming(player, chosen.id);
+  // kennt. `chosen.strength` explizit als `currentClubStrength` mitgegeben, da
+  // `player.club` an dieser Stelle noch der ALTE Verein ist.
+  const homecomingInfo = detectClubHomecoming(player, chosen.id, chosen.strength);
 
   const overall = overallRating(player);
   const oldName = player.club.name;
@@ -3429,27 +3492,35 @@ export function applyClubOfferChoice(
   player.startingRoleGuaranteeSeasons = 0;
   if (reason !== "pro-debut") player.clubChangesCount += 1;
 
-  // "Heimkehrer" (siehe `clubHomecomingYears` oben): der Verein kennt den Spieler
-  // noch aus frühen Jahren - ein spürbarer Vertrauensvorschuss ON TOP des normal
+  // "Heimkehrer" (siehe `homecomingInfo` oben): der Verein kennt den Spieler noch
+  // aus frühen Jahren - ein spürbarer Vertrauensvorschuss ON TOP des normal
   // ausgewürfelten Werts oben, unabhängig davon, wie das Einsatzminuten-Versprechen
   // ausging. Die eigentliche narrative Ausgestaltung (weitere Moral-/Ruf-Effekte je
   // nach Spielerreaktion) übernimmt das erzwungene `HOMECOMING_TEMPLATE_ID`-Event
   // (siehe App.tsx `handleChoice`), das App.tsx über `homecomingClubReturn` unten
-  // anstößt - hier nur der "das kennt man sich"-Basiseffekt plus die kompakte
-  // Karriere-Historie fürs "Heimkehrer"-Award (siehe `detectCareerPhenotype`).
-  const isClubHomecoming = clubHomecomingYears !== null;
-  if (isClubHomecoming) {
+  // anstößt - hier nur der "das kennt man sich"-Basiseffekt plus die vollständige
+  // `HomecomingInfo` in `player.homecomings` (Grundlage für `CareerNarrativeState.
+  // homecoming`, den "HOMECOMER"-Phänotyp und die Karriereende-Erzählung).
+  if (homecomingInfo) {
     player.clubRelation = clamp(player.clubRelation + 10, 0, 100);
+    player.homecomings.push(homecomingInfo);
+    // Label mit echten Zahlen statt eines pauschalen Satzes (ADD-ON-Vorgabe
+    // Abschnitt 12) - fließt unverändert in die "Prägende Momente"-Liste am
+    // Karriereende ein (siehe CareerEnd.tsx, rendert `narrativeHistory` generisch).
+    const label =
+      homecomingInfo.strengthTier === "sehr stark"
+        ? `Zwischen ${homecomingInfo.firstSpellStartAge} und ${homecomingInfo.firstSpellEndAge} ${homecomingInfo.firstSpellSeasons} prägende Saisons bei ${chosen.city} - mit ${homecomingInfo.returnAge} und ${homecomingInfo.yearsAway} Jahre später die große Heimkehr`
+        : `Heimkehr zu ${chosen.city}, ${homecomingInfo.yearsAway} Jahre später`;
     player.narrativeHistory.push({
       season: player.seasonHistory.length,
       age: player.age,
       type: "HOMECOMING",
-      label: `Heimkehr zu ${chosen.city}, ${clubHomecomingYears} Jahre später`,
+      label,
     });
     player.log.push({
       season: 0,
       age: player.age,
-      text: `${player.name} kehrt ${clubHomecomingYears} Jahre später zu ${chosen.city} zurück - ein echtes Wiedersehen.`,
+      text: `${player.name} kehrt ${homecomingInfo.yearsAway} Jahre später zu ${chosen.city} zurück - ein echtes Wiedersehen.`,
       kind: "positive",
     });
   }
@@ -3690,14 +3761,15 @@ export function applyClubOfferChoice(
     chosen.city,
     decisionOldRole,
     decisionOfferCard,
-    decisionOldWage
+    decisionOldWage,
+    homecomingInfo !== null
   );
   maybeStartNarrativeThread(player, recordedDecision);
   return {
     feedback: { choiceId, text, kind, deltaLines },
     newActiveLeague,
     endedStorylineTemplateIds: endedThreads.map((t) => t.nextTemplateId),
-    homecomingClubReturn: isClubHomecoming,
+    homecomingClubReturn: homecomingInfo !== null,
   };
 }
 
@@ -4030,6 +4102,7 @@ export function computeCareerNarrativeState(player: Player): CareerNarrativeStat
     clubLevelTrend,
     recentDecisionOutcome,
     activeThread: player.activeNarrativeThread,
+    homecoming: player.homecomings.length > 0 ? player.homecomings[player.homecomings.length - 1] : null,
   };
 }
 
@@ -4112,7 +4185,7 @@ export function detectCareerPhenotype(player: Player): CareerPhenotypeResult {
 
   // HOMECOMER: mindestens eine echte Rückkehr zu einem Verein aus frühen Jahren
   // (siehe `detectClubHomecoming`, Eintrag wird in `applyClubOfferChoice` gepusht).
-  if (player.narrativeHistory.some((h) => h.type === "HOMECOMING")) matches.push("HOMECOMER");
+  if (player.homecomings.length > 0) matches.push("HOMECOMER");
 
   // STEADY_PROFESSIONAL: durchgehend nah am Liga-Durchschnitt, kein Ausreißer nach
   // oben oder unten - der ruhige Gegenpol zu Wonderkind/Late-Bloomer/Boom-or-Bust.

@@ -189,6 +189,31 @@ export const TREND_LABEL: Record<NarrativeTrend, string> = {
 export function describeCareerMomentum(state: CareerNarrativeState, player: Player): NarrativeMomentumText | null {
   const thread = state.activeThread;
   if (thread) {
+    // Heimkehr-Varianten (siehe ADD-ON-Vorgabe "Heimkehrer" Abschnitt 21/22 +
+    // Nutzerentscheidung "eigene Heimkehr-Texte ergänzen"): derselbe ADAPTATION-
+    // /STRUGGLE-/REBUILD-Thread wie bei jedem großen Wechsel, aber tonal passend -
+    // eine Rückkehr zu vertrautem Umfeld liest sich nicht wie ein Sprung ins
+    // Ungewisse.
+    if (thread.isHomecoming) {
+      if (thread.stage === "ADAPTATION") {
+        return {
+          headline: "Zurück in vertrauter Umgebung",
+          text: "Die Heimkehr zu einem Verein aus früheren Jahren ist geschafft. Deine Rolle dort ist zunächst noch offen.",
+        };
+      }
+      if (thread.stage === "STRUGGLE") {
+        return {
+          headline: "Die Heimkehr fällt schwerer als gedacht",
+          text: "Trotz der vertrauten Umgebung liegen Einsatzzeit und Leistung aktuell unter deinem Niveau.",
+        };
+      }
+      if (thread.stage === "REBUILD") {
+        return {
+          headline: "Der Heimvorteil zahlt sich langsam aus",
+          text: "Nach einer schwierigen Anfangsphase findest du bei deinem früheren Verein wieder Tritt.",
+        };
+      }
+    }
     if (thread.stage === "ADAPTATION") {
       return {
         headline: "Der große Schritt",
@@ -211,7 +236,23 @@ export function describeCareerMomentum(state: CareerNarrativeState, player: Play
 
   const lastHistory = player.narrativeHistory[player.narrativeHistory.length - 1];
   if (lastHistory?.type === "BIG_MOVE_BREAKTHROUGH" && player.seasonHistory.length - lastHistory.season <= 1) {
-    return { headline: "Durchbruch", text: "Der mutige Schritt hat sich ausgezahlt - du hast dich durchgesetzt." };
+    return lastHistory.label.includes("Heimkehr")
+      ? { headline: "Die Heimkehr hat sich ausgezahlt", text: "Die Rückkehr zu vertrautem Umfeld hat sich gelohnt - du hast dich durchgesetzt." }
+      : { headline: "Durchbruch", text: "Der mutige Schritt hat sich ausgezahlt - du hast dich durchgesetzt." };
+  }
+
+  // Frisch erkannte Heimkehr OHNE (mehr) aktiven Thread - z.B. weil der Thread
+  // schon neutral ausgelaufen ist, die Rückkehr aber noch die jüngste prägende
+  // Station war. Nutzerentscheidung: auch live im Dashboard zeigen, nicht nur am
+  // Karriereende.
+  if (state.homecoming) {
+    const lastHomecomingSeason = player.transferDecisions.filter((d) => d.isHomecoming).at(-1)?.season;
+    if (lastHomecomingSeason !== undefined && player.seasonHistory.length - lastHomecomingSeason <= 1) {
+      return {
+        headline: "Wieder daheim",
+        text: `Nach ${state.homecoming.yearsAway} Jahren bist du zu ${state.homecoming.clubName} zurückgekehrt - vertrautes Terrain, neue Rolle.`,
+      };
+    }
   }
 
   const perfRising = state.performanceTrend === "rising";
@@ -253,13 +294,26 @@ export const TRANSFER_DECISION_MEANING: Record<TransferDecisionType, string> = {
 export function describeSeasonNarrative(stats: SeasonStats, state: CareerNarrativeState, player: Player): NarrativeMomentumText | null {
   const lastHistory = player.narrativeHistory[player.narrativeHistory.length - 1];
   if (lastHistory && lastHistory.season === player.seasonHistory.length - 1 && lastHistory.type === "BIG_MOVE_BREAKTHROUGH") {
-    return { headline: "Durchbruch", text: "Deine Leistungen haben ein neues Niveau erreicht." };
+    return lastHistory.label.includes("Heimkehr")
+      ? { headline: "Die Heimkehr hat sich ausgezahlt", text: "Deine Rückkehr zu vertrautem Umfeld trägt spürbar Früchte." }
+      : { headline: "Durchbruch", text: "Deine Leistungen haben ein neues Niveau erreicht." };
+  }
+  if (state.activeThread?.isHomecoming && state.activeThread.stage === "STRUGGLE") {
+    return { headline: "Schwierige Heimkehr-Saison", text: "Trotz der vertrauten Umgebung war deine Rolle unsicherer, als du es dir erhofft hattest." };
+  }
+  if (state.activeThread?.isHomecoming && state.activeThread.stage === "REBUILD") {
+    return { headline: "Zurück auf dem Platz", text: "Nach wenig Einsatzzeit hast du dir bei deinem früheren Verein wieder eine größere Rolle erarbeitet." };
   }
   if (state.activeThread?.stage === "STRUGGLE") {
     return { headline: "Schwierige Saison", text: "Deine Rolle war unsicherer, als du es dir erhofft hattest." };
   }
   if (state.activeThread?.stage === "REBUILD") {
     return { headline: "Zurück auf dem Platz", text: "Nach wenig Einsatzzeit hast du dir wieder eine größere Rolle erarbeitet." };
+  }
+  // Direkt in der Saison der Heimkehr selbst (noch kein Thread-Stage-Wechsel
+  // nötig) - Nutzerentscheidung: auch live im Saisonrückblick zeigen.
+  if (player.transferDecisions.at(-1)?.isHomecoming && player.transferDecisions.at(-1)?.season === player.seasonHistory.length) {
+    return { headline: "Wieder daheim", text: "Die Rückkehr zu einem Verein aus früheren Jahren ist geschafft." };
   }
   // WICHTIG: `performanceScore` (siehe careerEngine.ts `simulateSeason`) ist bereits
   // eine eigenständige, um 50 zentrierte Skala (avgRating + productionFactor,

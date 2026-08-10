@@ -59,6 +59,13 @@ export function loadGame(): GameState | null {
       // `Player.recentTransferWasForeignHomecoming`) - `false` als neutrale
       // Annäherung, kein rückwirkendes Nacherfinden des letzten Wechsels.
       state.player.recentTransferWasForeignHomecoming ??= false;
+      // Ältere Spielstände kennen das strukturierte Heimkehrer-Protokoll noch nicht
+      // (siehe `Player.homecomings`/`pastClubOfferCooldowns`) - leer als
+      // bestmögliche Annäherung, kein rückwirkendes Nacherfinden vergangener
+      // Heimkehren (der "HOMECOMER"-Phänotyp bleibt für diese Karrieren dadurch
+      // unerreicht, aber keine erfundenen Daten).
+      state.player.homecomings ??= [];
+      state.player.pastClubOfferCooldowns ??= {};
       // Ältere Spielstände kennen das Heimatland noch nicht - als bestmögliche
       // Annäherung das aktuelle Land nehmen (nur relevant für künftige Rückkehr-Erkennung).
       state.player.homeCountryId ??= state.player.country;
@@ -78,6 +85,10 @@ export function loadGame(): GameState | null {
           // erfundenen Werts, matcht dadurch nie versehentlich einen echten
           // Verein (kein rückwirkendes "Heimkehrer"-Erkennen für alte Saisons).
           clubId: s.clubId ?? "",
+          // Ältere Saison-Historien kennen `clubStrength` noch nicht - `overallRating`
+          // als grobe, aber plausible Näherung (beide liegen auf einer ähnlichen 0-99-
+          // Skala), nur relevant für die "damals/heute"-Vereinsstärke im Heimkehr-Text.
+          clubStrength: s.clubStrength ?? s.overallRating,
         }));
       }
     }

@@ -348,7 +348,16 @@ export default function App() {
             const rest = didTransfer
               ? game.pendingEventIds.filter((id) => !STALE_AFTER_TRANSFER_TEMPLATE_IDS.has(id) && !endedStorylineTemplateIds.includes(id))
               : game.pendingEventIds;
-            return homecomingClubReturn ? [HOMECOMING_TEMPLATE_ID, ...rest] : rest;
+            // Heimkehr-Event ERSETZT einen der verbleibenden Saison-Slots statt sie
+            // zu addieren (ADD-ON-Vorgabe "Heimkehrer" Abschnitt 8/23: "Heimkehrer-
+            // Event ersetzt einen normalen nicht-garantierten Slot", strikt 3-5
+            // Events/Saison). `insertWithinBudget` mit `maxTotal = rest.length` (der
+            // Rest-Budget VOR der Einfügung) trimmt bei Bedarf das letzte verbleibende
+            // Element - genau dasselbe "Trim-statt-Wachsen"-Prinzip wie beim
+            // Saisonstart in `handleStartSeason`. Nur im seltenen Grenzfall, dass gar
+            // keine Events mehr übrig sind (`rest.length === 0`), bleibt - wie dort
+            // dokumentiert - ausnahmsweise ein zusätzliches Event stehen.
+            return homecomingClubReturn ? insertWithinBudget(rest, HOMECOMING_TEMPLATE_ID, 0, new Set(), rest.length) : rest;
           })(),
       feedback,
     });
