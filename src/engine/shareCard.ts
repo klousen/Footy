@@ -434,6 +434,13 @@ export function drawShareCard(canvas: HTMLCanvasElement, data: ShareCardData): v
   ctx.font = '700 24px "Segoe UI", system-ui, sans-serif';
   ctx.fillStyle = CHALK;
   ctx.fillText(data.tierLabel.toUpperCase(), ratingX + ratingSize / 2, topRowY + 162);
+  // Die große Zahl im Badge ist der Karriere-Bestwert (höchste je erreichte
+  // Gesamtstärke), nicht der Wert am Karriereende (der nach Alterung/Abbau
+  // niedriger liegen kann, siehe `ShareCardData.overall`-Kommentar) - das muss
+  // auf dem Bild selbst stehen, nicht nur im separaten Sharetext.
+  ctx.font = '600 15px "Segoe UI", system-ui, sans-serif';
+  ctx.fillStyle = CHALK_DIM;
+  ctx.fillText("KARRIERE-BESTWERT", ratingX + ratingSize / 2, topRowY + 188);
 
   ctx.textAlign = "left";
   let idY = topRowY + 58;
@@ -528,7 +535,7 @@ export function drawShareCard(canvas: HTMLCanvasElement, data: ShareCardData): v
     { key: "meister", label: "Meister", count: data.trophyBreakdown.meister },
     { key: "pokal", label: "Pokal", count: data.trophyBreakdown.pokal },
     { key: "euroCup", label: "Euro Cup", count: data.trophyBreakdown.euroCup },
-    { key: "cl", label: "CL", count: data.trophyBreakdown.cl },
+    { key: "cl", label: "Champions Cup", count: data.trophyBreakdown.cl },
     { key: "aufstieg", label: "Aufstieg", count: data.trophyBreakdown.aufstieg },
   ];
   const trophyColW = contentW / trophyItems.length;

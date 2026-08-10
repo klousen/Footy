@@ -1352,8 +1352,18 @@ export function simulateSeason(
   if (avgRating >= 7.6 && rng() < 0.12 + clamp((overall - clubStrength) / 200, 0, 0.25)) {
     trophies.push("Spieler der Saison");
   }
-  if (player.stage === "jugend" || player.stage === "durchbruch") {
-    if (overall >= clubStrength - 5 && rng() < 0.1) trophies.push("Talent der Saison");
+  // "Talent der Saison" bewusst auf höchstens 21 Jahre gedeckelt (die
+  // "durchbruch"-Phase liefe sonst bis 22, siehe `stageForAge`) - mit 22 gilt
+  // man realistisch nicht mehr als "Talent", sondern als etablierter Profi.
+  if (player.stage === "jugend" || (player.stage === "durchbruch" && player.age <= 21)) {
+    if (overall >= clubStrength - 5 && rng() < 0.1) {
+      trophies.push("Talent der Saison");
+      // Leichter Entwicklungsschub für die Auszeichnung - dieselbe
+      // "stärkeres Umfeld"-Mechanik wie bei einem Aufstiegswechsel (siehe
+      // `trainingEnvironmentMultiplier` in `ageUpPlayer`), hier aber bewusst
+      // nur EINE Saison ("leicht"), nicht die 2-3 Saisons eines echten Wechsels.
+      player.trainingBoostSeasons = Math.max(player.trainingBoostSeasons, 1);
+    }
   }
 
   player.careerTotals.matches += matches;
