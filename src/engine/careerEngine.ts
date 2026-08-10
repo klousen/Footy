@@ -3667,6 +3667,29 @@ export function applyClubOfferChoice(
   // garantiert dort ausschließlich "Stammspieler", was nicht zu jedem hier
   // versprochenen Rollenniveau passen würde).
   player.startingRoleGuaranteeSeasons = 0;
+  // Bugreport "ein starker Spieler ist beim neuen Verein normalerweise sofort
+  // gesetzt, das Spiel darf einen Wechsel zum besseren Verein nicht ständig
+  // bestrafen": Diagnose bestätigte, dass ein GERADE ERST als Stammspieler
+  // zugesagter Wechsel (Versprechen oben eingehalten) in 43% der Fälle
+  // NOCH INNERHALB DERSELBEN SAISON von `resolveClubSituation` wieder
+  // zurückgestuft wurde, bevor überhaupt eine faire Anlaufsaison vergangen
+  // war - `currentSquadRole` dort bestraft denselben Stärkeunterschied
+  // (`overall - clubStrength`) EIN ZWEITES Mal indirekt über die erste
+  // Saison-Durchschnittsnote am neuen (stärkeren) Verein, die naturgemäß
+  // niedriger ausfällt (siehe `ratingBase` in `simulateSeason`) - eine
+  // Selbstverstärkung, die die eigene Zusage im selben Atemzug widerlegte,
+  // in dem sie gegeben wurde. Dieselbe vertragliche Garantie wie bei anderen
+  // Stammplatz-Zusagen (siehe oben) sichert die zugesagte Rolle jetzt für
+  // die Anlauf-Saison ab. Bewusst 2 statt 1 (wie bei "verlaengern_rolle"
+  // oben): `ageUpPlayer` dekrementiert `startingRoleGuaranteeSeasons` NOCH
+  // VOR `resolveClubSituation` - in DERSELBEN Saison, in der hier gerade
+  // gesetzt wird, würde ein Wert von 1 also schon auf 0 stehen, BEVOR die
+  // Garantie überhaupt einmal geprüft wurde, und komplett wirkungslos
+  // bleiben. Effektiv genau EINE volle Anlauf-Saison Schutz, ab der Saison
+  // danach entscheidet wieder ganz normal die tatsächliche Leistung.
+  if (promiseKept && newRole === "Stammspieler") {
+    player.startingRoleGuaranteeSeasons = 2;
+  }
   if (reason !== "pro-debut") player.clubChangesCount += 1;
 
   // "Heimkehrer" (siehe `homecomingInfo` oben): der Verein kennt den Spieler noch
