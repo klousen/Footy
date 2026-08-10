@@ -568,6 +568,59 @@ function scaleAttributeEffects(effects: EventChoice["effects"]): EventChoice["ef
   return { ...effects, attributes: scaledAttrs };
 }
 
+/**
+ * Kuratierte Liste "blasser" reiner Attribut-Events (siehe Handoff "Spürbarkeit
+ * von Trainings-/Routine-Events erhöhen", Abschnitt "Nachtrag") - bewusst KEINE
+ * automatische Erkennung über die Effekt-Form (wie dort ursprünglich
+ * vorgeschlagen), sondern eine gepflegte, konservative Auswahl statt eines
+ * globalen Multiplikators auf alle ~23 betroffenen Events (siehe Chat-
+ * Rückfrage: "abgeschwächte Variante"). `training_technikfokus` und
+ * `jugend_technikpartner` sind bewusst NICHT enthalten - die haben mit
+ * `training_spezialisierung`/`jugend_torwarttrainer_akademie` bereits einen
+ * eigenen, substanzielleren Slot-Partner bekommen (siehe dort), eine
+ * zusätzliche Verstärkung hier würde diese beiden gegenüber ihren neuen
+ * Geschwistern wieder bevorzugen.
+ */
+const PURE_ATTRIBUTE_BOOST_TEMPLATE_IDS: ReadonlySet<string> = new Set([
+  "training_extraschicht",
+  "lifestyle_ernaehrung",
+  "krafttraining",
+  "standardtraining",
+  "videostudium",
+  "jugend_schule",
+  "medien_kritik",
+  "jugend_wachstumsschmerzen",
+  "jugend_wachstumsschub",
+  "sportwissenschaft",
+  "mentaltrainer_intensivwoche",
+  "jugend_probetraining",
+  "jugend_vergleich_talent",
+  "jugend_elternabend",
+  "jugend_elternehrgeiz",
+  "weiterbildung_nebenbei",
+  "auswaertsreise_chaos",
+  "jugend_heimweh_internat",
+  "lifestyle_dopingkontrolle",
+  "medien_zitat_verdreht",
+  "eigentor",
+]);
+/** Deutlich konservativer als die im Handoff vorgeschlagenen 1.5-2.0 (siehe
+ * Chat-Rückfrage) - wirkt ZUSÄTZLICH zur bereits universellen
+ * `scaleAttributeEffects`-Verstärkung oben, nicht anstelle davon. `Math.ceil`
+ * statt `Math.round`, damit der Effekt bei den hier typischen kleinen Deltas
+ * (1-3) tatsächlich IMMER sichtbar wird, nicht nur bei größeren Werten. */
+const PURE_ATTRIBUTE_BOOST = 1.2;
+
+function boostPureAttributeEffects(effects: EventChoice["effects"], templateId: string | undefined): EventChoice["effects"] {
+  if (!effects.attributes || !templateId || !PURE_ATTRIBUTE_BOOST_TEMPLATE_IDS.has(templateId)) return effects;
+  const boosted: Partial<Attributes> = {};
+  for (const key of Object.keys(effects.attributes) as AttributeKey[]) {
+    const raw = effects.attributes[key] ?? 0;
+    boosted[key] = raw === 0 ? 0 : Math.sign(raw) * Math.ceil(Math.abs(raw) * PURE_ATTRIBUTE_BOOST);
+  }
+  return { ...effects, attributes: boosted };
+}
+
 export function applyChoice(state: GameState, choice: EventChoice): EventChoice["effects"] {
   const player = state.player;
   if (!player) return {};
@@ -578,6 +631,7 @@ export function applyChoice(state: GameState, choice: EventChoice): EventChoice[
     effects = success ? choice.followUpChance.success : choice.followUpChance.failure;
   }
   effects = scaleAttributeEffects(effects);
+  effects = boostPureAttributeEffects(effects, state.currentEvent?.templateId);
 
   applyEffects(player, effects, state.seasonNumber);
   return effects;
