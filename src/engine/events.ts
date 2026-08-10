@@ -1,7 +1,10 @@
-import type { EventChoice, EventTemplate, Player } from "./types";
+import type { AttributeKey, EventChoice, EventTemplate, Player } from "./types";
 import { detectClubHomecoming, isNearRetirement, overallRatingFromAttributes } from "./types";
 import { clamp, FEMALE_FIRST_NAMES, FIRST_NAMES, LAST_NAMES } from "./data";
 import { LOAN_DECISIONS } from "./loanStory";
+// `ATTRIBUTE_LABEL` kommt aus labels.ts (nur Typ-Importe aus ./types, keine
+// Rückabhängigkeit auf events.ts/careerEngine.ts - kein Zirkel).
+import { ATTRIBUTE_LABEL } from "./labels";
 
 /** Sommerpause-Event (siehe Template weiter unten) - wird NIE über die normale
  * Gewichtungs-Auswahl gezogen, sondern von App.tsx `handleStartSeason` explizit
@@ -461,6 +464,10 @@ export const EVENT_TEMPLATES: EventTemplate[] = [
     minAge: 15,
     maxAge: 34,
     weight: 3,
+    // Teilt sich den Slot mit "training_spezialisierung" (siehe dort) - beide
+    // sind reine Trainingsschwerpunkt-Wahlen, sollen sich in derselben Saison
+    // gegenseitig ersetzen statt zu addieren.
+    exclusiveGroup: "training_fokus",
     build: (_p, ctx) => {
       const gain = rInt(ctx, 1, 3);
       const cost = rInt(ctx, 1, 3);
@@ -491,6 +498,54 @@ export const EVENT_TEMPLATES: EventTemplate[] = [
             id: "mental",
             label: "Mentaltraining mit dem Sportpsychologen",
             effects: { attributes: { mentalitaet: gain }, morale: 2, traitDeltas: { arbeitsmoral: 2 }, logText: "hat mentale Stärke aufgebaut.", logKind: "info" },
+          },
+        ],
+      };
+    },
+  },
+  {
+    id: "training_spezialisierung",
+    category: "training",
+    minAge: 17,
+    maxAge: 30,
+    weight: 2.5,
+    // Teilt sich den Slot mit "training_technikfokus" (siehe dort) - echter
+    // Trade-off statt einer weiteren generischen Trainingswahl: Stärke
+    // ausbauen (Spezialist) oder Schwäche ausgleichen (Allrounder).
+    exclusiveGroup: "training_fokus",
+    dynamicWeight: (p) => {
+      const technikLastig = p.attributes.technik - p.attributes.physis;
+      return clamp(1 + Math.abs(technikLastig) / 40, 1, 1.8);
+    },
+    build: (p, ctx) => {
+      const strongKey: AttributeKey = p.attributes.technik >= p.attributes.physis ? "technik" : "physis";
+      const weakKey: AttributeKey = strongKey === "technik" ? "physis" : "technik";
+      return {
+        category: "training",
+        title: "Spezialisierung oder Ausgleich?",
+        description: "Der Trainerstab stellt dich vor eine grundsätzliche Weichenstellung für die kommenden Trainingsmonate.",
+        choices: [
+          {
+            id: "vertiefen",
+            label: `Stärke vertiefen (${ATTRIBUTE_LABEL[strongKey]})`,
+            detail: "Baut die eigene Stärke gezielt weiter aus, statt Schwächen auszugleichen.",
+            effects: {
+              attributes: { [strongKey]: rInt(ctx, 3, 5) },
+              traitDeltas: { arbeitsmoral: 1 },
+              logText: `hat sich entschieden, die eigene Stärke im Bereich ${ATTRIBUTE_LABEL[strongKey]} gezielt weiter auszubauen.`,
+              logKind: "info",
+            },
+          },
+          {
+            id: "ausgleichen",
+            label: `Schwäche ausgleichen (${ATTRIBUTE_LABEL[weakKey]})`,
+            detail: "Kleinerer Zuwachs, macht das eigene Profil aber ausgewogener.",
+            effects: {
+              attributes: { [weakKey]: rInt(ctx, 2, 4) },
+              traitDeltas: { disziplin: 2 },
+              logText: `hat gezielt an der schwächeren Seite (${ATTRIBUTE_LABEL[weakKey]}) gearbeitet.`,
+              logKind: "info",
+            },
           },
         ],
       };
@@ -2353,6 +2408,9 @@ export const EVENT_TEMPLATES: EventTemplate[] = [
     minAge: 14,
     maxAge: 17,
     weight: 2,
+    // Teilt sich den Slot mit "jugend_torwarttrainer_akademie" (nur Torhüter,
+    // siehe dort) - für Torhüter die passendere, positionsspezifische Wahl.
+    exclusiveGroup: "jugend_technik_ausbau",
     build: () => ({
       category: "training",
       title: "Technik-Partnerübungen",
@@ -2367,6 +2425,44 @@ export const EVENT_TEMPLATES: EventTemplate[] = [
           id: "ablehnen",
           label: "Lieber mit Gleichaltrigen üben",
           effects: { attributes: { mentalitaet: 1 }, logText: "hat lieber mit der eigenen Altersklasse trainiert.", logKind: "info" },
+        },
+      ],
+    }),
+  },
+  {
+    id: "jugend_torwarttrainer_akademie",
+    category: "jugend",
+    minAge: 14,
+    maxAge: 18,
+    weight: 2,
+    condition: (p) => p.position === "TW",
+    exclusiveGroup: "jugend_technik_ausbau",
+    build: (_p, ctx) => ({
+      category: "jugend",
+      title: "Eigener Torwarttrainer in der Akademie",
+      description: `Die Akademie von ${club(_p)} stellt dir erstmals einen spezialisierten Torwarttrainer für Einzeleinheiten zur Seite.`,
+      choices: [
+        {
+          id: "technik",
+          label: "Schwerpunkt Stellungsspiel & Technik",
+          effects: {
+            attributes: { technik: rInt(ctx, 3, 5), intelligenz: 1 },
+            fitness: -3,
+            traitDeltas: { arbeitsmoral: 2 },
+            logText: "hat mit dem neuen Torwarttrainer intensiv an Stellungsspiel und Technik gearbeitet.",
+            logKind: "info",
+          },
+        },
+        {
+          id: "reflexe",
+          label: "Schwerpunkt Reflexe & Explosivität",
+          effects: {
+            attributes: { tempo: rInt(ctx, 2, 4), physis: rInt(ctx, 1, 3) },
+            fitness: -4,
+            traitDeltas: { arbeitsmoral: 1 },
+            logText: "hat mit dem neuen Torwarttrainer gezielt Reflexe und Explosivität trainiert.",
+            logKind: "info",
+          },
         },
       ],
     }),
@@ -4017,6 +4113,44 @@ export const EVENT_TEMPLATES: EventTemplate[] = [
         ],
       };
     },
+  },
+
+  {
+    id: "meilenstein_kabinenansprache",
+    category: "meilenstein",
+    minAge: 22,
+    maxAge: 36,
+    weight: 1.8,
+    condition: (p) => p.traits.fuehrung > 40,
+    dynamicWeight: (p) => clamp(p.traits.fuehrung / 50, 1, 2),
+    build: (p) => ({
+      category: "meilenstein",
+      title: "Die Mannschaft steckt in der Krise",
+      description: `Nach zwei enttäuschenden Ergebnissen von ${club(p)} erwartet die Kabine ein klares Wort - alle Blicke richten sich auf dich.`,
+      choices: [
+        {
+          id: "ansprache",
+          label: "Kabinenansprache halten",
+          detail: "Übernimmst offen die Verantwortung - stärkt Führungsstärke und Vereinsbeziehung.",
+          effects: {
+            traitDeltas: { fuehrung: 4, medienimage: 2 },
+            clubRelation: 3,
+            logText: "hat mit einer klaren Ansprache die Kabine wieder auf Kurs gebracht.",
+            logKind: "info",
+          },
+        },
+        {
+          id: "zurueckhalten",
+          label: "Lieber der Mannschaft die Sache selbst überlassen",
+          detail: "Kein Risiko, aber die Chance, sich als Führungsspieler zu zeigen, bleibt ungenutzt.",
+          effects: {
+            traitDeltas: { fuehrung: -2 },
+            logText: "hat sich bewusst zurückgehalten und die Kabine sich selbst überlassen.",
+            logKind: "info",
+          },
+        },
+      ],
+    }),
   },
 
   // --- 4) Zoff mit dem Trainer ----------------------------------------------
