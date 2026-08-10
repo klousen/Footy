@@ -1049,6 +1049,19 @@ export interface Achievement {
   positive: boolean;
 }
 
+/** Ein Eintrag im geräteweiten Bestenlisten-Archiv (siehe `storage.ts`,
+ * `rankingArchive`) - wird bei JEDEM Karriereende geschrieben, unabhängig vom
+ * Karriere-Pass-Status (Tracking läuft immer, nur die Anzeige ist gated). */
+export interface RankingEntry {
+  playerName: string;
+  finalOVR: number;
+  legacyScore: number;
+  nation: string;
+  nationFlag: string;
+  longestClub: { name: string; years: number };
+  completedAt: string; // ISO-Timestamp
+}
+
 export interface GameState {
   player: Player | null;
   /** Liga-Pyramide des Landes, in dem der Spieler aktuell unter Vertrag steht. */
@@ -1096,7 +1109,9 @@ export interface GameState {
 }
 
 export type Screen =
-  | "start"
+  | "title"
+  | "slot-select"
+  | "leaderboard"
   | "country"
   | "create"
   | "youthOffer"

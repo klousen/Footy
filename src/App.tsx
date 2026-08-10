@@ -1,7 +1,19 @@
 import { useEffect, useState } from "react";
 import type { AttributeKey, ClubState, EventChoice, GameState, Position } from "./engine/types";
 import { emptyState } from "./engine/initialState";
-import { loadGame, saveGame, clearSave, hasSave as hasSaveOnDisk } from "./engine/storage";
+import {
+  addRankingEntry,
+  deleteSlot,
+  getMostRecentSlot,
+  hasCareerPass as hasCareerPassOnDisk,
+  hasSave as hasSaveOnDisk,
+  listSlots,
+  loadRankingArchive,
+  loadSlot,
+  saveSlot,
+  setCareerPass as setCareerPassOnDisk,
+  slotLimit,
+} from "./engine/storage";
 import type { CountryId } from "./engine/leagues";
 import {
   ageUpPlayer,
@@ -12,6 +24,7 @@ import {
   buildEpilogue,
   buildEventFromId,
   buildLoanFutureEvent,
+  buildRankingEntry,
   buildRetirementEvent,
   clubOfferTemplateId,
   computeAchievements,
@@ -26,6 +39,7 @@ import {
   overallRating,
   pickPostCareerPath,
   pickSeasonTemplateIds,
+  rankingScore,
   resolveClubSituation,
   rng,
   shouldOfferRetirement,
@@ -38,7 +52,12 @@ import { LOAN_DECISION_TEMPLATE_IDS } from "./engine/loanStory";
 import { HOMECOMING_TEMPLATE_ID, UNDERDOG_CUP_TEMPLATE_ID, VACATION_TEMPLATE_ID } from "./engine/events";
 import { pickSpreadClubOffers } from "./engine/leagueEngine";
 import { TRANSFER_DECISION_MEANING } from "./ui/labels";
-import { StartScreen } from "./ui/StartScreen";
+import { useLanguage } from "./ui/LanguageContext";
+import { TitleScreen } from "./ui/TitleScreen";
+import { SlotSelectScreen } from "./ui/SlotSelectScreen";
+import { LeaderboardScreen } from "./ui/LeaderboardScreen";
+import { OverwriteConfirmDialog } from "./ui/OverwriteConfirmDialog";
+import { DevPassDialog } from "./ui/DevPassDialog";
 import { SelectCountry } from "./ui/SelectCountry";
 import { CreatePlayer } from "./ui/CreatePlayer";
 import { YouthClubOffer } from "./ui/YouthClubOffer";
@@ -49,42 +68,29 @@ import { CareerEnd } from "./ui/CareerEnd";
 import { EndCareerMenu } from "./ui/EndCareerMenu";
 import "./app.css";
 
-function initState(): GameState {
-  return loadGame() ?? emptyState();
-}
-
 export default function App() {
-  const [game, setGame] = useState<GameState>(initState);
+  const { t } = useLanguage();
+  // App startet IMMER im Titelmenü (siehe Handoff Abschnitt 1) - nie automatisch
+  // in einen geladenen Spielstand hinein, auch wenn einer existiert. Welcher
+  // Slot gerade aktiv gespielt wird, lebt bewusst als eigener Component-State
+  // (nicht in `GameState`), damit Titelmenü/Slot-Auswahl/Bestenliste ohne
+  // Slot-Bezug auskommen.
+  const [game, setGame] = useState<GameState>(emptyState);
+  const [activeSlotId, setActiveSlotId] = useState<string | null>(null);
   const [pendingCountry, setPendingCountry] = useState<CountryId | null>(null);
   const [youthOffers, setYouthOffers] = useState<ClubState[]>([]);
   const [showEndCareerMenu, setShowEndCareerMenu] = useState(false);
+  const [overwriteTarget, setOverwriteTarget] = useState<{ slotId: string; playerName: string } | null>(null);
+  const [showDevDialog, setShowDevDialog] = useState(false);
+  const [careerPass, setCareerPassState] = useState<boolean>(hasCareerPassOnDisk);
 
+  // Nur persistieren, solange ein Slot aktiv ist - Titelmenü/Slot-Auswahl/
+  // Bestenliste (kein `activeSlotId`) schreiben nichts in den Spielstand-Container.
   useEffect(() => {
-    saveGame(game);
-  }, [game]);
-
-  // Einmalig beim Mount: `pendingCountry`/`youthOffers` leben bewusst NUR als
-  // Component-State, nicht in `GameState` (siehe Kommentare dort) - das persistierte
-  // `game.screen` kann nach einem Reload aber trotzdem noch auf "create" oder
-  // "youthOffer" zeigen, während der dafür nötige Component-State (Länderwahl bzw.
-  // Angebotsliste) mit dem Reload verloren ging. Ohne diese Absicherung tut der
-  // "Karriere beginnen"-Button dann buchstäblich nichts mehr (`handleCreatePlayer`
-  // bricht wegen fehlendem `pendingCountry` still ab, Bugreport) bzw. zeigt
-  // "youthOffer" eine leere, unwählbare Angebotsliste. Holt den Spieler in beiden
-  // Fällen in einen benutzbaren Zustand zurück, statt ihn auf einem toten Screen
-  // stehen zu lassen.
-  useEffect(() => {
-    if (game.screen === "create" && !pendingCountry) {
-      setGame({ ...emptyState(), screen: "country" });
-      return;
+    if (activeSlotId) {
+      saveSlot(activeSlotId, game);
     }
-    if (game.screen === "youthOffer" && youthOffers.length === 0 && game.leagueState) {
-      setYouthOffers(pickSpreadClubOffers(game.leagueState.tier2, rng, 3));
-    }
-    // Nur beim allerersten Mount relevant (Reload-Wiederherstellung) - läuft
-    // absichtlich nicht bei jedem Screen-Wechsel erneut.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [game, activeSlotId]);
 
   // Bei jedem Screen-Wechsel (z.B. Saison-Rückblick, neues Event) ganz oben
   // starten - sonst bleibt teils die Scroll-Position der vorherigen, längeren
@@ -94,17 +100,94 @@ export default function App() {
     window.scrollTo(0, 0);
   }, [game.screen, game.currentEvent?.id, game.lastSeasonStats]);
 
-  function handleNewGame() {
-    clearSave();
+  // Lädt einen Slot vollständig (inkl. offenem Event/Feedback/Saisonbilanz, siehe
+  // `saveSlot`-Dokumentation in storage.ts) und stellt dabei denselben Component-
+  // State wieder her, den `pendingCountry`/`youthOffers` bewusst NICHT persistiert
+  // mitbringen: landet der geladene Slot auf "create" (Länderwahl noch nicht
+  // getroffen) oder "youthOffer" (Angebotsliste verloren), wird er in einen
+  // benutzbaren Zustand zurückgeholt statt auf einem toten Screen zu enden.
+  function enterSlot(slotId: string, state: GameState) {
+    setActiveSlotId(slotId);
+    setPendingCountry(null);
+    setYouthOffers([]);
+    if (state.screen === "create") {
+      setGame({ ...emptyState(), screen: "country" });
+      return;
+    }
+    if (state.screen === "youthOffer" && state.leagueState) {
+      setYouthOffers(pickSpreadClubOffers(state.leagueState.tier2, rng, 3));
+    }
+    setGame(state);
+  }
+
+  function startNewCareerInSlot(slotId: string) {
+    setActiveSlotId(slotId);
     setPendingCountry(null);
     setYouthOffers([]);
     setGame({ ...emptyState(), screen: "country" });
   }
 
-  function handleContinue() {
-    const loaded = loadGame();
-    if (loaded) setGame(loaded);
+  function goToTitle() {
+    setActiveSlotId(null);
+    setGame({ ...emptyState(), screen: "title" });
   }
+
+  // ---------------- Titelmenü ----------------
+
+  function handleContinue() {
+    const slot = getMostRecentSlot();
+    if (!slot) return;
+    enterSlot(slot.id, slot.state);
+  }
+
+  function handleGoToNewCareer() {
+    if (slotLimit() <= 1) {
+      const existing = loadSlot("slot-1");
+      if (existing?.player) {
+        setOverwriteTarget({ slotId: "slot-1", playerName: existing.player.name });
+      } else {
+        startNewCareerInSlot("slot-1");
+      }
+      return;
+    }
+    setActiveSlotId(null);
+    setGame({ ...emptyState(), screen: "slot-select" });
+  }
+
+  function handleConfirmOverwrite() {
+    if (!overwriteTarget) return;
+    deleteSlot(overwriteTarget.slotId);
+    startNewCareerInSlot(overwriteTarget.slotId);
+    setOverwriteTarget(null);
+  }
+
+  function handleCancelOverwrite() {
+    setOverwriteTarget(null);
+  }
+
+  function handleViewLeaderboard() {
+    setActiveSlotId(null);
+    setGame({ ...emptyState(), screen: "leaderboard" });
+  }
+
+  function handlePaywallPlaceholder() {
+    alert(t("paywallPlaceholder"));
+  }
+
+  function handleDevToggle(value: boolean) {
+    setCareerPassState(value);
+    setCareerPassOnDisk(value);
+  }
+
+  // ---------------- Slot-Auswahl ----------------
+
+  function handleSelectSlot(slotId: string) {
+    const state = loadSlot(slotId);
+    if (!state) return;
+    enterSlot(slotId, state);
+  }
+
+  // ---------------- Bestehender Karriere-Flow (unverändert) ----------------
 
   function handleSelectCountry(countryId: CountryId) {
     setPendingCountry(countryId);
@@ -441,10 +524,7 @@ export default function App() {
   }
 
   function handleNewCareerAfterEnd() {
-    clearSave();
-    setPendingCountry(null);
-    setYouthOffers([]);
-    setGame({ ...emptyState(), screen: "country" });
+    startNewCareerInSlot(activeSlotId ?? "slot-1");
   }
 
   // Der "Return"-Button oben rechts fragt erst nach, statt die Karriere sofort zu
@@ -456,11 +536,10 @@ export default function App() {
   }
 
   function handleEndCareerStartNew() {
-    clearSave();
-    setPendingCountry(null);
-    setYouthOffers([]);
+    const slotId = activeSlotId;
     setShowEndCareerMenu(false);
-    setGame({ ...emptyState(), screen: "start" });
+    if (slotId) deleteSlot(slotId);
+    startNewCareerInSlot(slotId ?? "slot-1");
   }
 
   function handleCancelEndCareer() {
@@ -470,6 +549,8 @@ export default function App() {
   // Sichtbar, sobald ein Spieler existiert und noch nicht auf der Karriereende-
   // Übersicht steht (dort gibt es bereits einen eigenen "Neue Karriere"-Weg).
   const showReturnButton = game.player !== null && game.screen !== "careerEnd";
+
+  const topRankingPreview = [...loadRankingArchive()].sort((a, b) => rankingScore(b) - rankingScore(a)).slice(0, 3);
 
   return (
     <div className="app-shell">
@@ -490,8 +571,41 @@ export default function App() {
           onCancel={handleCancelEndCareer}
         />
       )}
-      {game.screen === "start" && (
-        <StartScreen hasSave={hasSaveOnDisk()} onNewGame={handleNewGame} onContinue={handleContinue} />
+      {overwriteTarget && (
+        <OverwriteConfirmDialog
+          playerName={overwriteTarget.playerName}
+          onConfirm={handleConfirmOverwrite}
+          onCancel={handleCancelOverwrite}
+        />
+      )}
+      {import.meta.env.DEV && showDevDialog && (
+        <DevPassDialog hasCareerPass={careerPass} onToggle={handleDevToggle} onClose={() => setShowDevDialog(false)} />
+      )}
+      {game.screen === "title" && (
+        <TitleScreen
+          hasSave={hasSaveOnDisk()}
+          previewPlayer={getMostRecentSlot()?.state.player ?? null}
+          hasCareerPass={careerPass}
+          rankingPreview={topRankingPreview}
+          onContinue={handleContinue}
+          onNewCareer={handleGoToNewCareer}
+          onViewLeaderboard={handleViewLeaderboard}
+          onDevLongPress={() => setShowDevDialog(true)}
+        />
+      )}
+      {game.screen === "slot-select" && (
+        <SlotSelectScreen
+          slots={listSlots()}
+          slotLimit={slotLimit()}
+          onSelectSlot={handleSelectSlot}
+          onNewCareerInSlot={startNewCareerInSlot}
+          onLockedTap={handlePaywallPlaceholder}
+          onUpgrade={handlePaywallPlaceholder}
+          onBack={goToTitle}
+        />
+      )}
+      {game.screen === "leaderboard" && (
+        <LeaderboardScreen entries={loadRankingArchive()} hasCareerPass={careerPass} onBack={goToTitle} onUpgrade={handlePaywallPlaceholder} />
       )}
       {game.screen === "country" && <SelectCountry onSelect={handleSelectCountry} />}
       {game.screen === "create" && <CreatePlayer onCreate={handleCreatePlayer} />}
@@ -540,12 +654,16 @@ export default function App() {
 
 /** Bündelt die Karriereende-Auswertung (Legacy-Score, Achievements, Epilog) -
  * genutzt sowohl vom regulären Rücktritts-Event als auch vom manuellen
- * "Return"-Button, der die Karriere jederzeit vorzeitig beenden kann. */
+ * "Return"-Button, der die Karriere jederzeit vorzeitig beenden kann. Schreibt
+ * bei JEDEM Karriereende zusätzlich einen Bestenlisten-Eintrag (siehe Handoff
+ * Abschnitt 4: Tracking läuft immer, unabhängig vom Karriere-Pass-Status -
+ * nur die spätere ANZEIGE ist gated). */
 function buildCareerEndUpdate(player: NonNullable<GameState["player"]>): Partial<GameState> {
   player.retired = true;
   player.postCareerPath = pickPostCareerPath(player);
   const { score, tier, factors } = computeLegacy(player);
   const achievements = computeAchievements(player);
+  addRankingEntry(buildRankingEntry(player, score));
   return {
     player: { ...player },
     currentEvent: null,

@@ -21,6 +21,7 @@ import type {
   Player,
   Position,
   NarrativeTrend,
+  RankingEntry,
   ScoreFactor,
   SeasonStats,
   SquadRole,
@@ -3961,6 +3962,52 @@ export function buildClubTenures(player: Player): ClubTenure[] {
     t.avgScore = Math.round(t.avgScore / t.seasons);
   }
   return tenures;
+}
+
+/** Baut den Bestenlisten-Eintrag für die geräteweite Rangliste (siehe `storage.ts`,
+ * `rankingArchive`) - wird bei JEDEM Karriereende geschrieben, unabhängig vom
+ * Karriere-Pass-Status (nur die spätere ANZEIGE ist gated, das Tracking läuft immer). */
+export function buildRankingEntry(player: Player, legacyScore: number): RankingEntry {
+  // Karriere-Bestwert statt aktuellem Wert nach Alterung/Abbau - dieselbe Herleitung
+  // wie im Sharepic (siehe `buildShareCardData` in shareCard.ts).
+  const finalOVR = Math.max(overallRating(player), ...player.seasonHistory.map((s) => s.overallRating));
+  // Heimatland statt aktuellem Vereinsland - die Nationalität ändert sich nicht
+  // durch Auslandswechsel (siehe `homeCountryId`-Dokumentation in types.ts).
+  const country = COUNTRIES.find((c) => c.id === player.homeCountryId);
+  // Längster Verein über die GESAMTE Karriere: mehrere (auch nicht direkt
+  // aufeinanderfolgende, z.B. durch eine Heimkehr getrennte) Zugehörigkeiten beim
+  // selben Verein werden für diese Kennzahl zusammengezählt statt nur die längste
+  // EINZELNE Zugehörigkeit zu nehmen.
+  const seasonsByClub = new Map<string, number>();
+  for (const tenure of buildClubTenures(player)) {
+    seasonsByClub.set(tenure.club, (seasonsByClub.get(tenure.club) ?? 0) + tenure.seasons);
+  }
+  let longestClub = { name: player.club.name, years: 0 };
+  for (const [club, seasons] of seasonsByClub) {
+    if (seasons > longestClub.years) longestClub = { name: club, years: seasons };
+  }
+  return {
+    playerName: player.name,
+    finalOVR,
+    legacyScore,
+    nation: country?.name ?? player.homeCountryId,
+    nationFlag: country?.flag ?? "🏳️",
+    longestClub,
+    completedAt: new Date().toISOString(),
+  };
+}
+
+/**
+ * Kombinierter Sortier-Score für die Bestenliste (siehe Handoff Abschnitt 4:
+ * "gewichtete Kombination aus OVR und Legacy-Score - exakte Formel bei Bedarf
+ * separat abstimmen"). `finalOVR` liegt auf einer 1-99-Skala, `legacyScore` auf
+ * einer deutlich größeren (Tier-Schwellen bei 220/500/850/1400, siehe
+ * `computeLegacy`) - `finalOVR * 10` bringt beide Größen in eine vergleichbare
+ * Größenordnung, damit weder ein einzelner OVR-Punkt noch ein einzelner
+ * Legacy-Punkt die Rangliste dominiert.
+ */
+export function rankingScore(entry: RankingEntry): number {
+  return entry.finalOVR * 10 + entry.legacyScore;
 }
 
 // Dünner Re-Export: die eigentliche Logik lebt in types.ts (siehe dort), damit

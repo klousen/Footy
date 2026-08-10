@@ -9,6 +9,7 @@ import type {
   TraitKey,
   TransferDecisionType,
 } from "./types";
+import type { Language } from "./storage";
 
 export const ATTRIBUTE_LABEL: Record<AttributeKey, string> = {
   technik: "Technik",
@@ -384,4 +385,58 @@ export function turningPointForSeason(player: Player): string | null {
   const lastHistory = player.narrativeHistory[player.narrativeHistory.length - 1];
   if (!lastHistory || lastHistory.season !== player.seasonHistory.length - 1) return null;
   return lastHistory.label;
+}
+
+// -----------------------------------------------------------------------------
+// i18n (Titelmenü) - siehe Handoff "Titelmenü, Spielstand-Slots & Bestenliste-
+// Gating" Abschnitt 5: fürs Erste nur das Titelmenü selbst zweisprachig, Rest der
+// App bleibt vorerst Deutsch. `{de, en}`-Paare statt reiner Strings, damit sich
+// das Muster später ohne Refactor auf die gesamte App ausweiten lässt.
+// -----------------------------------------------------------------------------
+export const TITLE_I18N = {
+  tagline: { de: "Deine Karriere. Dein Weg.", en: "Your career. Your way." },
+  yearsAbbr: { de: "J.", en: "y." },
+  continueCareer: { de: "Karriere fortsetzen", en: "Continue career" },
+  newCareer: { de: "Neue Karriere starten", en: "Start new career" },
+  viewLeaderboard: { de: "Bestenliste ansehen", en: "View leaderboard" },
+  rankingTitle: { de: "Bestenliste", en: "Leaderboard" },
+  rankingTitleAccent: { de: "Top Karrieren", en: "Top Careers" },
+  rankingLink: { de: "ALLE ANZEIGEN →", en: "VIEW ALL →" },
+  lockTitle: { de: "Bestenliste ist Karriere-Pass", en: "Leaderboard is Career Pass" },
+  lockSub: {
+    de: "Deine Karrieren werden schon gezählt. Schalte die Ansicht mit dem Karriere-Pass frei.",
+    en: "Your careers are already being counted. Unlock the view with the Career Pass.",
+  },
+  lockCta: { de: "KARRIERE-PASS ANSEHEN", en: "VIEW CAREER PASS" },
+  slotEyebrow: { de: "Karriere wählen", en: "Choose career" },
+  slotTitle: { de: "Deine Karrieren", en: "Your careers" },
+  newCareerSlot: { de: "Neue Karriere", en: "New career" },
+  emptySlotLabel: { de: "Slot", en: "Slot" },
+  passBadge: { de: "KARRIERE-PASS", en: "CAREER PASS" },
+  passBannerTitle: { de: "3 Spielstände", en: "3 save slots" },
+  passBannerText: {
+    de: "Mit dem Karriere-Pass mehrere Karrieren parat haben und jederzeit zwischen ihnen wechseln.",
+    en: "With the Career Pass, keep several careers ready and switch between them any time.",
+  },
+  passBannerBtn: { de: "UPGRADEN", en: "UPGRADE" },
+  backToTitle: { de: "← Zurück", en: "← Back" },
+  overwriteTitle: { de: "Karriere ersetzen?", en: "Replace career?" },
+  overwriteText: {
+    de: "Deine aktuelle Karriere als {name} wird beendet und ersetzt. Fortfahren?",
+    en: "Your current career as {name} will end and be replaced. Continue?",
+  },
+  overwriteConfirm: { de: "Fortfahren", en: "Continue" },
+  overwriteCancel: { de: "Abbrechen", en: "Cancel" },
+  paywallPlaceholder: {
+    de: "Der Karriere-Pass ist noch nicht verfügbar - bald mehr!",
+    en: "The Career Pass isn't available yet - more soon!",
+  },
+  leaderboardEmpty: { de: "Noch keine abgeschlossene Karriere.", en: "No completed career yet." },
+  legacyLabel: { de: "Legacy", en: "Legacy" },
+} satisfies Record<string, Record<Language, string>>;
+
+export type TitleI18nKey = keyof typeof TITLE_I18N;
+
+export function t(key: TitleI18nKey, lang: Language): string {
+  return TITLE_I18N[key][lang];
 }
