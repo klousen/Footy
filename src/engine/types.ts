@@ -769,6 +769,14 @@ export interface Player {
   roleProtectionSeasons: number;
   /** Solange > 0, ist mindestens "Stammspieler" garantiert (vertragliche Stammplatzgarantie). */
   startingRoleGuaranteeSeasons: number;
+  /** Gesetzt (auf die vorherige, bessere Rolle) unmittelbar NACH einer automatischen
+   * Kaderrollen-Verschlechterung (siehe `resolveClubSituation`) - garantiert ein
+   * Reaktions-Event ("Die Kaderrolle wackelt", siehe `decideRoleChallengeInjection`)
+   * in der kommenden Saison, statt die Degradierung unwidersprochen hinzunehmen.
+   * `null` außerhalb einer solchen offenen Situation. Wird beim Einplanen des
+   * Events wieder auf `null` gesetzt (siehe `handleStartSeason` in App.tsx) -
+   * unabhängig davon, welche der drei Antwortmöglichkeiten gewählt wird. */
+  roleChallengePending: SquadRole | null;
   /** Wurde bereits Kapitän der Nationalmannschaft (schaltet u.a. ein Achievement frei). */
   nationalTeamCaptain: boolean;
   /** Anzahl tatsächlich vollzogener Vereinswechsel (für Legacy-Faktoren/Achievements). */

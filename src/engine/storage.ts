@@ -66,6 +66,10 @@ function normalizeGameState(state: GameState): GameState {
     state.player.growthCarry ??= {};
     state.player.nationalTeamGoals ??= 0;
     state.player.startingRoleGuaranteeSeasons ??= 0;
+    // Ältere Spielstände kennen das garantierte Kaderrollen-Reaktions-Event noch
+    // nicht (siehe `Player.roleChallengePending`) - `null` als neutrale Annäherung,
+    // kein rückwirkendes Nacherfinden einer vergangenen Degradierung.
+    state.player.roleChallengePending ??= null;
     state.player.cupExitThisSeason ??= false;
     // Ältere Spielstände kennen `playedAbroad` noch nicht - da wir nicht mehr
     // rekonstruieren können, ob je ins Ausland gewechselt wurde, im Zweifel als

@@ -299,6 +299,7 @@ export function createPlayer(
       consecutiveBenchSeasons: 0,
       roleProtectionSeasons: 0,
       startingRoleGuaranteeSeasons: 0,
+      roleChallengePending: null,
       nationalTeamCaptain: false,
       clubChangesCount: 0,
       playedAbroad: false,
@@ -633,6 +634,16 @@ export function applyChoice(state: GameState, choice: EventChoice): EventChoice[
   }
   effects = scaleAttributeEffects(effects);
   effects = boostPureAttributeEffects(effects, state.currentEvent?.templateId);
+
+  // Löst `Player.roleChallengePending` erst HIER auf (nicht schon beim garantierten
+  // Einplanen in App.tsx `handleStartSeason`) - `buildEventFromId` prüft `condition`
+  // erneut beim tatsächlichen Anzeigen, ein zu frühes Zurücksetzen würde den Slot
+  // sofort wieder gegen die neutrale "Ruhige Woche"-Ersatzfüllung tauschen (siehe
+  // dortiger Kommentar). Gilt für alle drei Antworten gleichermaßen - die
+  // Gelegenheit wurde in jedem Fall gegeben, unabhängig vom Ausgang.
+  if (state.currentEvent?.templateId === "taktik_kaderrolle_verteidigen") {
+    player.roleChallengePending = null;
+  }
 
   applyEffects(player, effects, state.seasonNumber);
   return effects;
@@ -2355,6 +2366,16 @@ export function resolveClubSituation(player: Player, league: LeagueState): LogEn
       kind: improved ? "positive" : "negative",
     };
     player.log.push(entry);
+    // Eine automatische Verschlechterung (kein Widerspruch durch Bewährungschance/
+    // Stammplatzgarantie - die wurden oben bereits VOR diesem Vergleich angewandt)
+    // garantiert ein Reaktions-Event in der kommenden Saison, statt sie unwidersprochen
+    // hinzunehmen (siehe `decideRoleChallengeInjection` + "taktik_kaderrolle_verteidigen"
+    // in events.ts, Bugreport "wenn das Spiel mir sagt ich bekomme weniger Spielzeit,
+    // kann ich aktiv nichts dagegen tun"). Speichert die VORHERIGE (bessere) Rolle, damit
+    // ein erfolgreicher Widerstand genau dorthin zurückführen kann.
+    if (!improved) {
+      player.roleChallengePending = oldRole;
+    }
   }
 
   if (player.contract.yearsLeft <= 0) {
@@ -3329,6 +3350,33 @@ export function decideNarrativeEventInjection(
     return "narrative_berufungsfrust";
   }
   return null;
+}
+
+/**
+ * Zweite "Hard Priority"-Slot-Reservierung, analog zu `decideNarrativeEventInjection`,
+ * aber unabhängig von dieser (beide können in derselben Saison unterschiedliche Slots
+ * belegen): garantiert das Reaktions-Event "Die Kaderrolle wackelt", sobald
+ * `resolveClubSituation` eine automatische Kaderrollen-Verschlechterung erkannt hat
+ * (siehe `Player.roleChallengePending`) - der Spieler bekommt die Degradierung nicht
+ * nur mitgeteilt, sondern IMMER die Gelegenheit, aktiv gegenzuhalten, statt auf das
+ * zufällige Ziehen eines passenden Events aus dem allgemeinen Pool angewiesen zu sein.
+ */
+export function decideRoleChallengeInjection(
+  player: Player,
+  usedTemplateIds: Set<string>,
+  recentTemplateSeasons: Record<string, number>,
+  seasonNumber: number
+): string | null {
+  if (!player.roleChallengePending) return null;
+  const id = "taktik_kaderrolle_verteidigen";
+  const t = getTemplateById(id);
+  if (!t) return null;
+  if (player.age < t.minAge || player.age > t.maxAge) return null;
+  if (t.unique && usedTemplateIds.has(id)) return null;
+  const last = recentTemplateSeasons[id];
+  if (last !== undefined && seasonNumber - last < TEMPLATE_HARD_MIN_GAP) return null;
+  if (t.condition && !t.condition(player)) return null;
+  return id;
 }
 
 /** Setzt ein Element an eine bestimmte Position (geklemmt auf die Array-Länge). */

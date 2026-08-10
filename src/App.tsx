@@ -32,6 +32,7 @@ import {
   createPlayer,
   decideClubOfferInjection,
   decideNarrativeEventInjection,
+  decideRoleChallengeInjection,
   dueStorylineTemplateIds,
   finalizeYouthClub,
   insertWithinBudget,
@@ -267,6 +268,24 @@ export default function App() {
     if (narrativeInjectionId) {
       ids = insertWithinBudget(ids, narrativeInjectionId, ids.length, guaranteedIds, seasonEventBudget);
       recentTemplateSeasons[narrativeInjectionId] = nextSeasonNumber;
+    }
+
+    // Zweiter, unabhängiger "Hard Priority"-Slot: garantiert das Reaktions-Event
+    // "Die Kaderrolle wackelt", sobald die letzte Saison eine automatische
+    // Kaderrollen-Verschlechterung ergeben hat (siehe `resolveClubSituation`/
+    // `Player.roleChallengePending`) - der Bugreport "wenn das Spiel mir sagt ich
+    // bekomme weniger Spielzeit, kann ich aktiv nichts dagegen tun" wird damit
+    // NIE dem Zufall des allgemeinen Event-Pools überlassen. WICHTIG: das Flag darf
+    // HIER noch NICHT zurückgesetzt werden - `buildEventFromId` prüft `condition`
+    // erneut beim tatsächlichen Anzeigen (Sicherheitsnetz gegen zwischenzeitlich
+    // veränderten Spielerzustand, siehe dortiger Kommentar) und würde sonst den
+    // gerade erst garantierten Slot sofort wieder gegen die neutrale "Ruhige
+    // Woche"-Ersatzfüllung tauschen. Das Zurücksetzen passiert stattdessen in
+    // `applyChoice`, sobald die Antwort tatsächlich gewählt wurde.
+    const roleChallengeInjectionId = decideRoleChallengeInjection(game.player, used, recentTemplateSeasons, nextSeasonNumber);
+    if (roleChallengeInjectionId) {
+      ids = insertWithinBudget(ids, roleChallengeInjectionId, ids.length, guaranteedIds, seasonEventBudget);
+      recentTemplateSeasons[roleChallengeInjectionId] = nextSeasonNumber;
     }
 
     // Fällige Storyline-Fortsetzungen werden garantiert eingeplant, nicht zufällig gezogen.

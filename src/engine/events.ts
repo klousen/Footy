@@ -149,6 +149,30 @@ function europeanCompetitionName(competition: "CL" | "EL"): string {
   return competition === "CL" ? "Champions Cup" : "Europa Cup";
 }
 
+/**
+ * Erfolgschance für die "aktiv gegenhalten"-Option im garantierten Reaktions-
+ * Event "taktik_kaderrolle_verteidigen" (siehe `decideRoleChallengeInjection`
+ * in careerEngine.ts) - bewusst NICHT die sonst im Spiel übliche feste Zahl
+ * (Bugreport "wenn das Spiel mir sagt ich bekomme weniger Spielzeit, kann ich
+ * aktiv nichts dagegen tun"): verknüpft die Chance mit Auftreten im Gespräch
+ * (Charisma + Mentalität), Standfestigkeit im Konflikt (Führungsstärke), dem
+ * bisherigen Vereinsverhältnis UND einem "Vertrauensvorschuss" durch die
+ * zuletzt gezeigte sportliche Leistung (Ø-Bewertung der letzten Saison) - wer
+ * zuletzt gut gespielt hat, hat spürbar bessere Karten als jemand mit
+ * identischem Charakter, aber schwacher Form. Bewusst weiterhin GEKAPPT
+ * (15-85%) - nie ein Selbstläufer, nie aussichtslos, Gegenwind bleibt Teil
+ * des Spiels.
+ */
+function roleChallengeSuccessChance(p: Player): number {
+  const base = 0.35;
+  const lastStats = p.seasonHistory[p.seasonHistory.length - 1];
+  const formBonus = lastStats ? (lastStats.avgRating - 6.0) * 0.035 : 0;
+  const presenceBonus = ((p.attributes.charisma - 50 + (p.attributes.mentalitaet - 50)) / 2 / 100) * 0.35;
+  const leadershipBonus = ((p.traits.fuehrung - 50) / 100) * 0.25;
+  const relationBonus = ((p.clubRelation - 50) / 100) * 0.15;
+  return clamp(base + formBonus + presenceBonus + leadershipBonus + relationBonus, 0.15, 0.85);
+}
+
 export const EVENT_TEMPLATES: EventTemplate[] = [
   // ---------------------------------------------------------------------
   // JUGEND (14-17)
@@ -5195,6 +5219,81 @@ export const EVENT_TEMPLATES: EventTemplate[] = [
         },
       ],
     }),
+  },
+  {
+    // Garantiertes Gegenstück zur automatischen Kaderrollen-Verschlechterung
+    // (siehe `resolveClubSituation`/`decideRoleChallengeInjection` in
+    // careerEngine.ts, Bugreport "wenn das Spiel mir sagt ich bekomme weniger
+    // Spielzeit, kann ich aktiv nichts dagegen tun") - anders als die übrigen
+    // Kaderrollen-Events hier bewusst NICHT dem Zufall des allgemeinen Pools
+    // überlassen: taucht IMMER in der Saison nach einer erkannten Degradierung
+    // auf, nicht nur manchmal.
+    id: "taktik_kaderrolle_verteidigen",
+    category: "taktik",
+    minAge: 17,
+    maxAge: 38,
+    weight: 1.2,
+    condition: (p) => p.roleChallengePending !== null,
+    build: (p) => {
+      const chance = roleChallengeSuccessChance(p);
+      return {
+        category: "taktik",
+        title: "Die Kaderrolle wackelt",
+        description: `Deine Rolle im Kader von ${club(
+          p
+        )} hat sich zuletzt spürbar verschlechtert - der Trainer traut dir gerade weniger zu. Wie reagierst du?`,
+        choices: [
+          {
+            id: "geduldig",
+            label: "Geduldig weiterarbeiten und im Training überzeugen",
+            detail: "Risikoarm, aber keine unmittelbare Besserung - schützt zumindest vor weiterem Abrutschen.",
+            effects: {
+              morale: -2,
+              roleProtectionSeasons: 1,
+              traitDeltas: { disziplin: 2, arbeitsmoral: 1 },
+              logText: "hat die schwächere Kaderrolle akzeptiert und im Training geduldig weitergearbeitet.",
+              logKind: "info",
+            },
+          },
+          {
+            id: "wechsel",
+            label: "Wechsel oder Leihe im Winter aktiv anstoßen",
+            detail: "Klarer Schritt, aber Vereinsbindung leidet - neues Umfeld, neue Chance.",
+            effects: {
+              wantsTransfer: true,
+              clubRelation: -4,
+              logText: "stößt nach der schwächeren Kaderrolle aktiv einen Wechsel im Winter an.",
+              logKind: "negative",
+            },
+          },
+          {
+            id: "kaempfen",
+            label: "Aktiv beim Trainer um mehr Einsatzzeit kämpfen",
+            detail: "Erfolgschance hängt von Auftreten, Vereinsverhältnis und zuletzt gezeigter Form ab.",
+            effects: {},
+            followUpChance: {
+              chance,
+              success: {
+                clubRelation: 6,
+                morale: 6,
+                squadRoleOverride: p.roleChallengePending ?? undefined,
+                roleProtectionSeasons: 1,
+                traitDeltas: { fuehrung: 1 },
+                logText: "hat sich beim Trainer für mehr Einsatzzeit starkgemacht - mit Erfolg, die alte Rolle ist zurück.",
+                logKind: "positive",
+              },
+              failure: {
+                clubRelation: -8,
+                morale: -6,
+                wantsTransfer: true,
+                logText: "hat sich beim Trainer für mehr Einsatzzeit starkgemacht - ohne Erfolg, das Verhältnis leidet.",
+                logKind: "negative",
+              },
+            },
+          },
+        ],
+      };
+    },
   },
   {
     id: "medien_kritik_formkrise",
