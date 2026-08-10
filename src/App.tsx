@@ -35,7 +35,7 @@ import {
   summarizeEffects,
 } from "./engine/careerEngine";
 import { LOAN_DECISION_TEMPLATE_IDS } from "./engine/loanStory";
-import { UNDERDOG_CUP_TEMPLATE_ID, VACATION_TEMPLATE_ID } from "./engine/events";
+import { HOMECOMING_TEMPLATE_ID, UNDERDOG_CUP_TEMPLATE_ID, VACATION_TEMPLATE_ID } from "./engine/events";
 import { pickSpreadClubOffers } from "./engine/leagueEngine";
 import { TRANSFER_DECISION_MEANING } from "./ui/labels";
 import { StartScreen } from "./ui/StartScreen";
@@ -279,6 +279,11 @@ export default function App() {
 
     let didTransfer = false;
     let endedStorylineTemplateIds: string[] = [];
+    // "Heimkehrer" (siehe `ClubOfferResult.homecomingClubReturn`/`detectClubHomecoming`
+    // in types.ts) - erzwingt unten das dedizierte Info-Event als NÄCHSTES Ereignis
+    // direkt nach dem Wechsel-Feedback, dieselbe "erzwungenes Spezial-Event"-Weiche
+    // wie beim Leihjahr/Rücktritt.
+    let homecomingClubReturn = false;
     const feedback = isLoanDecision
       ? applyLoanDecisionChoice(player, game.seasonNumber, game.currentEvent.templateId, choice.id)
       : isClubOfferEvent(game.currentEvent.templateId)
@@ -289,6 +294,7 @@ export default function App() {
           if (result.newActiveLeague) newActiveLeague = result.newActiveLeague;
           didTransfer = player.club.clubId !== oldClubId;
           endedStorylineTemplateIds = result.endedStorylineTemplateIds ?? [];
+          homecomingClubReturn = result.homecomingClubReturn ?? false;
           // "Was das bedeutet" (siehe "CAREER NARRATIVE ... TECHNISCHE VERANKERUNG"
           // Abschnitt 12) - rein qualitativ, der tatsächliche Ausgang ist hier noch
           // nicht bekannt (siehe `TRANSFER_DECISION_MEANING`).
@@ -338,9 +344,12 @@ export default function App() {
       foreignLeagues: { ...foreignLeagues },
       pendingEventIds: justStartedLoanNarrative
         ? [...LOAN_DECISION_TEMPLATE_IDS]
-        : didTransfer
-        ? game.pendingEventIds.filter((id) => !STALE_AFTER_TRANSFER_TEMPLATE_IDS.has(id) && !endedStorylineTemplateIds.includes(id))
-        : game.pendingEventIds,
+        : (() => {
+            const rest = didTransfer
+              ? game.pendingEventIds.filter((id) => !STALE_AFTER_TRANSFER_TEMPLATE_IDS.has(id) && !endedStorylineTemplateIds.includes(id))
+              : game.pendingEventIds;
+            return homecomingClubReturn ? [HOMECOMING_TEMPLATE_ID, ...rest] : rest;
+          })(),
       feedback,
     });
   }

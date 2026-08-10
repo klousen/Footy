@@ -72,6 +72,40 @@ export function isNearRetirement(player: Player): boolean {
   return overall < peakOverall * 0.72 || player.fitness < 55;
 }
 
+/** Mindestalter für eine "Heimkehrer"-Rückkehr (siehe `detectClubHomecoming`). */
+export const HOMECOMING_MIN_AGE = 25;
+/** "Mehr als 2 Jahre" in den frühen Jahren (18-25) = mindestens 3 Saisons dort. */
+export const HOMECOMING_MIN_EARLY_CAREER_SEASONS = 3;
+
+/**
+ * Erkennt eine echte "Heimkehr" zu einem Verein, an dem der Spieler in frühen
+ * Jahren (18-25) schon einmal mehr als 2 Saisons gespielt hat und zu dem er
+ * jetzt (Alter >= `HOMECOMING_MIN_AGE`) zurückkehrt - unabhängig davon, ob
+ * dazwischen noch weitere Stationen lagen. `null`, wenn keine Heimkehr
+ * vorliegt, sonst die Anzahl Jahre seit der zuletzt dort verbrachten Saison
+ * (auch spätere, nicht mehr "frühe" Saisons an diesem Verein zählen für den
+ * Zeitpunkt mit, damit "X Jahre später" auch stimmt, wenn der Spieler über
+ * das 25. Lebensjahr hinaus dortgeblieben ist, bevor er ihn verließ).
+ *
+ * Lebt bewusst hier in types.ts statt in careerEngine.ts (wie `isNearRetirement`
+ * oben) - sowohl `applyClubOfferChoice` (careerEngine.ts, Wechsel-Auflösung) als
+ * auch der Event-Text von `HOMECOMING_TEMPLATE_ID` (events.ts) brauchen dieselbe
+ * Berechnung, ein zirkulärer Import events.ts -> careerEngine.ts ist aber nicht
+ * möglich.
+ */
+export function detectClubHomecoming(player: Player, targetClubId: string): number | null {
+  if (player.age < HOMECOMING_MIN_AGE) return null;
+  const seasonsThere = player.seasonHistory.filter((s) => s.clubId === targetClubId);
+  if (seasonsThere.length === 0) return null;
+  const earlyCareerSeasons = seasonsThere.filter((s) => s.age >= 18 && s.age <= 25);
+  if (earlyCareerSeasons.length < HOMECOMING_MIN_EARLY_CAREER_SEASONS) return null;
+  const lastAgeThere = Math.max(...seasonsThere.map((s) => s.age));
+  const yearsSince = player.age - lastAgeThere;
+  // Gerade erst dort gewesen (z.B. Leih-Rückkehr im selben Zug) - kein echtes "wieder".
+  if (yearsSince < 1) return null;
+  return yearsSince;
+}
+
 export const POSITION_WEIGHTS: Record<Position, Attributes> = {
   TW: { technik: 0.15, tempo: 0.05, physis: 0.25, mentalitaet: 0.35, intelligenz: 0.15, charisma: 0.05 },
   IV: { technik: 0.12, tempo: 0.13, physis: 0.33, mentalitaet: 0.25, intelligenz: 0.12, charisma: 0.05 },
@@ -239,6 +273,10 @@ export interface SeasonStats {
   seasonLabel: string; // z.B. "Saison 2031/32"
   age: number;
   club: string;
+  /** Stabile Vereins-ID (siehe `Club.clubId`) - anders als `club` (Anzeigename)
+   * robust gegen Namensgleichheit über Ländergrenzen hinweg. Grundlage für
+   * `detectClubHomecoming` (siehe unten). */
+  clubId: string;
   /** Gesamtstärke während dieser Saison (vor dem Wachstum am Saisonende). */
   overallRating: number;
   /** Attribut-/Charakterwerte zu Saisonbeginn (vor den Events dieser Saison) - reiner
@@ -674,6 +712,14 @@ export interface Player {
   /** True, sobald mindestens einmal in ein anderes Land als `homeCountryId` gewechselt
    * wurde - Grundlage für das "Ligalegende"-Achievement (ganze Karriere in einem Land). */
   playedAbroad: boolean;
+  /** True NUR unmittelbar nach dem zuletzt vollzogenen Wechsel, wenn dieser eine
+   * echte Rückkehr vom Ausland ins Heimatland war (siehe `applyClubOfferChoice`,
+   * `isHomecoming`) - steuert, ob danach das positive "Wieder daheim"-Event statt
+   * der generischen "Ankommen beim neuen Verein"-Einfindungsschwierigkeiten feuern
+   * kann (siehe `vertrag_neuankunft_schwierig`/`vertrag_heimkehr_ausland_glueck`
+   * in events.ts). Wird bei JEDEM weiteren Wechsel neu gesetzt (auch auf `false`),
+   * spiegelt also immer nur den zuletzt vollzogenen Wechsel wider. */
+  recentTransferWasForeignHomecoming: boolean;
   /** True, solange ein Leihgeschäft läuft (siehe `ClubOfferReason` "loan"/"loan-return")
    * - erzwingt im folgenden Sommertransferfenster die automatische Rückkehr. */
   loanActive: boolean;
@@ -861,7 +907,8 @@ export type CareerPhenotype =
   | "INJURY_PRONE_SURVIVOR"
   | "LATE_CAREER_RESURGENCE"
   | "BOOM_OR_BUST_MOVER"
-  | "CEILING_BREAKER";
+  | "CEILING_BREAKER"
+  | "HOMECOMER";
 
 export interface CareerPhenotypeResult {
   primary: CareerPhenotype;

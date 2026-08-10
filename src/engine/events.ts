@@ -1,5 +1,5 @@
 import type { EventChoice, EventTemplate, Player } from "./types";
-import { isNearRetirement, overallRatingFromAttributes } from "./types";
+import { detectClubHomecoming, isNearRetirement, overallRatingFromAttributes } from "./types";
 import { clamp, FEMALE_FIRST_NAMES, FIRST_NAMES, LAST_NAMES } from "./data";
 import { LOAN_DECISIONS } from "./loanStory";
 
@@ -15,6 +15,14 @@ export const VACATION_TEMPLATE_ID = "urlaub_sommerpause";
  * tatsächlich gewonnen wurde (siehe dortiger Kommentar). Als Konstante exportiert,
  * damit App.tsx nicht denselben String-Literal dupliziert. */
 export const UNDERDOG_CUP_TEMPLATE_ID = "landespokal_aussenseitersieg";
+
+/** "Heimkehrer"-Info-Event (siehe Template weiter unten) - wird NIE über die
+ * normale Gewichtungs-Auswahl gezogen, sondern von App.tsx `handleChoice` direkt
+ * nach einem echten Wechsel erzwungen, wenn `applyClubOfferChoice` eine Heimkehr
+ * erkannt hat (siehe `ClubOfferResult.homecomingClubReturn`, `detectClubHomecoming`
+ * in types.ts). Als Konstante exportiert, damit App.tsx nicht denselben
+ * String-Literal dupliziert. */
+export const HOMECOMING_TEMPLATE_ID = "heimkehr_verein";
 
 // Hilfsfunktion für lesbaren Vereinsnamen im Text
 const club = (p: Player) => p.club.name;
@@ -4575,10 +4583,14 @@ export const EVENT_TEMPLATES: EventTemplate[] = [
   // KARRIERE-PSYCHOLOGIE: Vereinswechsel, Trainer, Medien, Konkurrenz - wie
   // man mit den mentalen Kernsituationen einer Profikarriere umgeht. Bewusst
   // klar von verwandten bestehenden Ereignissen abgegrenzt: "vertrag_neuankunft_schwierig"
-  // greift NUR direkt nach einem echten Wechsel (siehe `recentlyTransferred`),
-  // "taktik_neuer_trainer_infrage" schließt sich mit der laufenden "trainerzoff"-
-  // Storyline gegenseitig aus, "taktik_stammplatz_verloren" respektiert eine aktive
-  // Stammplatzgarantie (kein Widerspruch zu deren Rollen-Floor).
+  // greift NUR direkt nach einem echten Wechsel (siehe `recentlyTransferred`) UND
+  // NICHT nach einer Rückkehr vom Ausland ins Heimatland (siehe
+  // `p.recentTransferWasForeignHomecoming` - dafür gibt es stattdessen das positive
+  // Gegenstück "vertrag_heimkehr_ausland_glueck" direkt darunter, Bugreport:
+  // "Wechsel vom Ausland ins Heimatland sollten... nicht Einfindungsschwierigkeiten
+  // triggern"), "taktik_neuer_trainer_infrage" schließt sich mit der laufenden
+  // "trainerzoff"-Storyline gegenseitig aus, "taktik_stammplatz_verloren" respektiert
+  // eine aktive Stammplatzgarantie (kein Widerspruch zu deren Rollen-Floor).
   // ---------------------------------------------------------------------
   {
     id: "vertrag_neuankunft_schwierig",
@@ -4586,7 +4598,7 @@ export const EVENT_TEMPLATES: EventTemplate[] = [
     minAge: 18,
     maxAge: 38,
     weight: 1.5,
-    condition: (p) => p.stage !== "jugend" && p.clubChangesCount > 0 && recentlyTransferred(p),
+    condition: (p) => p.stage !== "jugend" && p.clubChangesCount > 0 && recentlyTransferred(p) && !p.recentTransferWasForeignHomecoming,
     build: (p) => ({
       category: "vertrag",
       title: "Ankommen beim neuen Verein",
@@ -4637,6 +4649,49 @@ export const EVENT_TEMPLATES: EventTemplate[] = [
             roleProtectionSeasons: 1,
             traitDeltas: { fuehrung: 1 },
             logText: "hat sich über einen Mentor im Kader Rückhalt beim neuen Verein aufgebaut.",
+            logKind: "positive",
+          },
+        },
+      ],
+    }),
+  },
+  // Positives Gegenstück zu "vertrag_neuankunft_schwierig" (siehe Bugreport oben):
+  // nach der Rückkehr vom Ausland ins Heimatland ist das Ankommen kein Kampf,
+  // sondern eine willkommene Selbstverständlichkeit - vertraute Sprache, Kultur
+  // und (meist) auch der neue-alte Verein sorgen für einen runden Start, den man
+  // nach der Zeit im Ausland bewusst genießt.
+  {
+    id: "vertrag_heimkehr_ausland_glueck",
+    category: "vertrag",
+    minAge: 18,
+    maxAge: 38,
+    weight: 1.5,
+    condition: (p) => p.stage !== "jugend" && recentlyTransferred(p) && p.recentTransferWasForeignHomecoming,
+    build: (p) => ({
+      category: "vertrag",
+      title: "Wieder daheim",
+      description: `Nach der Zeit im Ausland ist die Rückkehr zu ${club(p)} geschafft - vertraute Sprache, vertraute Wege, ein Zuhause, das ${p.name} sichtlich guttut. Wie gehst du mit dem Neustart in der Heimat um?`,
+      choices: [
+        {
+          id: "genuss",
+          label: "Die Rückkehr in Ruhe genießen und ankommen lassen",
+          detail: "Entspannter Neustart, spürbar bessere Stimmung von Anfang an.",
+          effects: {
+            clubRelation: 5,
+            morale: 8,
+            logText: "genießt sichtlich die Rückkehr in die Heimat nach der Zeit im Ausland.",
+            logKind: "positive",
+          },
+        },
+        {
+          id: "fokus",
+          label: "Die neue Sicherheit sofort in Leistung ummünzen",
+          detail: "Weniger Nostalgie, dafür schneller wieder auf Betriebstemperatur.",
+          effects: {
+            clubRelation: 3,
+            attributes: { mentalitaet: 1 },
+            traitDeltas: { arbeitsmoral: 1 },
+            logText: "nutzt die vertraute Heimat-Umgebung, um sofort wieder voll anzugreifen.",
             logKind: "positive",
           },
         },
@@ -6437,6 +6492,74 @@ export const EVENT_TEMPLATES: EventTemplate[] = [
         },
       ],
     }),
+  },
+
+  // ---------------------------------------------------------------------
+  // "HEIMKEHRER" (siehe HOMECOMING_TEMPLATE_ID/`detectClubHomecoming` in types.ts):
+  // eine echte Rückkehr zu einem Verein, an dem der Spieler in frühen Jahren
+  // (18-25) schon einmal mehr als 2 Saisons gespielt hat. Wie beim Außenseiter-
+  // Pokalsieg oben `storylineOnly: true` - App.tsx `handleChoice` erzwingt dieses
+  // Event direkt als nächstes Ereignis nach dem Wechsel-Feedback, wenn
+  // `applyClubOfferChoice` eine Heimkehr erkannt hat. Die eigentliche "Jahre
+  // später"-Zahl wird hier über dieselbe `detectClubHomecoming`-Funktion wie bei
+  // der Erkennung selbst neu berechnet (liest nur `seasonHistory`, das sich seit
+  // dem Wechsel noch nicht verändert hat) statt sie über einen Seitenkanal zu
+  // transportieren.
+  // ---------------------------------------------------------------------
+  {
+    id: HOMECOMING_TEMPLATE_ID,
+    category: "meilenstein",
+    minAge: 25,
+    maxAge: 40,
+    weight: 0,
+    storylineOnly: true,
+    build: (p) => {
+      const years = detectClubHomecoming(p, p.club.clubId) ?? 0;
+      const yearsLabel = years === 1 ? "ein Jahr später" : `${years} Jahre später`;
+      return {
+        category: "meilenstein",
+        title: `Heimkehr, ${yearsLabel}`,
+        description: `${club(p)} - vertraute Straßen, ein vertrautes Stadion, Gesichter, die sich noch an die frühen Jahre erinnern. Nach der Zeit anderswo ist ${p.name} wieder da, wo die Karriere einmal begann. Wie gehst du mit der Rückkehr um?`,
+        choices: [
+          {
+            id: "genuss",
+            label: "Die Vertrautheit genießen und offen auf alte Bekannte zugehen",
+            detail: "Warmer Empfang, spürbarer Rückhalt von Anfang an.",
+            effects: {
+              clubRelation: 6,
+              morale: 8,
+              traitDeltas: { medienimage: 1 },
+              logText: "genießt sichtlich die Rückkehr an eine vertraute Wirkungsstätte.",
+              logKind: "positive",
+            },
+          },
+          {
+            id: "fokus",
+            label: "Trotz aller Nostalgie sofort voll auf die Leistung konzentrieren",
+            detail: "Weniger Sentimentalität, dafür schneller wieder im Rhythmus.",
+            effects: {
+              clubRelation: 3,
+              attributes: { mentalitaet: 1 },
+              traitDeltas: { arbeitsmoral: 2 },
+              logText: "nutzt die Rückkehr, um sich sofort voll auf die sportliche Leistung zu konzentrieren.",
+              logKind: "positive",
+            },
+          },
+          {
+            id: "botschafter",
+            label: "Als erfahrenes Gesicht bewusst eine Vorbildrolle für den Nachwuchs übernehmen",
+            detail: "Weniger im Rampenlicht, dafür Einfluss auf die junge Generation im Kader.",
+            effects: {
+              reputation: 5,
+              clubRelation: 4,
+              traitDeltas: { fuehrung: 2 },
+              logText: "übernimmt nach der Rückkehr direkt eine Vorbildrolle für die jüngeren Spieler im Kader.",
+              logKind: "positive",
+            },
+          },
+        ],
+      };
+    },
   },
 
   // ---------------------------------------------------------------------

@@ -28,7 +28,7 @@ import type {
   TransferDecisionEntry,
   TransferDecisionType,
 } from "./types";
-import { isNearRetirement, overallRatingFromAttributes } from "./types";
+import { detectClubHomecoming, HOMECOMING_MIN_AGE, isNearRetirement, overallRatingFromAttributes } from "./types";
 import { clamp } from "./data";
 import { ATTRIBUTE_LABEL, ATTRIBUTE_ORDER, formatMoney, RELATIONSHIP_LABEL, SQUAD_ROLE_RANK, TRAIT_LABEL, TRAIT_ORDER } from "./labels";
 import { eligibleTemplates, getTemplateById, EVENT_TEMPLATES } from "./events";
@@ -301,6 +301,7 @@ export function createPlayer(
       nationalTeamCaptain: false,
       clubChangesCount: 0,
       playedAbroad: false,
+      recentTransferWasForeignHomecoming: false,
       loanActive: false,
       loanReturnClub: null,
       loanReturnCountryId: null,
@@ -1421,6 +1422,7 @@ export function simulateSeason(
     seasonLabel: seasonLabelForNumber(seasonNumber),
     age: player.age,
     club: player.club.name,
+    clubId: player.club.clubId,
     overallRating: overall,
     attributesAtSeasonStart: { ...player.attributesAtSeasonStart },
     traitsAtSeasonStart: { ...player.traitsAtSeasonStart },
@@ -2589,6 +2591,17 @@ function internationalOfferChance(reason: ClubOfferReason, player: Player, overa
   return isLateCareerAtHome ? base * 0.5 : base;
 }
 
+/** Wahrscheinlichkeit, dass eine gewürfelte Vereinsangebots-Karte durch einen
+ * bekannten früheren Verein ersetzt wird (siehe `pastClubCandidate`) - "sie
+ * kennen einen ja": steigt mit dem Alter statt eines harten Stufensprungs ab
+ * dem Veteranen-Alter, bleibt dabei aber "im Rahmen" gedeckelt. Vor Alter 25
+ * (siehe `HOMECOMING_MIN_AGE`) noch 0, weil ein Karrierestarter realistisch
+ * noch keinen Verein hat, der ihn "vermisst". */
+function pastClubOfferChance(age: number): number {
+  if (age < HOMECOMING_MIN_AGE) return 0;
+  return clamp(0.12 + ((age - HOMECOMING_MIN_AGE) / 11) * 0.38, 0.12, 0.5);
+}
+
 interface OfferCandidate {
   club: ClubState;
   countryId: CountryId;
@@ -2603,18 +2616,20 @@ interface OfferCandidate {
 
 /**
  * Sucht unter den früheren Vereinen mit einer echten, mehrjährigen Vergangenheit
- * (siehe `buildClubTenures`, mind. 2 Saisons) einen konkreten Kandidaten für eine
- * "Rückkehr zu einem alten Verein"-Angebotsoption im Karriereherbst - nur dort, wo der
- * Verein noch in einer bekannten Liga (aktuelle oder gecachte Auslandsliga)
- * auffindbar ist. Vereinsnamen sind innerhalb eines Landes eindeutig (siehe
- * `disambiguateCities` in leagues.ts), ein reiner Namensabgleich genügt daher.
+ * (siehe `buildClubTenures`, mehr als 2 Saisons - "sie kennen einen ja", dieselbe
+ * Schwelle wie `HOMECOMING_MIN_EARLY_CAREER_SEASONS` für die Heimkehrer-Erkennung)
+ * einen konkreten Kandidaten für eine "Rückkehr zu einem alten Verein"-Angebotsoption
+ * im Karriereherbst - nur dort, wo der Verein noch in einer bekannten Liga (aktuelle
+ * oder gecachte Auslandsliga) auffindbar ist. Vereinsnamen sind innerhalb eines
+ * Landes eindeutig (siehe `disambiguateCities` in leagues.ts), ein reiner
+ * Namensabgleich genügt daher.
  */
 function pastClubCandidate(
   player: Player,
   activeLeague: LeagueState,
   foreignLeagues: Partial<Record<CountryId, LeagueState>>
 ): OfferCandidate | null {
-  const tenures = buildClubTenures(player).filter((t) => t.seasons >= 2 && t.club !== player.club.name);
+  const tenures = buildClubTenures(player).filter((t) => t.seasons > 2 && t.club !== player.club.name);
   if (tenures.length === 0) return null;
   const pick = tenures[Math.floor(rng() * tenures.length)];
   const knownLeagues: [CountryId, LeagueState][] = [
@@ -2797,11 +2812,12 @@ function buildClubOfferEvent(
     }
   }
 
-  // Im Karriereherbst kommt ein Angebot oft von einem Verein, bei dem man schon
-  // einmal länger war ("Rückkehr zu alten Wirkungsstätten") statt nur von völlig
-  // neuen Vereinen - ersetzt dazu mit einer gewissen Wahrscheinlichkeit einen der
-  // sonst zufällig gewählten Kandidaten (siehe `pastClubCandidate`).
-  if ((player.stage === "veteran" || player.stage === "spaetphase") && reason !== "pro-debut" && reason !== "lockruf" && rng() < 0.45) {
+  // Ein Angebot kommt mit zunehmendem Alter immer öfter von einem Verein, bei dem
+  // man schon einmal länger war ("Rückkehr zu alten Wirkungsstätten - sie kennen
+  // einen ja") statt nur von völlig neuen Vereinen - ersetzt dazu mit steigender
+  // (aber gedeckelter) Wahrscheinlichkeit einen der sonst zufällig gewählten
+  // Kandidaten (siehe `pastClubCandidate`/`pastClubOfferChance`).
+  if (reason !== "pro-debut" && reason !== "lockruf" && rng() < pastClubOfferChance(player.age)) {
     const past = pastClubCandidate(player, league, foreignLeagues);
     if (past && candidates.length > 0 && !candidates.some((c) => c.club.id === past.club.id)) {
       candidates[Math.floor(rng() * candidates.length)] = past;
@@ -3219,6 +3235,10 @@ export interface ClubOfferResult {
    * der Warteschlange entfernen, sonst würde z.B. "Zoff mit dem Trainer" beim ALTEN
    * Verein nach dem Wechsel fälschlich beim NEUEN Verein weitererzählt. */
   endedStorylineTemplateIds?: string[];
+  /** True, wenn dieser Wechsel eine echte "Heimkehr" zu einem früheren Verein war
+   * (siehe `detectClubHomecoming`) - App.tsx erzwingt daraufhin das dedizierte
+   * `HOMECOMING_TEMPLATE_ID`-Info-Event als nächstes Ereignis (siehe `handleChoice`). */
+  homecomingClubReturn?: boolean;
 }
 
 /** Löst eine Entscheidung innerhalb eines `club_offer`-Events auf (kein generisches EffectDelta). */
@@ -3367,6 +3387,14 @@ export function applyClubOfferChoice(
     return { feedback: { choiceId, text, kind: "info", deltaLines: [] } };
   }
 
+  // "Heimkehrer": eine echte Rückkehr zu einem Verein, an dem der Spieler in
+  // frühen Jahren (18-25) schon einmal mehr als 2 Saisons gespielt hat (siehe
+  // `detectClubHomecoming` in types.ts) - unabhängig vom Wechselgrund. Bewusst
+  // VOR der Club-Zuweisung unten geprüft (liest nur `seasonHistory`/`age`,
+  // Reihenfolge ist also egal), damit der Rest der Funktion `chosen.id` schon
+  // kennt.
+  const clubHomecomingYears = detectClubHomecoming(player, chosen.id);
+
   const overall = overallRating(player);
   const oldName = player.club.name;
   const oldStrength = player.club.strength;
@@ -3400,6 +3428,31 @@ export function applyClubOfferChoice(
   // versprochenen Rollenniveau passen würde).
   player.startingRoleGuaranteeSeasons = 0;
   if (reason !== "pro-debut") player.clubChangesCount += 1;
+
+  // "Heimkehrer" (siehe `clubHomecomingYears` oben): der Verein kennt den Spieler
+  // noch aus frühen Jahren - ein spürbarer Vertrauensvorschuss ON TOP des normal
+  // ausgewürfelten Werts oben, unabhängig davon, wie das Einsatzminuten-Versprechen
+  // ausging. Die eigentliche narrative Ausgestaltung (weitere Moral-/Ruf-Effekte je
+  // nach Spielerreaktion) übernimmt das erzwungene `HOMECOMING_TEMPLATE_ID`-Event
+  // (siehe App.tsx `handleChoice`), das App.tsx über `homecomingClubReturn` unten
+  // anstößt - hier nur der "das kennt man sich"-Basiseffekt plus die kompakte
+  // Karriere-Historie fürs "Heimkehrer"-Award (siehe `detectCareerPhenotype`).
+  const isClubHomecoming = clubHomecomingYears !== null;
+  if (isClubHomecoming) {
+    player.clubRelation = clamp(player.clubRelation + 10, 0, 100);
+    player.narrativeHistory.push({
+      season: player.seasonHistory.length,
+      age: player.age,
+      type: "HOMECOMING",
+      label: `Heimkehr zu ${chosen.city}, ${clubHomecomingYears} Jahre später`,
+    });
+    player.log.push({
+      season: 0,
+      age: player.age,
+      text: `${player.name} kehrt ${clubHomecomingYears} Jahre später zu ${chosen.city} zurück - ein echtes Wiedersehen.`,
+      kind: "positive",
+    });
+  }
 
   // Auslandswechsel: die bisherige Heimatliga wandert (mit ihrem aktuellen Stand)
   // in den Cache, die Zielliga wird die neue aktive Liga - und bleibt es, bis der
@@ -3578,9 +3631,18 @@ export function applyClubOfferChoice(
   // Eine Rückkehr ins eigene Heimatland ist davon ausgenommen: vertraute Sprache,
   // Kultur und Umfeld machen "Heimkehr" zu etwas durchweg Positivem statt eines
   // Eingewöhnungs-Risikos wie bei jedem anderen Auslandswechsel.
+  //
+  // `recentTransferWasForeignHomecoming` (siehe types.ts) spiegelt IMMER nur den
+  // ZULETZT vollzogenen Wechsel wider - deshalb hier unconditional zurückgesetzt
+  // (auch bei einem rein inländischen Wechsel, wo der Block unten gar nicht läuft),
+  // bevor sie unten ggf. wieder auf `true` gesetzt wird. Steuert, ob als Nächstes
+  // die generische "Ankommen beim neuen Verein"-Einfindungsschwierigkeit oder das
+  // positive "Wieder daheim"-Gegenstück feuern kann (siehe events.ts).
+  player.recentTransferWasForeignHomecoming = false;
   if (movingCountryId) {
     const isHomecoming = movingCountryId === player.homeCountryId;
     if (isHomecoming) {
+      player.recentTransferWasForeignHomecoming = true;
       player.morale = clamp(player.morale + 10, 0, 100);
       player.clubRelation = clamp(player.clubRelation + 5, 0, 100);
       deltaLines.push("🏡 Heimkehr: vertraute Sprache, Kultur und Umfeld sorgen für einen runden Start");
@@ -3635,6 +3697,7 @@ export function applyClubOfferChoice(
     feedback: { choiceId, text, kind, deltaLines },
     newActiveLeague,
     endedStorylineTemplateIds: endedThreads.map((t) => t.nextTemplateId),
+    homecomingClubReturn: isClubHomecoming,
   };
 }
 
@@ -4046,6 +4109,10 @@ export function detectCareerPhenotype(player: Player): CareerPhenotypeResult {
   if (hasBoom && hasBust) matches.push("BOOM_OR_BUST_MOVER");
 
   if (narrative.ceilingBreaks.length > 0) matches.push("CEILING_BREAKER");
+
+  // HOMECOMER: mindestens eine echte Rückkehr zu einem Verein aus frühen Jahren
+  // (siehe `detectClubHomecoming`, Eintrag wird in `applyClubOfferChoice` gepusht).
+  if (player.narrativeHistory.some((h) => h.type === "HOMECOMING")) matches.push("HOMECOMER");
 
   // STEADY_PROFESSIONAL: durchgehend nah am Liga-Durchschnitt, kein Ausreißer nach
   // oben oder unten - der ruhige Gegenpol zu Wonderkind/Late-Bloomer/Boom-or-Bust.

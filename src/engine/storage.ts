@@ -55,6 +55,10 @@ export function loadGame(): GameState | null {
       state.player.nationalTeamCandidacySeasons ??= 0;
       state.player.activeNarrativeThread ??= null;
       state.player.narrativeHistory ??= [];
+      // Ältere Spielstände kennen das "Heimkehrer"-Feature noch nicht (siehe
+      // `Player.recentTransferWasForeignHomecoming`) - `false` als neutrale
+      // Annäherung, kein rückwirkendes Nacherfinden des letzten Wechsels.
+      state.player.recentTransferWasForeignHomecoming ??= false;
       // Ältere Spielstände kennen das Heimatland noch nicht - als bestmögliche
       // Annäherung das aktuelle Land nehmen (nur relevant für künftige Rückkehr-Erkennung).
       state.player.homeCountryId ??= state.player.country;
@@ -69,6 +73,11 @@ export function loadGame(): GameState | null {
           possibleMinutes: s.possibleMinutes ?? 0,
           capsThisSeason: s.capsThisSeason ?? 0,
           performanceScore: s.performanceScore ?? s.avgRating * 10,
+          // Ältere Saison-Historien kennen `clubId` noch nicht (siehe
+          // `detectClubHomecoming` in types.ts) - leerer String statt eines
+          // erfundenen Werts, matcht dadurch nie versehentlich einen echten
+          // Verein (kein rückwirkendes "Heimkehrer"-Erkennen für alte Saisons).
+          clubId: s.clubId ?? "",
         }));
       }
     }
