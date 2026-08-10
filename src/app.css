@@ -118,23 +118,14 @@ body::before {
   animation: fade-in 0.32s var(--ease);
 }
 
-/* Dezente Spielfeldlinien-Textur auf jedem Screen (Design "Matchday Dossier",
-   siehe footy-karriere-mockup.html .pitch-lines) - als Pseudo-Element statt
-   eines eigenen DOM-Knotens in jeder einzelnen Screen-Komponente, damit sich
-   die Textur automatisch auf alle Screens anwendet, ohne 8+ Dateien einzeln
-   anzufassen. Negativer z-index (mit `.screen{position:relative}` als
-   Stapelkontext) hält sie hinter dem eigentlichen Inhalt, statt ihn als
-   absolut positioniertes Element zu überdecken. */
-.screen::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  z-index: -1;
-  opacity: 0.07;
-  pointer-events: none;
-  background-image: repeating-linear-gradient(0deg, transparent 0 38px, var(--chalk) 38px 39px, transparent 39px 78px),
-    radial-gradient(circle at 50% 15%, transparent 0 60px, var(--chalk) 60px 61px, transparent 61px);
-}
+/* Früher gab es hier zusätzlich ein `.screen::before` mit derselben Textur als
+   `position: absolute` (an den jeweiligen, ggf. hohen `.screen`-Container
+   gebunden statt an den Viewport) - dadurch driftete der angedeutete
+   Anstoßkreis beim Scrollen sichtbar gegen den wirklich fixierten Kreis aus
+   `body::before` ("floatet mit"-Bugreport). `body::before` deckt die exakt
+   gleiche Textur bereits fürs gesamte, feststehende Hintergrund ab (siehe
+   oben) - das doppelte, scrollende Pseudo-Element war reine Redundanz und
+   wurde ersatzlos entfernt statt es ebenfalls auf `fixed` umzustellen. */
 
 @keyframes fade-in {
   from {
