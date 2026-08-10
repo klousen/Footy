@@ -147,16 +147,13 @@ export default function App() {
     enterSlot(slot.id, slot.state);
   }
 
+  // Führt IMMER über die Slot-Auswahl - auch im Free-Tier (1 Slot). Nur dort
+  // laufen die gesperrten Slot-Karten + der Upgrade-Banner (siehe
+  // SlotSelectScreen) tatsächlich Nutzern ohne Karriere-Pass vor die Augen;
+  // ein direkter Sprung an der Auswahl vorbei (z.B. sofort in den
+  // Überschreiben-Dialog) hätte genau die Zielgruppe übersprungen, die den
+  // Pass beworben bekommen soll.
   function handleGoToNewCareer() {
-    if (slotLimit() <= 1) {
-      const existing = loadSlot("slot-1");
-      if (existing?.player) {
-        setOverwriteTarget({ slotId: "slot-1", playerName: existing.player.name });
-      } else {
-        startNewCareerInSlot("slot-1");
-      }
-      return;
-    }
     setActiveSlotId(null);
     setGame({ ...emptyState(), screen: "slot-select" });
   }
@@ -188,9 +185,21 @@ export default function App() {
 
   // ---------------- Slot-Auswahl ----------------
 
+  // Tap auf einen belegten Slot: Bedeutung hängt vom Pass-Status ab. Pass-User
+  // haben mehrere unabhängige Karrieren - ein Tap wechselt schlicht dorthin
+  // ("unabhängig ladbar", siehe Handoff Abschnitt 3). Free-User erreichen
+  // diesen Screen dagegen AUSSCHLIESSLICH über "Neue Karriere starten" - ihr
+  // einziger belegter Slot ist also nicht zum bloßen Fortsetzen gedacht
+  // (dafür gibt es den eigenen Button im Titelmenü), sondern ein Tap hier
+  // bedeutet "diese Karriere ersetzen" - wie zuvor über den direkten
+  // Überschreiben-Dialog, jetzt eben von hier aus ausgelöst.
   function handleSelectSlot(slotId: string) {
     const state = loadSlot(slotId);
     if (!state) return;
+    if (!careerPass) {
+      if (state.player) setOverwriteTarget({ slotId, playerName: state.player.name });
+      return;
+    }
     enterSlot(slotId, state);
   }
 
