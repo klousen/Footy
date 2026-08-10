@@ -2227,6 +2227,19 @@ input:focus {
 
 /* ---------------- Bestenlisten-Panel (Vorschau im Titelmenü + volle Ansicht) ---------------- */
 
+/* Beschriftung über der zweiten, immer entsperrten Vorschau-Kopie im
+   Titelmenü (siehe TitleScreen.tsx) - macht deutlich, dass es sich um eine
+   reine Anzeige-Duplikation handelt, nicht um eine zweite echte Funktion. */
+.tm-ranking-preview-label {
+  margin-top: 10px;
+  text-align: center;
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  letter-spacing: 0.06em;
+  color: var(--chalk-dim);
+  opacity: 0.6;
+}
+
 .tm-ranking-panel {
   margin-top: 24px;
   background: var(--bg-panel);

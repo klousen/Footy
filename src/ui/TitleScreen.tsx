@@ -2,9 +2,74 @@ import { useRef } from "react";
 import type { Player, RankingEntry } from "../engine/types";
 import { overallRating } from "../engine/careerEngine";
 import { overallTier } from "../engine/labels";
-import { useLanguage } from "./LanguageContext";
+import { useLanguage, type TFn } from "./LanguageContext";
 
 const LONGPRESS_MS = 800;
+
+/** Bestenlisten-Vorschau-Panel, ausgelagert damit sie sich unverändert sowohl
+ * gesperrt (echter Pass-Status) als auch entsperrt (siehe zweite, aktive Kopie
+ * im Titelmenü) rendern lässt, ohne die JSX doppelt zu pflegen. */
+function RankingPreviewPanel({
+  locked,
+  rankingPreview,
+  onViewLeaderboard,
+  t,
+}: {
+  locked: boolean;
+  rankingPreview: RankingEntry[];
+  onViewLeaderboard: () => void;
+  t: TFn;
+}) {
+  return (
+    <div className="tm-ranking-panel">
+      <div className="tm-ranking-header" onClick={onViewLeaderboard}>
+        <div className="tm-ranking-title">
+          {t("rankingTitle")} · <span>{t("rankingTitleAccent")}</span>
+        </div>
+        <div className="tm-ranking-link">{t("rankingLink")}</div>
+      </div>
+
+      {rankingPreview.slice(0, 3).map((entry, i) => (
+        <div key={i} className={`tm-rank-row ${i === 0 ? "tm-rank-first" : ""} ${locked ? "tm-panel-blurred" : ""}`}>
+          <div className="tm-rank-pos">{i + 1}</div>
+          <div className="tm-rank-main">
+            <div className="tm-rank-name">{entry.playerName}</div>
+            <div className="tm-rank-meta">
+              {entry.nationFlag} {entry.nation} · {entry.longestClub.years} {t("yearsAbbr")} {entry.longestClub.name}
+            </div>
+          </div>
+          <div className="tm-rank-scores">
+            <div className="tm-score-block">
+              <span className="tm-score-value ovr">{entry.finalOVR}</span>
+              <span className="tm-score-label">OVR</span>
+            </div>
+            <div className="tm-score-block">
+              <span className="tm-score-value legacy">{entry.legacyScore}</span>
+              <span className="tm-score-label">{t("legacyLabel")}</span>
+            </div>
+          </div>
+        </div>
+      ))}
+
+      {locked && rankingPreview.length > 0 && (
+        <div className="tm-lock-overlay">
+          <svg className="tm-lock-icon" viewBox="0 0 24 24" fill="none">
+            <path
+              d="M6 10V8a6 6 0 1112 0v2M5 10h14a1 1 0 011 1v9a1 1 0 01-1 1H5a1 1 0 01-1-1v-9a1 1 0 011-1z"
+              stroke="currentColor"
+              strokeWidth="1.8"
+            />
+          </svg>
+          <div className="tm-lock-title">{t("lockTitle")}</div>
+          <div className="tm-lock-sub">{t("lockSub")}</div>
+          <button className="tm-lock-cta" onClick={onViewLeaderboard}>
+            {t("lockCta")}
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
 
 /**
  * Titelmenü (siehe Handoff "Titelmenü, Spielstand-Slots & Bestenliste-Gating"
@@ -100,53 +165,15 @@ export function TitleScreen({
         </button>
       </div>
 
-      <div className="tm-ranking-panel">
-        <div className="tm-ranking-header" onClick={onViewLeaderboard}>
-          <div className="tm-ranking-title">
-            {t("rankingTitle")} · <span>{t("rankingTitleAccent")}</span>
-          </div>
-          <div className="tm-ranking-link">{t("rankingLink")}</div>
-        </div>
+      <RankingPreviewPanel locked={!hasCareerPass} rankingPreview={rankingPreview} onViewLeaderboard={onViewLeaderboard} t={t} />
 
-        {rankingPreview.slice(0, 3).map((entry, i) => (
-          <div key={i} className={`tm-rank-row ${i === 0 ? "tm-rank-first" : ""} ${!hasCareerPass ? "tm-panel-blurred" : ""}`}>
-            <div className="tm-rank-pos">{i + 1}</div>
-            <div className="tm-rank-main">
-              <div className="tm-rank-name">{entry.playerName}</div>
-              <div className="tm-rank-meta">
-                {entry.nationFlag} {entry.nation} · {entry.longestClub.years} {t("yearsAbbr")} {entry.longestClub.name}
-              </div>
-            </div>
-            <div className="tm-rank-scores">
-              <div className="tm-score-block">
-                <span className="tm-score-value ovr">{entry.finalOVR}</span>
-                <span className="tm-score-label">OVR</span>
-              </div>
-              <div className="tm-score-block">
-                <span className="tm-score-value legacy">{entry.legacyScore}</span>
-                <span className="tm-score-label">{t("legacyLabel")}</span>
-              </div>
-            </div>
-          </div>
-        ))}
-
-        {!hasCareerPass && rankingPreview.length > 0 && (
-          <div className="tm-lock-overlay">
-            <svg className="tm-lock-icon" viewBox="0 0 24 24" fill="none">
-              <path
-                d="M6 10V8a6 6 0 1112 0v2M5 10h14a1 1 0 011 1v9a1 1 0 01-1 1H5a1 1 0 01-1-1v-9a1 1 0 011-1z"
-                stroke="currentColor"
-                strokeWidth="1.8"
-              />
-            </svg>
-            <div className="tm-lock-title">{t("lockTitle")}</div>
-            <div className="tm-lock-sub">{t("lockSub")}</div>
-            <button className="tm-lock-cta" onClick={onViewLeaderboard}>
-              {t("lockCta")}
-            </button>
-          </div>
-        )}
-      </div>
+      {/* Zweite, IMMER entsperrte Kopie direkt unter der (ggf. gesperrten)
+          echten Vorschau - reine Anzeige-Duplikation zum Begutachten der
+          freigeschalteten Optik, unabhängig vom tatsächlichen Pass-Status.
+          Kein eigener Gating-Zustand, keine Persistenz - respektiert nicht
+          hasCareerPass. */}
+      <div className="tm-ranking-preview-label">— Vorschau: entsperrt —</div>
+      <RankingPreviewPanel locked={false} rankingPreview={rankingPreview} onViewLeaderboard={onViewLeaderboard} t={t} />
 
       <div className="tm-footer">
         <button

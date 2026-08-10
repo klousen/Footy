@@ -2,10 +2,15 @@ import { createContext, useContext, useState, type ReactNode } from "react";
 import { loadLanguage, saveLanguage, type Language } from "../engine/storage";
 import { t as translate, type TitleI18nKey } from "../engine/labels";
 
+/** Signatur der `t`-Übersetzungsfunktion - eigener Typ-Export, damit Komponenten
+ * (z.B. ausgelagerte Sub-Komponenten wie `RankingPreviewPanel` in TitleScreen.tsx)
+ * sie als Prop-Typ referenzieren können, ohne den ganzen Kontext zu importieren. */
+export type TFn = (key: TitleI18nKey) => string;
+
 interface LanguageContextValue {
   language: Language;
   setLanguage: (lang: Language) => void;
-  t: (key: TitleI18nKey) => string;
+  t: TFn;
 }
 
 const LanguageContext = createContext<LanguageContextValue | null>(null);
