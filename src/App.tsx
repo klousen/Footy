@@ -95,9 +95,16 @@ export default function App() {
   // Bei jedem Screen-Wechsel (z.B. Saison-Rückblick, neues Event) ganz oben
   // starten - sonst bleibt teils die Scroll-Position der vorherigen, längeren
   // Ansicht erhalten und die wichtigsten Infos (Score, Titel) sind erst nach
-  // manuellem Scrollen sichtbar.
+  // manuellem Scrollen sichtbar. Explizit `behavior: "instant"` statt der
+  // knappen `scrollTo(0, 0)`-Form: `html` hat global `scroll-behavior: smooth`
+  // (siehe app.css) - ohne die Override sah der Wechsel dadurch wie ein
+  // animiertes Hochscrollen DURCH die bereits ausgetauschte neue Seite aus,
+  // statt wie ein klarer Screen-Wechsel (Bugreport "wirkt als würde die App
+  // einfach hochscrollen"). Der eigentliche Wechsel-Effekt kommt jetzt allein
+  // von der `.screen`-Fade-in-Animation (siehe app.css), die bei jedem echten
+  // Komponentenwechsel neu abspielt.
   useEffect(() => {
-    window.scrollTo(0, 0);
+    window.scrollTo({ top: 0, left: 0, behavior: "instant" });
   }, [game.screen, game.currentEvent?.id, game.lastSeasonStats]);
 
   // Lädt einen Slot vollständig (inkl. offenem Event/Feedback/Saisonbilanz, siehe
