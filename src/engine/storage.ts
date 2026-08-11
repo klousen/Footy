@@ -124,6 +124,12 @@ function normalizeGameState(state: GameState): GameState {
     // Ältere Spielstände kennen das Investment-System noch nicht.
     state.player.activeInvestment ??= null;
     state.player.investmentCooldowns ??= {};
+    // Ältere Spielstände kennen das Titelgewinn-Popup-Feature noch nicht (siehe
+    // `Player.lastTitleSeasonByType`) - leer/neutral, kein rückwirkendes Nacherfinden
+    // vergangener Titel-Drought-Zeiträume (das Popup fällt für den nächsten Titel dann
+    // auf die neutrale "erster Titel mit diesem Verein"-Formulierung zurück).
+    state.player.lastTitleSeasonByType ??= { meisterschaft: null, pokal: null, championscup: null, europacup: null };
+    state.player.lastTitleClubIdByType ??= { meisterschaft: null, pokal: null, championscup: null, europacup: null };
     // Ältere Spielstände kennen das Heimatland noch nicht - als bestmögliche
     // Annäherung das aktuelle Land nehmen (nur relevant für künftige Rückkehr-Erkennung).
     state.player.homeCountryId ??= state.player.country;
@@ -147,11 +153,15 @@ function normalizeGameState(state: GameState): GameState {
         // als grobe, aber plausible Näherung (beide liegen auf einer ähnlichen 0-99-
         // Skala), nur relevant für die "damals/heute"-Vereinsstärke im Heimkehr-Text.
         clubStrength: s.clubStrength ?? s.overallRating,
+        titleWins: s.titleWins ?? [],
       }));
     }
   }
   state.foreignLeagues ??= {};
   state.europeanLeagueDrift ??= {};
+  state.currentTitlePopup ??= null;
+  state.pendingTitlePopups ??= [];
+  state.shownTitlePopupsThisSeason ??= [];
   return state;
 }
 

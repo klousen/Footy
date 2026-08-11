@@ -25,6 +25,10 @@ import type {
   ScoreFactor,
   SeasonStats,
   SquadRole,
+  TitleContributionSquadRole,
+  TitleType,
+  TitleWin,
+  TitleWinContribution,
   TraitKey,
   TransferDecisionEntry,
   TransferDecisionType,
@@ -331,6 +335,8 @@ export function createPlayer(
       focusAttribute: focusAttr,
       activeInvestment: null,
       investmentCooldowns: {},
+      lastTitleSeasonByType: { meisterschaft: null, pokal: null, championscup: null, europacup: null },
+      lastTitleClubIdByType: { meisterschaft: null, pokal: null, championscup: null, europacup: null },
   };
 
   // Der Spieler wird erst mit 16 steuerbar (siehe `birthAge`/`age` oben, Basis-
@@ -1662,6 +1668,10 @@ export function simulateSeason(
     newAchievements: [],
     scoreFactors,
     tableSnapshot,
+    // Analog zu `newAchievements` (siehe App.tsx `finishSeasonEvents`) erst NACH
+    // `ageUpPlayer` über `buildTitleWinsForSeason` befüllt - hier nur der leere
+    // Startwert, siehe Kommentar an `SeasonStats.titleWins`.
+    titleWins: [],
     europeanCup,
     nationalCup,
     // Noch VOR dieser Zeile gesetzt (siehe Player.loanNarrative) - wird erst nach der
@@ -1675,6 +1685,149 @@ export function simulateSeason(
   advanceNarrativeThread(player, stats);
 
   return stats;
+}
+
+// ---------------------------------------------------------------------------
+// Titelgewinn-Popup (siehe Handoff "Titelgewinn-Popup") - vorgeschalteter
+// Zwischenschritt vor der Saisonbilanz bei Meisterschaft/Pokal/Champions Cup/
+// Europa Cup. `buildTitleWinsForSeason` wird bewusst NICHT innerhalb von
+// `simulateSeason` selbst aufgerufen, sondern erst danach in `App.tsx`
+// `finishSeasonEvents` - NACH `ageUpPlayer`, damit `overallAfter` den
+// altersbedingten Wachstumsschub dieser Saison bereits einschließt (siehe
+// `overallBefore`/`overallAfter` unten), aber VOR `resolveClubSituation`, damit
+// `player.contract.squadRole` noch die Rolle WÄHREND dieser Saison widerspiegelt
+// statt der schon für die nächste Saison neu berechneten.
+// ---------------------------------------------------------------------------
+
+/** Reihenfolge, in der mehrere Titel derselben Saison als Popups gezeigt werden
+ * (siehe Handoff Abschnitt 1: "priorisiert nach Tier (Gold vor Silber)") - Liga-
+ * Meisterschaft und Champions Cup (Gold) vor Landespokal und Europa Cup (Silber).
+ * Da sich Champions Cup und Europa Cup pro Saison ausschließen (siehe
+ * `computeSeasonEuropeanCupResult`), sind praktisch nie mehr als drei Einträge
+ * gleichzeitig relevant (Meisterschaft + Pokal + genau einer der beiden Europapokale). */
+const TITLE_TYPE_PRIORITY: TitleType[] = ["meisterschaft", "championscup", "pokal", "europacup"];
+
+/** Sortiert Titelgewinne dieser Saison nach `TITLE_TYPE_PRIORITY` - exportiert, damit
+ * `App.tsx` die von `buildTitleWinsForSeason` gelieferte (unsortierte) Liste konsistent
+ * in Anzeige-Reihenfolge bringen kann. */
+export function sortTitleWins(wins: TitleWin[]): TitleWin[] {
+  return [...wins].sort((a, b) => TITLE_TYPE_PRIORITY.indexOf(a.type) - TITLE_TYPE_PRIORITY.indexOf(b.type));
+}
+
+function titleTypeForTrophy(trophy: string): TitleType | null {
+  if (trophy === "Meisterschale" || trophy === "Zweitliga-Meisterschaft") return "meisterschaft";
+  if (trophy === "Landespokal") return "pokal";
+  if (trophy === "Champions Cup") return "championscup";
+  if (trophy === "Europa Cup") return "europacup";
+  return null;
+}
+
+/** Torhüter kennen im Popup nur "Nummer 1"/"Nummer 2" (siehe `goalkeeperRoleLabel`
+ * oben, dieselbe Zweiteilung), Feldspieler nur "Stammspieler"/"Rotationsspieler" -
+ * die feineren `SquadRole`-Abstufungen (Ergänzungsspieler/Ausbildungsspieler/
+ * Ersatzbank) fallen für die Popup-Anzeige auf die nächstliegende der beiden groben
+ * Stufen zurück (ein Titel wird ohnehin fast nie von jemandem tief auf der Bank
+ * "mitgewonnen", der Fall ist also selten und die Vergröberung unkritisch). */
+function mapContributionSquadRole(role: SquadRole, position: Position): TitleContributionSquadRole {
+  if (position === "TW") return role === "Stammspieler" ? "nummer1" : "nummer2";
+  return role === "Stammspieler" ? "stammspieler" : "rotationsspieler";
+}
+
+/** Anzahl Runden bis zum Titel bei Landespokal (`NATIONAL_CUP_STAGES` in
+ * nationalCup.ts) UND Champions/Europa Cup (`KNOCKOUT_STAGES` in europeanCup.ts) -
+ * beide Arrays haben aktuell 5 Einträge. Lokal dupliziert statt importiert (beide
+ * Arrays sind dort bewusst nicht exportiert) - bei einer künftigen Änderung der
+ * Rundenzahl in einer der beiden Dateien muss dieser Wert mitgezogen werden. */
+const KO_TITLE_ROUNDS = 5;
+
+/**
+ * Der eigene Anteil an EINEM Titelgewinn, aufbereitet fürs Popup (siehe
+ * `TitleWinContribution`). Bei der Meisterschaft (ganze Liga-Saison) reichen dafür
+ * die bereits erfassten Saison-Gesamtwerte 1:1. Pokal/Champions Cup/Europa Cup
+ * simuliert die Engine dagegen rundenbasiert OHNE Einzelspiel-Ebene (siehe
+ * nationalCup.ts/europeanCup.ts) - es gibt also keine echte separate Wettbewerbs-
+ * Statistik. "Einsätze" werden hier stattdessen aus der Rundenzahl bis zum Titel
+ * abgeleitet, gewichtet mit der eigenen Saison-Einsatzquote (ein Rotationsspieler
+ * war rechnerisch auch in der K.o.-Runde seltener dabei als ein gesetzter
+ * Stammspieler) - mit einer Untergrenze von 50%, da ein Titelgewinner selbst als
+ * Rotationsspieler in den entscheidenden K.o.-Spielen typischerweise häufiger zum
+ * Zug kommt als im Liga-Alltag. Tore/Vorlagen/Weiße Westen werden proportional aus
+ * den Saison-Gesamtwerten abgeleitet - eine ehrliche Näherung, keine erfundene
+ * Präzision.
+ */
+function titleContributionWindow(
+  type: TitleType,
+  stats: SeasonStats,
+  isGoalkeeper: boolean
+): Omit<TitleWinContribution, "squadRole"> {
+  if (type === "meisterschaft") {
+    const appearances = stats.matches;
+    const maxPossibleAppearances = Math.max(appearances, Math.round(stats.possibleMinutes / 90));
+    return isGoalkeeper
+      ? { appearances, maxPossibleAppearances, cleanSheets: stats.cleanSheets, saveRate: stats.savePercentage, avgRating: stats.avgRating }
+      : { appearances, maxPossibleAppearances, goals: stats.goals, assists: stats.assists, avgRating: stats.avgRating };
+  }
+
+  const minutesShare = stats.possibleMinutes > 0 ? clamp(stats.minutesPlayed / stats.possibleMinutes, 0, 1) : 0.5;
+  const maxPossibleAppearances = KO_TITLE_ROUNDS;
+  const appearances = clamp(Math.round(KO_TITLE_ROUNDS * Math.max(minutesShare, 0.5)), 1, KO_TITLE_ROUNDS);
+  const fraction = stats.matches > 0 ? appearances / stats.matches : 0;
+  return isGoalkeeper
+    ? {
+        appearances,
+        maxPossibleAppearances,
+        cleanSheets: Math.round(stats.cleanSheets * fraction),
+        saveRate: stats.savePercentage,
+        avgRating: stats.avgRating,
+      }
+    : {
+        appearances,
+        maxPossibleAppearances,
+        goals: Math.round(stats.goals * fraction),
+        assists: Math.round(stats.assists * fraction),
+        avgRating: stats.avgRating,
+      };
+}
+
+/**
+ * Baut die Titelgewinn-Popup-Einträge für DIESE Saison (siehe `stats.trophies`) und
+ * pflegt dabei `player.lastTitleSeasonByType`/`lastTitleClubIdByType` fort (Grundlage
+ * für `yearsSinceLastTitle` beim NÄCHSTEN Titel desselben Typs). Aufrufer: `App.tsx`
+ * `finishSeasonEvents`, siehe Modul-Kommentar oben für den genauen Aufrufzeitpunkt.
+ * Individuelle Auszeichnungen (Torschützenkönig etc.) sind bewusst KEINE `TitleWin`s -
+ * das Popup ist ausschließlich für echte Mannschaftstitel gedacht.
+ */
+export function buildTitleWinsForSeason(player: Player, stats: SeasonStats, seasonNumber: number): TitleWin[] {
+  const isGoalkeeper = player.position === "TW";
+  const overallBefore = overallRatingFromAttributes(stats.attributesAtSeasonStart, player.position);
+  const overallAfter = overallRating(player);
+  const squadRole = mapContributionSquadRole(player.contract.squadRole, player.position);
+
+  const wins: TitleWin[] = [];
+  for (const trophy of stats.trophies) {
+    const type = titleTypeForTrophy(trophy);
+    // `stats.trophies` enthält NIE denselben Titel-Typ zweimal (Meisterschaft/Pokal/
+    // je Europapokal sind pro Saison maximal einmal gewinnbar), der Guard ist reine
+    // Robustheit gegen künftige Änderungen an `simulateSeason`.
+    if (!type || wins.some((w) => w.type === type)) continue;
+
+    const priorSeason = player.lastTitleSeasonByType[type];
+    const priorClubId = player.lastTitleClubIdByType[type];
+    const yearsSinceLastTitle = priorSeason !== null && priorClubId === player.club.clubId ? seasonNumber - priorSeason : null;
+
+    wins.push({
+      type,
+      season: seasonNumber,
+      yearsSinceLastTitle,
+      contribution: { ...titleContributionWindow(type, stats, isGoalkeeper), squadRole },
+      overallBefore,
+      overallAfter,
+    });
+
+    player.lastTitleSeasonByType[type] = seasonNumber;
+    player.lastTitleClubIdByType[type] = player.club.clubId;
+  }
+  return wins;
 }
 
 /**
