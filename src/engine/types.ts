@@ -698,7 +698,7 @@ export interface Player {
    * normalen Auslandswechsel zu erkennen. */
   homeCountryId: CountryId;
   position: Position;
-  birthAge: number; // Startalter 14
+  birthAge: number; // Startalter 16
   age: number;
   attributes: Attributes;
   /** Reiner Anzeige-Snapshot von `attributes`/`traits` zu Beginn der laufenden Saison

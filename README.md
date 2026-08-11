@@ -1,7 +1,7 @@
 # Footca - Football Career ⚽
 
 Eine textbasierte Fußball-Karriere-Simulation im Browser. Du übernimmst einen
-Spieler mit 14 Jahren in der Jugendakademie eines fiktiven Vereins und triffst
+Spieler mit 16 Jahren in der Jugendakademie eines fiktiven Vereins und triffst
 über die gesamte Karriere hinweg echte Entscheidungen - bis zum Karriereende
 im höheren Alter.
 
@@ -198,7 +198,7 @@ im höheren Alter.
   Event-Texte werden zudem erst unmittelbar vor der Anzeige mit dem dann
   aktuellen Spielerstand erzeugt - ein Vereinswechsel mitten in der Saison
   zeigt in späteren Events also korrekt den neuen Verein.
-- **Vollständige Karriere**: von der Jugend (14) über Durchbruch, Etablierung
+- **Vollständige Karriere**: von der Jugend (16) über Durchbruch, Etablierung
   und Veteranenjahre bis zum Karriereende.
 - **Echte Konsequenzen**: Entscheidungen wirken sich auf Attribute, Moral,
   Fitness, Vereinsbeziehung, Bekanntheit, Gehalt und Vermögen aus -

@@ -12,7 +12,7 @@ export function CreatePlayer({ onCreate }: { onCreate: (name: string, position: 
 
   return (
     <div className="screen create-screen">
-      <h2>Dein Spieler mit 14 Jahren</h2>
+      <h2>Dein Spieler mit 16 Jahren</h2>
       <p className="muted">Lege den Grundstein für deine Karriere. Diese Wahl beeinflusst deinen frühen Spielstil.</p>
 
       <label className="field">
