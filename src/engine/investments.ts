@@ -164,6 +164,19 @@ export function hasActiveInvestment(player: Player, id: PersonalInvestmentId): b
   return player.activeInvestment?.id === id;
 }
 
+/** Investments, die gerade im Cooldown stecken (Restdauer > 0) - für die
+ * ausgegraute Anzeige am Ende der Angebotsliste im Dashboard-Panel (siehe
+ * InvestmentPanel.tsx), damit sichtbar bleibt, WAS bald wieder verfügbar wird
+ * und WIE LANGE es noch dauert, statt einfach zu verschwinden wie in
+ * `availableInvestmentIds`. Bewusst unabhängig von `isUnlocked` - der
+ * Cooldown selbst ist der relevante Zustand, unabhängig davon, ob z.B. beim
+ * Reha-Experten aktuell noch eine passende Verletzung vorliegt. */
+export function cooldownInvestments(player: Player): { id: PersonalInvestmentId; seasonsRemaining: number }[] {
+  return investmentDefinitions
+    .filter((d) => (player.investmentCooldowns[d.id] ?? 0) > 0)
+    .map((d) => ({ id: d.id, seasonsRemaining: player.investmentCooldowns[d.id] ?? 0 }));
+}
+
 /** Dieselben vier Kombinationen wie bei der "Frühe Stärke"-Wahl der
  * Charaktererstellung (siehe `EARLY_FOCUS_OPTIONS` in ui/labels.ts) - hier als
  * reine Attribut-Liste für die Validierung in `activateInvestment` (KEINE

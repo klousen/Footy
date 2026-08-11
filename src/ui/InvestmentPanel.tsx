@@ -1,13 +1,15 @@
 import { useState } from "react";
-import { availableInvestmentIds, INVESTMENT_DEFINITIONS, investmentCost, SPECIAL_TRAINING_FOCUS_ATTRIBUTES } from "../engine/investments";
+import { availableInvestmentIds, cooldownInvestments, INVESTMENT_DEFINITIONS, investmentCost, SPECIAL_TRAINING_FOCUS_ATTRIBUTES } from "../engine/investments";
 import type { AttributeKey, Player, PersonalInvestmentId } from "../engine/types";
 import { ATTRIBUTE_LABEL, EARLY_FOCUS_OPTIONS, formatMoney } from "./labels";
 
 // Kompaktes Aktivierungs-Panel statt eines großen Economy-Screens (siehe
 // "investments.ts": Investments werden AKTIVIERT, nicht gekauft, max. 1
 // gleichzeitig) - beim Öffnen bewusst nur die aktuell tatsächlich möglichen
-// Optionen (siehe `availableInvestmentIds`), keine gesperrten/Cooldown-Einträge
-// zur Auswahl.
+// Optionen (siehe `availableInvestmentIds`) oben zur Auswahl. Investments im
+// Cooldown werden NICHT versteckt, sondern ausgegraut ans Ende der Liste
+// gehängt (siehe `cooldownInvestments`) - mit Angabe, wie viele Saisons der
+// Cooldown noch läuft, statt einfach spurlos zu verschwinden.
 export function InvestmentPanel({
   player,
   onActivate,
@@ -18,6 +20,7 @@ export function InvestmentPanel({
   onClose: () => void;
 }) {
   const available = availableInvestmentIds(player);
+  const cooldowns = cooldownInvestments(player);
   // Fokusattribut fürs Spezialtraining: dieselben vier Kombinationen wie bei der
   // "Frühe Stärke"-Wahl der Charaktererstellung (siehe `EARLY_FOCUS_OPTIONS` -
   // ein gemeinsamer Auswahl-Pool statt einer eigenen Liste hier, wie vom Nutzer
@@ -34,7 +37,7 @@ export function InvestmentPanel({
           <h3>Persönliches Umfeld</h3>
         </div>
 
-        {player.activeInvestment ? (
+        {player.activeInvestment && (
           <div className="investment-active-banner">
             <strong>{INVESTMENT_DEFINITIONS[player.activeInvestment.id].label}</strong>
             {player.activeInvestment.id === "spezialtraining" &&
@@ -42,9 +45,13 @@ export function InvestmentPanel({
             aktiv · noch {player.activeInvestment.seasonsRemaining} Saison{player.activeInvestment.seasonsRemaining === 1 ? "" : "en"}
             <p className="muted">Erst nach Ablauf (und Cooldown) lässt sich ein neues Investment aktivieren.</p>
           </div>
-        ) : available.length === 0 ? (
+        )}
+
+        {!player.activeInvestment && available.length === 0 && cooldowns.length === 0 && (
           <p className="muted">Aktuell ist kein Investment verfügbar - entweder noch nicht freigeschaltet oder im Cooldown.</p>
-        ) : (
+        )}
+
+        {!player.activeInvestment && available.length > 0 && (
           <div className="investment-list">
             {available.map((id) => {
               const def = INVESTMENT_DEFINITIONS[id];
@@ -90,6 +97,27 @@ export function InvestmentPanel({
                   >
                     {affordable ? "Aktivieren" : "Zu teuer"}
                   </button>
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        {/* Cooldown-Einträge: ausgegraut ans Ende der Liste, nicht versteckt -
+            zeigt an, was bald wieder verfügbar wird und wie lange es noch dauert. */}
+        {cooldowns.length > 0 && (
+          <div className="investment-list investment-list-cooldown">
+            {cooldowns.map(({ id, seasonsRemaining }) => {
+              const def = INVESTMENT_DEFINITIONS[id];
+              return (
+                <div key={id} className="investment-card investment-card-cooldown">
+                  <div className="investment-card-head">
+                    <span className="investment-label">{def.label}</span>
+                    <span className="investment-cooldown-badge">
+                      Cooldown · noch {seasonsRemaining} Saison{seasonsRemaining === 1 ? "" : "en"}
+                    </span>
+                  </div>
+                  <p className="muted investment-effect">{def.effectSummary}</p>
                 </div>
               );
             })}
