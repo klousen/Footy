@@ -1009,7 +1009,8 @@ export type CareerPhenotype =
   | "LATE_CAREER_RESURGENCE"
   | "BOOM_OR_BUST_MOVER"
   | "CEILING_BREAKER"
-  | "HOMECOMER";
+  | "HOMECOMER"
+  | "PRESTIGE_FIGHTER";
 
 export interface CareerPhenotypeResult {
   primary: CareerPhenotype;

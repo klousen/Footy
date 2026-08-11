@@ -104,6 +104,7 @@ export const CAREER_PHENOTYPE_LABEL: Record<CareerPhenotype, string> = {
   BOOM_OR_BUST_MOVER: "Alles-oder-nichts-Wechsler",
   CEILING_BREAKER: "Über sich hinausgewachsen",
   HOMECOMER: "Heimkehrer",
+  PRESTIGE_FIGHTER: "Der Kämpfer",
 };
 
 export const CAREER_PHENOTYPE_DESCRIPTION: Record<CareerPhenotype, string> = {
@@ -122,6 +123,7 @@ export const CAREER_PHENOTYPE_DESCRIPTION: Record<CareerPhenotype, string> = {
   BOOM_OR_BUST_MOVER: "Eine Karriere voller großer, riskanter Entscheidungen - mal ging es steil bergauf, mal spürbar bergab.",
   CEILING_BREAKER: "Hat die eigenen Erwartungen in einzelnen Bereichen sogar übertroffen.",
   HOMECOMER: "Ist im Laufe der Karriere zu einem prägenden früheren Verein zurückgekehrt.",
+  PRESTIGE_FIGHTER: "Hat sich früh für einen großen Verein und das Risiko entschieden - und sich nach einer harten Durststrecke zurückgekämpft.",
 };
 
 /** Anzeige-Labels für `TransferDecisionType` (siehe `classifyTransferDecision` in

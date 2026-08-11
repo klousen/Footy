@@ -4404,6 +4404,31 @@ export function detectCareerPhenotype(player: Player): CareerPhenotypeResult {
   const earlyPerf = early.length > 0 ? avg(early.map((s) => s.performanceScore)) : null;
   const latePerf = late.length > 0 ? avg(late.map((s) => s.performanceScore)) : null;
 
+  // PRESTIGE_FIGHTER ("Der Kämpfer"): ein früher (19-23) PRESTIGE_RISK_MOVE, der
+  // zunächst spürbar einbrach (Performance in der Saison des Wechsels oder der
+  // direkt folgenden klar unter Liga-Durchschnitt, dieselbe Schwelle wie
+  // LATE_BLOOMER unten), dem aber innerhalb der nächsten ein bis drei Saisons ein
+  // echter Turnaround folgte - kein bloßer später OVR-Peak (siehe Doc-Kommentar
+  // `CareerPhenotype`), sondern eine tatsächlich wieder starke Saison. Anders als
+  // LATE_CAREER_RESURGENCE (Karriereherbst, 30+) geht es hier um den frühen,
+  // riskanten "großer Verein statt sicherer Weg"-Moment und das Zurückkämpfen
+  // danach. Per Backtest deutlich seltener (~0,1-0,2% aller Karrieren) als jeder
+  // andere Check hier - bewusst als ALLERERSTE Prüfung platziert (siehe
+  // Funktionskommentar "grob nach Seltenheit/Aussagekraft gestaffelt"), damit
+  // diese seltene, erzählerisch pointierte Geschichte nicht von einem der
+  // deutlich häufigeren Checks (LATE_BLOOMER, WONDERKIND_*, ...) als `primary`
+  // verdrängt wird, obwohl sie oft gemeinsam mit genau diesen zutrifft.
+  const prestigeFightback = player.transferDecisions.some((d) => {
+    if (d.type !== "PRESTIGE_RISK_MOVE" || d.age < 19 || d.age > 23) return false;
+    const dipWindow = hist.slice(d.seasonHistoryIndex, d.seasonHistoryIndex + 2);
+    const recoveryWindow = hist.slice(d.seasonHistoryIndex + 1, d.seasonHistoryIndex + 5);
+    if (dipWindow.length === 0 || recoveryWindow.length === 0) return false;
+    const dipPerf = avg(dipWindow.map((s) => s.performanceScore));
+    const recoveryPeak = Math.max(...recoveryWindow.map((s) => s.performanceScore));
+    return dipPerf < 45 && recoveryPeak > 55;
+  });
+  if (prestigeFightback) matches.push("PRESTIGE_FIGHTER");
+
   // LATE_BLOOMER: ECHTER Leistungs-Turnaround (nicht nur später OVR-Peak, siehe
   // Doc-Kommentar `CareerPhenotype` - der "falsch-positive Typ D" aus der Diagnose
   // bleibt hier bewusst außen vor).
