@@ -1892,8 +1892,26 @@ export function ageUpPlayer(player: Player): void {
     // Wettkampfpraxis - unabhängig von der altersbedingten Wachstums-/Abbaurate,
     // damit ein dauerhafter Bankplatz auch bei jungen Spielern zu einem echten
     // Rückschritt werden kann, nicht nur zu langsamerem Fortschritt.
+    //
+    // Diagnostik "Transfer-Risiko/negative Spiralen" (2000-Karrieren-Backtest):
+    // dieser separate Abzug ADDIERT sich zum ohnehin schon auf 0.3x reduzierten
+    // Wachstum der Ersatzbank-Rolle (siehe `squadRoleGrowthMultiplier`) - eine
+    // echte Doppelbestrafung, kein überlappender Effekt. Machte mit 32.1% des
+    // gesamten gemessenen Wachstumsverlusts betroffener Karrieren den
+    // zweitgrößten Einzelposten aus (nach dem Rollen-Multiplikator selbst,
+    // 69.5%). Von vier getesteten Kalibrierungs-Optionen (Bank-Malus lockern,
+    // diesen Abzug halbieren, Role-Challenge-Erfolgschance für <=23-Jährige
+    // erhöhen, rolePromiseChance für <=23-Jährige erhöhen) war die Halbierung
+    // dieses Werts die EINZIGE mit einem robusten, über dem Stichproben-
+    // Rauschen liegenden positiven Effekt (900-Karrieren-A/B, "immer stärkster
+    // Verein"-Stresstest): Peak-OVR 66.52->67.90, Karriereende-OVR
+    // 53.47->55.43, Karrierelänge 21.6->22.5 Saisons, Anteil dauerhaft
+    // beschädigter großer Wechsel 70.0%->66.5% - OHNE die Stammspieler-/
+    // Bank-Verteilung selbst zu verschieben, das eigentliche Transfer-Risiko
+    // (Rollen-Formel, Einsatzminuten-Versprechen, Trainingsumfeldbonus, ...)
+    // bleibt bewusst unangetastet.
     if (isBenchWarmer) {
-      rawDelta -= current * 0.06 * (0.6 + rng() * 0.6);
+      rawDelta -= current * 0.03 * (0.6 + rng() * 0.6);
     }
     // Fraktionaler Rest wird in die nächste Saison mitgenommen, statt bei der
     // Rundung auf ganze Punkte verloren zu gehen (siehe Kommentar oben).
