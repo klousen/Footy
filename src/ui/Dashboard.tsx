@@ -1,7 +1,8 @@
 import { useState } from "react";
-import type { LeagueState, Player } from "../engine/types";
+import type { LeagueState, Player, PersonalInvestmentId } from "../engine/types";
 import { POSITION_LABEL, overallRatingFromAttributes } from "../engine/types";
 import { computeCareerNarrativeState, overallRating, seasonLabelForNumber, squadRoleLabel } from "../engine/careerEngine";
+import { availableInvestmentIds, INVESTMENT_DEFINITIONS } from "../engine/investments";
 import { leagueNameForTier } from "../engine/leagueEngine";
 import { AttributeBars } from "./AttributeBars";
 import { TraitBars } from "./TraitBars";
@@ -9,19 +10,23 @@ import { StoryThreads } from "./StoryThreads";
 import { describeCareerMomentum, formatMoney, overallTier, RELATIONSHIP_LABEL } from "./labels";
 import { StatBox } from "./StatBox";
 import { Timeline } from "./Timeline";
+import { InvestmentPanel } from "./InvestmentPanel";
 
 export function Dashboard({
   player,
   league,
   seasonNumber,
   onStartSeason,
+  onActivateInvestment,
 }: {
   player: Player;
   league: LeagueState;
   seasonNumber: number;
   onStartSeason: () => void;
+  onActivateInvestment: (id: PersonalInvestmentId) => void;
 }) {
   const [showTimeline, setShowTimeline] = useState(false);
+  const [showInvestments, setShowInvestments] = useState(false);
   const overall = overallRating(player);
   const lastStats = player.seasonHistory[player.seasonHistory.length - 1];
   const leagueName = leagueNameForTier(league, player.club.tier);
@@ -103,11 +108,17 @@ export function Dashboard({
         />
       </div>
 
-      {/* Investitionen-Feature folgt in einem späteren Schritt (Kategorien, Preise,
-          Tier-Gating) - hier bewusst nur der Platzhalter-Button an der richtigen
-          Stelle im Design, noch ohne Funktion. */}
-      <button type="button" className="btn btn-outline-gold" onClick={() => {}}>
-        💼 Investitionen
+      {/* Persönliches Umfeld: kompakter Statustext statt eines eigenen Screens
+          (siehe investments.ts) - zeigt beim Laden bereits an, ob gerade etwas
+          aktiv ist, ohne das Panel extra öffnen zu müssen. */}
+      <button type="button" className="btn btn-outline-gold" onClick={() => setShowInvestments(true)}>
+        {player.activeInvestment
+          ? `💼 ${INVESTMENT_DEFINITIONS[player.activeInvestment.id].label} · noch ${player.activeInvestment.seasonsRemaining} Saison${
+              player.activeInvestment.seasonsRemaining === 1 ? "" : "en"
+            }`
+          : availableInvestmentIds(player).length > 0
+          ? "💼 Investment verfügbar"
+          : "💼 Persönliches Umfeld"}
       </button>
 
       {momentum && (
@@ -157,6 +168,16 @@ export function Dashboard({
       </div>
 
       {showTimeline && <Timeline player={player} onClose={() => setShowTimeline(false)} />}
+      {showInvestments && (
+        <InvestmentPanel
+          player={player}
+          onActivate={(id) => {
+            onActivateInvestment(id);
+            setShowInvestments(false);
+          }}
+          onClose={() => setShowInvestments(false)}
+        />
+      )}
     </div>
   );
 }

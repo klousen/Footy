@@ -1,4 +1,4 @@
-import type { GameState, RankingEntry } from "./types";
+import type { AttributeKey, GameState, RankingEntry } from "./types";
 
 // ============================================================================
 // Spielstand-Slots (siehe Handoff "Titelmenü, Spielstand-Slots & Bestenliste-
@@ -112,6 +112,18 @@ function normalizeGameState(state: GameState): GameState {
     // unerreicht, aber keine erfundenen Daten).
     state.player.homecomings ??= [];
     state.player.pastClubOfferCooldowns ??= {};
+    // Ältere Spielstände kennen die persönliche Fokus-Wahl der Charaktererstellung
+    // noch nicht (siehe "investments.ts" "spezialtraining") - als bestmögliche
+    // Annäherung das aktuell stärkste Attribut nehmen, kein rückwirkendes
+    // Nacherfinden der ursprünglichen Wahl.
+    if (!state.player.focusAttribute) {
+      const attributes = state.player.attributes;
+      const keys = Object.keys(attributes) as AttributeKey[];
+      state.player.focusAttribute = keys.reduce((best, k) => (attributes[k] > attributes[best] ? k : best), keys[0]);
+    }
+    // Ältere Spielstände kennen das Investment-System noch nicht.
+    state.player.activeInvestment ??= null;
+    state.player.investmentCooldowns ??= {};
     // Ältere Spielstände kennen das Heimatland noch nicht - als bestmögliche
     // Annäherung das aktuelle Land nehmen (nur relevant für künftige Rückkehr-Erkennung).
     state.player.homeCountryId ??= state.player.country;

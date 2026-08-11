@@ -58,6 +58,7 @@ import {
 } from "./leagueEngine";
 import { advanceEuropeanLeagueDrift, computeSeasonEuropeanCupResult } from "./europeanCup";
 import { computeSeasonNationalCupResult } from "./nationalCup";
+import { activateInvestment, hasActiveInvestment, INVESTMENT_DEFINITIONS, tickInvestments } from "./investments";
 
 const ATTRIBUTE_KEYS: AttributeKey[] = [
   "technik",
@@ -330,6 +331,9 @@ export function createPlayer(
       narrativeHistory: [],
       homecomings: [],
       pastClubOfferCooldowns: {},
+      focusAttribute: focusAttr,
+      activeInvestment: null,
+      investmentCooldowns: {},
     },
   };
 }
@@ -782,12 +786,26 @@ function applyEffects(player: Player, effects: EventChoice["effects"], season: n
   if (effects.cupExit) player.cupExitThisSeason = true;
   if (effects.injuryWeeksOut) {
     if (effects.injuryWeeksOut > 0) {
+      // Investment "Profi-Recovery" (siehe investments.ts): reduziert NEUE
+      // Verletzungen moderat - EIN zentraler Hook statt Anpassung an jedem
+      // einzelnen verletzungsauslösenden Event (die injizieren alle über
+      // genau dieses Feld), wirkt dadurch automatisch auf jedes bestehende
+      // UND künftige Verletzungs-Event. Mutiert `effects.injuryWeeksOut`
+      // direkt, damit die spätere Anzeige (`summarizeEffects`, dieselbe
+      // Objektreferenz) den tatsächlich angewendeten Wert zeigt.
+      if (hasActiveInvestment(player, "profi_recovery")) {
+        effects.injuryWeeksOut = Math.max(1, Math.round(effects.injuryWeeksOut * 0.75));
+      }
       player.injury = { label: effects.injuryLabel ?? "Verletzung", weeksOut: (player.injury?.weeksOut ?? 0) + effects.injuryWeeksOut };
       player.totalInjuryWeeks += effects.injuryWeeksOut;
     } else if (player.injury) {
       const remaining = player.injury.weeksOut + effects.injuryWeeksOut;
       player.injury = remaining <= 0 ? null : { ...player.injury, weeksOut: remaining };
     }
+  }
+  if (effects.activateInvestmentId) {
+    const entry = activateInvestment(player, effects.activateInvestmentId, season);
+    if (entry) player.log.push(entry);
   }
   if (effects.logText) {
     player.log.push({
@@ -852,6 +870,16 @@ export function summarizeEffects(effects: EventChoice["effects"], player?: Playe
       nextTemplateId
         ? `📖 Geschichte "${label}" (${stage}/${totalStages}) geht weiter - nächstes Kapitel in einer künftigen Saison.`
         : `📖 Geschichte "${label}" (${stage}/${totalStages}) ist abgeschlossen.`
+    );
+  }
+  // "Kosten, Laufzeit, Cooldown, kurzer narrativer Effekt - keine komplizierten
+  // Zahlenboni" (siehe investments.ts) - dieselbe knappe Zusammenfassung, egal
+  // ob ein Investment über das Dashboard-Panel oder (wie hier) über ein
+  // passendes Event aktiviert wurde.
+  if (effects.activateInvestmentId) {
+    const def = INVESTMENT_DEFINITIONS[effects.activateInvestmentId];
+    lines.push(
+      `💼 Investment aktiviert: ${def.label} (${def.durationSeasons} Saison${def.durationSeasons === 1 ? "" : "en"}, danach ${def.cooldownSeasons} Saison${def.cooldownSeasons === 1 ? "" : "en"} Cooldown)`
     );
   }
   if (lines.length === 0) lines.push("Keine spürbaren Auswirkungen.");
@@ -1012,8 +1040,12 @@ export function simulateSeason(
   // deutlich spürbarer Hebel (nicht nur Nuance) - echter Konflikt mit dem Verein
   // MUSS sich in klar weniger Einsatzminuten niederschlagen, ein gutes Verhältnis
   // in klar mehr.
+  // Investment "Berater/Coach" (siehe investments.ts): kleiner Zusatzbonus auf
+  // das Trainervertrauen - "leicht bessere Chance auf Einsatzzeit" aus der
+  // Vorgabe, ohne die Kaderrolle selbst zu verändern (nur WIE VIEL Einsatzzeit
+  // eine gegebene Rolle abwirft, siehe Doc-Kommentar oben).
   const trustFactor = clamp(
-    0.8 + (player.clubRelation - 50) / 160 + (player.fitness - 70) / 300,
+    0.8 + (player.clubRelation - 50) / 160 + (player.fitness - 70) / 300 + (hasActiveInvestment(player, "berater_coach") ? 0.03 : 0),
     0.55,
     1.2
   );
@@ -1851,6 +1883,17 @@ export function ageUpPlayer(player: Player): void {
   const performanceGrowthMultiplier = lastSeason
     ? clamp(1 + ((lastSeason.performanceScore - 50) / 100) * performanceReliability * 0.25, 0.88, 1.12)
     : 1;
+  // Persönliches Investment "Privattrainer" (siehe investments.ts): kleine
+  // zusätzliche Entwicklungschance - bewusst deutlich kleiner als die übrigen
+  // Multiplikatoren hier (Arbeitsmoral 0.8-1.2, Trainingsumfeld 1.35), damit
+  // Geld niemals zur dominanten Wachstumsquelle wird, sondern nur ein
+  // moderater Zusatzhebel bleibt (siehe Datei-Kommentar "Aktivierung statt
+  // Kauf" - kein direktes Erkaufen von Attributwachstum).
+  const investmentGrowthMultiplier = hasActiveInvestment(player, "privattrainer") ? 1.06 : 1;
+  // "Ernährungsberatung": kleiner, positiver Einfluss auf den Alterungsverlauf
+  // (Abbau-Seite) - wirkt nur, wenn tatsächlich abgebaut wird (dRate > 0
+  // weiter unten), symmetrisch klein gehalten wie der Wachstums-Bonus oben.
+  const investmentDeclineMultiplier = hasActiveInvestment(player, "ernaehrungsberatung") ? 0.93 : 1;
   const isBenchWarmer = player.contract.squadRole === "Ersatzbank";
   for (const key of ATTRIBUTE_KEYS) {
     const current = player.attributes[key];
@@ -1872,6 +1915,11 @@ export function ageUpPlayer(player: Player): void {
       // UNTERE Hälfte der Verteilung zusätzlich, ohne überdurchschnittliche
       // Trajektorien (nahe/über 1.0) nennenswert zu verändern.
       const effectiveTrajectory = Math.pow(player.developmentTrajectory, 1.6);
+      // "Spezialtraining" (siehe investments.ts): erhöht die Wahrscheinlichkeit
+      // kleiner Fortschritte GEZIELT beim gewählten Fokusattribut, statt pauschal
+      // auf alle sechs Attribute zu wirken wie der Privattrainer oben - deutlich
+      // kleiner Multiplikator, betrifft nur `player.focusAttribute`.
+      const specialTrainingMultiplier = hasActiveInvestment(player, "spezialtraining") && key === player.focusAttribute ? 1.12 : 1;
       rawDelta =
         gRate *
         room *
@@ -1880,11 +1928,19 @@ export function ageUpPlayer(player: Player): void {
         trainingEnvironmentMultiplier *
         roleGrowthMultiplier *
         performanceGrowthMultiplier *
+        investmentGrowthMultiplier *
+        specialTrainingMultiplier *
         (0.7 + rng() * 0.6);
       rawDelta = Math.max(0, rawDelta);
     } else if (dRate > 0) {
       rawDelta =
-        -dRate * current * ATTRIBUTE_DECLINE_MULTIPLIER[key] * roleDeclineMultiplier * conditionDeclineMultiplier * (0.7 + rng() * 0.6);
+        -dRate *
+        current *
+        ATTRIBUTE_DECLINE_MULTIPLIER[key] *
+        roleDeclineMultiplier *
+        conditionDeclineMultiplier *
+        investmentDeclineMultiplier *
+        (0.7 + rng() * 0.6);
     } else {
       rawDelta = 0;
     }
@@ -1931,6 +1987,7 @@ export function ageUpPlayer(player: Player): void {
   if (player.trainingBoostSeasons > 0) player.trainingBoostSeasons -= 1;
   if (player.formSlumpSeasons > 0) player.formSlumpSeasons -= 1;
   if (player.secondSpringSeasons > 0) player.secondSpringSeasons -= 1;
+  tickInvestments(player);
 
   if (player.injury) {
     const remaining = player.injury.weeksOut - 16; // Sommerpause heilt viel
@@ -3672,10 +3729,22 @@ export function applyClubOfferChoice(
   // `buildClubOfferEvent`) wird hier tatsächlich ausgewürfelt: je größer der
   // Sprung zwischen eigener Stärke und Vereinsniveau, desto eher bleibt es ein
   // Lippenbekenntnis und die tatsächliche Rolle fällt eine Stufe niedriger aus.
-  const promiseChance = rolePromiseChance(transferOverall, displayClubStrength(chosen.strength, wageCountryId));
+  // Investment "Berater/Coach" (siehe investments.ts): "bessere Vertrags-/
+  // Transferoptionen" - kleiner Zuschlag auf die Erfolgschance des
+  // Einsatzminuten-Versprechens, derselbe Bonus wie in der Angebots-Vorschau
+  // (siehe `buildClubOfferEvent`), damit dort gezeigt und hier ausgewürfelt
+  // konsistent bleiben.
+  const promiseChance = clamp(
+    rolePromiseChance(transferOverall, displayClubStrength(chosen.strength, wageCountryId)) + (hasActiveInvestment(player, "berater_coach") ? 0.05 : 0),
+    0.35,
+    0.97
+  );
   const promiseKept = rng() < promiseChance;
   const newRole = promiseKept ? promisedRole : roleOneStepDown(promisedRole, player.position);
-  player.contract = { club: chosen.city, yearsLeft: 3, wagePerYear: wage, squadRole: newRole };
+  // Bessere Vertragsverhandlung durch Berater/Coach - kleiner Gehaltsaufschlag
+  // beim tatsächlichen Vertragsabschluss.
+  const negotiatedWage = hasActiveInvestment(player, "berater_coach") ? Math.round((wage * 1.04) / 100) * 100 : wage;
+  player.contract = { club: chosen.city, yearsLeft: 3, wagePerYear: negotiatedWage, squadRole: newRole };
   player.clubRelation = promiseKept ? 60 : 45;
   if (!promiseKept) player.morale = clamp(player.morale - 8, 0, 100);
   player.wantsTransfer = false;
@@ -3880,7 +3949,7 @@ export function applyClubOfferChoice(
     `Neuer Verein: ${chosen.city}`,
     `Land: ${targetLeague.flag} ${targetLeague.countryName}`,
     `Liga: ${leagueLabel}`,
-    `Gehalt: ${formatMoney(wage)} / Jahr`,
+    `Gehalt: ${formatMoney(negotiatedWage)} / Jahr`,
     `Rolle im Kader: ${newRole}`,
     ...(reason === "loan-return" || reason === "loan-keep"
       ? []

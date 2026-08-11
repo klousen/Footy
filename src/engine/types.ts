@@ -506,6 +506,14 @@ export interface EffectDelta {
    * regulär am `potential`, siehe `applyEffects`).
    */
   ceilingBreak?: Partial<Record<AttributeKey, number>>;
+  /** Aktiviert ein persönliches Investment aus einem passenden Event heraus
+   * (siehe `PersonalInvestmentId`/investments.ts) - derselbe Weg wie die
+   * manuelle Aktivierung über das Dashboard-Panel, nur als Entscheidungs-Effekt
+   * statt als direkte Nutzeraktion. `applyEffects` prüft Kosten/Freischaltung/
+   * Cooldown erneut (Sicherheitsnetz, siehe dortiger Kommentar) und ignoriert
+   * den Effekt still, falls die Voraussetzungen zwischenzeitlich nicht mehr
+   * gelten. */
+  activateInvestmentId?: PersonalInvestmentId;
   logText?: string;
   logKind?: LogEntry["kind"];
 }
@@ -886,6 +894,40 @@ export interface Player {
    * (ADD-ON-Vorgabe Abschnitt 18: "sie kennen dich" statt "sie wollen dich jedes Jahr
    * zurück"). Key = `Club.clubId`. */
   pastClubOfferCooldowns: Record<string, number>;
+  /** Bei der Charaktererstellung gewähltes Fokusattribut (siehe `createPlayer`) -
+   * dort nur ein Bonus auf Potenzial/Start-Attribute, hier dauerhaft gespeichert,
+   * damit spätere Systeme (siehe `PersonalInvestmentId` "spezialtraining" in
+   * investments.ts) sich gezielt darauf beziehen können, ohne die ursprüngliche
+   * Wahl erneut abzufragen. */
+  focusAttribute: AttributeKey;
+  /** Aktuell aktives persönliches Investment (siehe "investments.ts") - `null`
+   * außerhalb einer aktiven Laufzeit. Maximal EINES gleichzeitig, bewusst als
+   * knappe strategische Ressource (siehe dortiger Datei-Kommentar), kein
+   * Shop-System mit beliebig vielen gleichzeitig aktiven Boni. */
+  activeInvestment: ActiveInvestment | null;
+  /** Saisons bis ein zuletzt abgelaufenes Investment erneut aktivierbar ist -
+   * Key = `PersonalInvestmentId`, fehlender Eintrag = kein Cooldown aktiv. */
+  investmentCooldowns: Partial<Record<PersonalInvestmentId, number>>;
+}
+
+/** Siehe "investments.ts" für die vollständige Definition/Freischaltung/Kosten
+ * je Investment - hier nur die Kern-IDs, damit `types.ts` (Player/EffectDelta)
+ * nicht auf die Engine-Datei zurückverweisen muss. */
+export type PersonalInvestmentId =
+  | "privattrainer"
+  | "spezialtraining"
+  | "profi_recovery"
+  | "ernaehrungsberatung"
+  | "berater_coach"
+  | "reha_experte";
+
+/** EIN aktuell laufendes persönliches Investment (siehe `Player.activeInvestment`). */
+export interface ActiveInvestment {
+  id: PersonalInvestmentId;
+  /** Verbleibende Saisons inkl. der aktuellen - wird in `ageUpPlayer`
+   * (careerEngine.ts, über `tickInvestments` in investments.ts) am Saisonende
+   * dekrementiert; bei 0 läuft das Investment aus und der Cooldown startet. */
+  seasonsRemaining: number;
 }
 
 /**

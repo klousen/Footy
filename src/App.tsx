@@ -50,6 +50,8 @@ import {
   summarizeEffects,
 } from "./engine/careerEngine";
 import { LOAN_DECISION_TEMPLATE_IDS } from "./engine/loanStory";
+import { activateInvestment } from "./engine/investments";
+import type { PersonalInvestmentId } from "./engine/types";
 import { HOMECOMING_TEMPLATE_ID, UNDERDOG_CUP_TEMPLATE_ID, VACATION_TEMPLATE_ID } from "./engine/events";
 import { pickSpreadClubOffers } from "./engine/leagueEngine";
 import { TRANSFER_DECISION_MEANING } from "./ui/labels";
@@ -575,6 +577,17 @@ export default function App() {
     goToTitle();
   }
 
+  // Persönliches Investment-Panel im Dashboard (siehe investments.ts) -
+  // Aktivierung ist eine direkte Nutzeraktion, kein Event-/Entscheidungs-Flow,
+  // daher hier eine eigene, schlanke Handler-Funktion statt über `handleChoice`.
+  function handleActivateInvestment(id: PersonalInvestmentId) {
+    if (!game.player) return;
+    const player = game.player;
+    const entry = activateInvestment(player, id, game.seasonNumber);
+    if (entry) player.log.push(entry);
+    setGame({ ...game, player: { ...player } });
+  }
+
   // Der "Return"-Button oben rechts fragt erst nach, statt die Karriere sofort zu
   // beenden - drei mögliche Wege aus dem Menü heraus:
   function handleEndCareerViewSummary() {
@@ -671,6 +684,7 @@ export default function App() {
           league={game.leagueState}
           seasonNumber={game.seasonNumber}
           onStartSeason={handleStartSeason}
+          onActivateInvestment={handleActivateInvestment}
         />
       )}
       {game.screen === "event" && game.player && game.currentEvent && (

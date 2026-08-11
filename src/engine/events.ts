@@ -4,7 +4,12 @@ import { clamp, FEMALE_FIRST_NAMES, FIRST_NAMES, LAST_NAMES } from "./data";
 import { LOAN_DECISIONS } from "./loanStory";
 // `ATTRIBUTE_LABEL` kommt aus labels.ts (nur Typ-Importe aus ./types, keine
 // Rückabhängigkeit auf events.ts/careerEngine.ts - kein Zirkel).
-import { ATTRIBUTE_LABEL } from "./labels";
+import { ATTRIBUTE_LABEL, formatMoney } from "./labels";
+// investments.ts importiert seinerseits nur aus ./types/./data/./labels - keine
+// Rückabhängigkeit auf events.ts/careerEngine.ts, also unbedenklich hier
+// importierbar (siehe Vorgabe "Investments können zusätzlich aus passenden
+// Events heraus angeboten werden").
+import { availableInvestmentIds, investmentCost } from "./investments";
 
 /** Sommerpause-Event (siehe Template weiter unten) - wird NIE über die normale
  * Gewichtungs-Auswahl gezogen, sondern von App.tsx `handleStartSeason` explizit
@@ -1378,6 +1383,40 @@ export const EVENT_TEMPLATES: EventTemplate[] = [
         },
       ],
     }),
+  },
+  // Beispiel-Integration "Investments können zusätzlich aus passenden Events
+  // heraus angeboten werden" (siehe investments.ts) - derselbe Aktivierungsweg
+  // wie im Dashboard-Panel (`EffectDelta.activateInvestmentId`, ausgewertet in
+  // `applyEffects`), nur als Entscheidung statt als direkte Nutzeraktion.
+  // `availableInvestmentIds` prüft bereits Freischaltung/Cooldown/"max. 1
+  // aktiv" gebündelt - dieselbe Quelle wie das Panel, keine doppelte Logik.
+  {
+    id: "investment_berater_angebot",
+    category: "vertrag",
+    minAge: 21,
+    maxAge: 32,
+    weight: 1,
+    condition: (p) => availableInvestmentIds(p).includes("berater_coach") && p.wealth >= investmentCost("berater_coach", p),
+    build: (p) => {
+      const cost = investmentCost("berater_coach", p);
+      return {
+        category: "vertrag",
+        title: "Ein Berater meldet sich",
+        description: `Ein erfahrener Berater/Coach bietet ${p.name} seine Dienste an - professionelle Unterstützung bei Vertragsverhandlungen und im Trainingsalltag, gegen eine jährliche Gebühr von ${formatMoney(cost)}.`,
+        choices: [
+          {
+            id: "annehmen",
+            label: `Berater engagieren (${formatMoney(cost)})`,
+            effects: { activateInvestmentId: "berater_coach" },
+          },
+          {
+            id: "ablehnen",
+            label: "Lieber allein weitermachen",
+            effects: { logText: "hat das Angebot eines Beraters vorerst ausgeschlagen.", logKind: "info" },
+          },
+        ],
+      };
+    },
   },
   {
     id: "transfer_loan",

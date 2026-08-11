@@ -2615,3 +2615,72 @@ input:focus {
     max-width: 430px;
   }
 }
+
+/* ---------------- Persönliches Investment-Panel ---------------- */
+
+.investment-active-banner {
+  background: var(--bg-deep);
+  border: 1px solid var(--gold-dim);
+  border-radius: var(--radius);
+  padding: 12px;
+  font-size: 0.9rem;
+}
+
+.investment-active-banner .muted {
+  margin-top: 6px;
+  font-size: 0.75rem;
+}
+
+.investment-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  overflow-y: auto;
+}
+
+.investment-card {
+  background: var(--bg-deep);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.investment-card-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.investment-label {
+  font-weight: 600;
+  color: var(--chalk);
+}
+
+.investment-cost {
+  font-family: var(--font-mono);
+  color: var(--gold-bright);
+  white-space: nowrap;
+}
+
+.investment-cost-unaffordable {
+  color: var(--red);
+}
+
+.investment-effect {
+  font-size: 0.82rem;
+  margin: 0;
+}
+
+.investment-meta {
+  font-size: 0.7rem;
+  color: var(--muted);
+  margin: 0 0 4px;
+}
+
+.investment-card .btn {
+  align-self: flex-start;
+}
