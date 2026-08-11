@@ -2247,6 +2247,11 @@ input:focus {
   border-radius: 12px;
   padding: 16px 16px 8px 16px;
   position: relative;
+  /* Ohne Bestenlisten-Einträge (z.B. noch keine abgeschlossene Karriere) fehlen
+     die sonst drei `.tm-rank-row`, die dem Panel seine übliche Höhe geben - die
+     Paywall-Sperre (`.tm-lock-overlay`, `inset: 0`) landet dann sonst auf einer
+     winzigen Fläche statt wie gewohnt über einer sichtbaren Vorschau. */
+  min-height: 176px;
 }
 
 .tm-ranking-header {

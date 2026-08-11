@@ -51,7 +51,18 @@ function RankingPreviewPanel({
         </div>
       ))}
 
-      {locked && rankingPreview.length > 0 && (
+      {/* Ohne Einträge (weder gesperrt noch entsperrt) fehlt sonst jeder Inhalt -
+          bei gesperrtem Panel liegt ohnehin gleich der Lock-Overlay darüber, bei
+          der "entsperrt"-Vorschau-Kopie bleibt es die einzige sichtbare Aussage. */}
+      {rankingPreview.length === 0 && <p className="tm-leaderboard-empty">{t("leaderboardEmpty")}</p>}
+
+      {/* Bugreport: ohne bereits abgeschlossene Karriere (leeres Ranking-Archiv,
+          `rankingPreview.length === 0`) blieb die Paywall bisher komplett
+          unsichtbar - die Sperre hing fälschlich an vorhandenen Vorschau-Zeilen,
+          statt allein am Pass-Status. Zeigt jetzt IMMER, sobald gesperrt, auch
+          ganz ohne Vorschau-Daten (siehe `.tm-ranking-panel` Mindesthöhe in
+          app.css, damit der Overlay dabei nicht auf einer winzigen Fläche landet). */}
+      {locked && (
         <div className="tm-lock-overlay">
           <svg className="tm-lock-icon" viewBox="0 0 24 24" fill="none">
             <path
