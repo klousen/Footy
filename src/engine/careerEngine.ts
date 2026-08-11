@@ -2145,6 +2145,93 @@ function transferEffectiveOverall(player: Player, overall: number, oldClubStreng
   return Math.max(overall, provenStarterFloor(player, oldClubStrength));
 }
 
+// ---------------------------------------------------------------------------
+// TRANSFERLOGIK 2.0: Kaderbedarf, Vertrauensvorschuss, Prognose-Kategorien
+// (siehe ADD-ON-Vorgabe "TRANSFERLOGIK 2.0") - clubStrength bleibt EIN Faktor
+// der Kaderrollen-Entscheidung beim Vereinswechsel, ist aber nicht mehr der
+// EINZIGE (Bugreport: "stärkerer Verein -> automatisch Bank, schwächerer
+// Verein -> automatisch Stammplatz", fühlte sich wie ein reines Tier-System
+// an). Bewusst KEINE Simulation anderer Spieler/echter Kader - nur ein
+// grober, abstrahierter Zuschlag/Abschlag auf die Rollen-/Versprechens-
+// Berechnung, siehe `rollPositionDemand` unten.
+// ---------------------------------------------------------------------------
+
+/** Abstrahierter, EINMALIG pro Angebot gewürfelter "Kaderbedarf auf der eigenen
+ * Position" - KEINE Simulation eines echten Kaders/anderer Spieler, nur ein
+ * zufälliger Zuschlag/Abschlag auf die sonst allein entscheidende Vereinsstärke
+ * (siehe `squadRoleForOverall`/`rolePromiseChance`, jeweils an den Aufrufstellen
+ * in `buildClubOfferEvent`/`applyClubOfferChoice`). Positiv = der Verein sucht
+ * gerade Verstärkung auf dieser Position (bessere Chancen als die reine Stärke
+ * vermuten lässt - "Verein 86 OVR + hoher Bedarf -> Spieler 78 OVR kann
+ * Stammplatzchance haben"), negativ = die Position ist bereits stark besetzt
+ * ("Verein 86 OVR + sehr geringe Nachfrage -> großer Konkurrenzkampf").
+ * Dreiecksverteilung um 0 (Differenz zweier `rng()`-Würfe) statt
+ * Gleichverteilung, damit extreme Bedarfs-/Konkurrenzlagen die Ausnahme
+ * bleiben. "lockruf" (der Verein verfolgt dich GEZIELT) ist leicht positiv
+ * verschoben, "pressure" (du wirst eher hinausgedrängt als aktiv geholt)
+ * leicht negativ - beide spiegeln, wie sehr der Verein dich WILL, nicht nur,
+ * wie stark er ist. Bandbreite bewusst in derselben Größenordnung wie EIN
+ * Rollen-Band in `squadRoleForOverall` (10 Punkte) - kann eine Kaderrolle-
+ * Stufe verschieben, aber die Vereinsstärke nicht bedeutungslos machen. */
+function rollPositionDemand(reason: ClubOfferReason): number {
+  const skew = reason === "lockruf" ? 2.5 : reason === "pressure" ? -1 : 0;
+  return clamp((rng() - rng()) * 9 + skew, -9, 9);
+}
+
+/** Fünf grob abgestufte, nutzerfacing Prognose-Kategorien statt einer rohen
+ * Prozentzahl (siehe Vorgabe Abschnitt 4) - der Spieler bekommt eine Prognose
+ * ("was der Verein in Aussicht stellt"), keine exakte Zahl und erst recht
+ * keine Garantie (siehe Abschnitt 5 "Versprechen ≠ Realität": `applyClubOfferChoice`
+ * würfelt danach unabhängig, ob die Rolle tatsächlich eintrifft). Deckt Torhüter
+ * automatisch mit ab - die kennen laut `squadRoleForOverall` ohnehin nur
+ * "Stammspieler" oder "Ersatzbank", landen also nur in der ersten/letzten
+ * Kategorie. */
+function rolePrognosisLabel(role: SquadRole, promiseChance: number): string {
+  if (role === "Stammspieler") return promiseChance >= 0.7 ? "Stammplatz in Aussicht" : "Gute Chancen auf Stammplatz";
+  if (role === "Rotation") return "Rotation wahrscheinlich";
+  if (role === "Ergänzungsspieler") return "Konkurrenz um den Platz";
+  return "Große Konkurrenz";
+}
+
+/** Kurzer, optionaler Begründungssatz zur Prognose-Kategorie (siehe Vorgabe
+ * Abschnitt 4, "optional ein kurzer Grund") - nur gesetzt, wenn der Kaderbedarf
+ * (oder bei "lockruf" das aktive Interesse) tatsächlich den Ausschlag gibt,
+ * sonst `undefined` (die Prognose-Kategorie allein trägt dann genug Aussage). */
+function rolePrognosisReason(positionDemand: number, reason: ClubOfferReason): string | undefined {
+  if (positionDemand >= 5) return "Der Verein sucht auf deiner Position nach Verstärkung.";
+  if (positionDemand <= -5) return "Auf deiner Position ist der Kader bereits stark besetzt.";
+  if (reason === "lockruf") return "Der Verein sieht dich als wichtige Verstärkung.";
+  return undefined;
+}
+
+/** Ersetzt den früheren, starren 60/45-Wert für die Vereinsbeziehung nach einem
+ * Wechsel (siehe Vorgabe Abschnitt 2 "Vertrauensvorschuss") - ein Verein, der
+ * aktiv verpflichtet, tut nicht so, als würde er den Spieler überhaupt nicht
+ * kennen. Reputation, jüngste Form und (bei "lockruf"/"pressure") das konkrete
+ * Interesse fließen mit ein, dazu ein KLEINER, bewusst nicht 1:1 übertragener
+ * Teil des beim alten Verein aufgebauten Vertrauens - ein neuer Verein muss
+ * sich das Vertrauen grundsätzlich neu verdienen, bekommt aber einen
+ * spürbaren, kontextabhängigen Vorschuss statt eines pauschalen Werts. Jeder
+ * Summand einzeln eng geclampt, damit kein Faktor die Basis (Versprechen
+ * gehalten/gebrochen) dominiert - Endergebnis bewusst in derselben
+ * Größenordnung wie der bisherige 45-60-Bereich, nur mit echter Varianz. */
+function computeArrivalTrust(
+  player: Player,
+  promiseKept: boolean,
+  reason: ClubOfferReason,
+  positionDemand: number,
+  oldClubRelation: number
+): number {
+  const base = promiseKept ? 58 : 46;
+  const reputationBonus = clamp((player.reputation - 50) / 12, -3, 5);
+  const lastStats = player.seasonHistory[player.seasonHistory.length - 1];
+  const formBonus = lastStats ? clamp((lastStats.avgRating - 6.5) * 1.5, -3, 4) : 0;
+  const priorRelationCarry = clamp((oldClubRelation - 50) * 0.15, -3, 3);
+  const interestBonus = reason === "lockruf" ? 4 : reason === "pressure" ? -2 : 0;
+  const positionFitBonus = clamp(positionDemand * 0.3, -3, 3);
+  return clamp(base + reputationBonus + formBonus + priorRelationCarry + interestBonus + positionFitBonus, 28, 82);
+}
+
 /**
  * Schwellen bewusst gelockert (früher: +5 / -5 / -15): Angebote landen laut
  * `targetStrength`-Formeln (siehe `buildClubOfferEvent`) ohnehin oft schon
@@ -3186,21 +3273,31 @@ function buildClubOfferEvent(
     // lokalen Skala (dort ist "wie stehe ich innerhalb MEINER Liga da" die
     // richtige Frage, kein Länder-Vergleich).
     const candStrengthForTransfer = displayClubStrength(cand.club.strength, cand.countryId);
+    // Kaderbedarf auf der eigenen Position (siehe "TRANSFERLOGIK 2.0" Abschnitt 1,
+    // `rollPositionDemand`) - verschiebt NUR die Rollen-/Versprechens-Berechnung
+    // unten (`roleFitStrength`), NICHT die angezeigte "echte" Vereinsstärke
+    // (`candStrengthForTransfer` bleibt für Gehalt/Vergleichspfeil unverändert):
+    // clubStrength bleibt relevant, entscheidet aber nicht mehr allein.
+    const positionDemand = rollPositionDemand(reason);
+    const roleFitStrength = candStrengthForTransfer - positionDemand;
     const transferOverall = transferEffectiveOverall(player, overall, currentStrengthDisplay);
-    const promisedRole = squadRoleForOverall(transferOverall, candStrengthForTransfer, player.position, player.age);
+    const promisedRole = squadRoleForOverall(transferOverall, roleFitStrength, player.position, player.age);
     // Das Einsatzminuten-Versprechen eines NEUEN Vereins ist nie hundertprozentig
     // sicher - je größer der Sprung zwischen eigener Stärke und Vereinsniveau,
     // desto eher bleibt die versprochene Rolle nur ein Lippenbekenntnis (siehe
     // `applyClubOfferChoice`, wo tatsächlich ausgewürfelt wird, ob der Verein das
     // Versprechen einhält).
-    const promiseChance = rolePromiseChance(transferOverall, candStrengthForTransfer);
+    const promiseChance = rolePromiseChance(transferOverall, roleFitStrength);
     // Nur eine Gehalts-Differenz zeigen, wenn ein aktuelles Gehalt zum Vergleich
     // existiert (nicht beim allerersten Profivertrag, siehe "pro-debut" - dort
     // wäre "wagePerYear: 0" als Basis eine bedeutungslose "+100%"-Differenz).
     const wageDelta = player.contract.wagePerYear > 0 ? wagePreview - player.contract.wagePerYear : undefined;
     // Strukturierte Kartendaten (siehe `OfferCardData`) für das neue Angebots-
     // Kartenlayout - dieselben bereits berechneten Werte wie im `detail`-Fließtext
-    // unten, nur aufgeschlüsselt statt zusammengezogen.
+    // unten, nur aufgeschlüsselt statt zusammengezogen. `roleLabel`/`roleSub` zeigen
+    // jetzt eine qualitative Prognose-Kategorie statt einer rohen Prozentzahl (siehe
+    // Vorgabe Abschnitt 4 "Versprechen, keine Garantie") - `positionDemand` reist
+    // unverändert mit, damit `applyClubOfferChoice` dieselbe Grundlage verwendet.
     const offerCard: OfferCardData = {
       headline: cand.club.city,
       league: cand.leagueLabel,
@@ -3209,10 +3306,11 @@ function buildClubOfferEvent(
       strengthPrev: currentStrengthDisplay,
       wage: wagePreview,
       wageDelta,
-      roleLabel: reason === "loan" ? "Leihe" : squadRoleLabel(promisedRole, player.position),
-      roleSub: reason === "loan" ? `Rückkehr zu ${player.club.name}` : `${Math.round(promiseChance * 100)}% Erfolgschance`,
+      roleLabel: reason === "loan" ? "Leihe" : rolePrognosisLabel(promisedRole, promiseChance),
+      roleSub: reason === "loan" ? `Rückkehr zu ${player.club.name}` : rolePrognosisReason(positionDemand, reason),
       typeLabel: reason === "loan" ? "Leihe" : cand.isForeign ? "Ausland" : "Inland",
       isStay: false,
+      positionDemand,
     };
     return {
       id: `club-${cand.club.id}`,
@@ -3235,7 +3333,7 @@ function buildClubOfferEvent(
       detail:
         reason === "loan"
           ? `${cand.leagueLabel} · Vereinsstärke ${candStrengthForTransfer} · Ein Jahr Leihe, danach automatische Rückkehr zu ${player.club.name} · Gehalt ca. ${formatMoney(wagePreview)}/Jahr`
-          : `${cand.leagueLabel} · Vereinsstärke ${candStrengthForTransfer} (aktuell: ${currentStrengthDisplay}) · Einsatzminuten-Versprechen: ${squadRoleLabel(promisedRole, player.position)} (${Math.round(promiseChance * 100)}% Erfolgschance) · Gehalt ca. ${formatMoney(wagePreview)}/Jahr${cand.isForeign ? " · Auslandswechsel" : ""}`,
+          : `${cand.leagueLabel} · Vereinsstärke ${candStrengthForTransfer} (aktuell: ${currentStrengthDisplay}) · Einsatzminuten-Prognose: ${rolePrognosisLabel(promisedRole, promiseChance)} · Gehalt ca. ${formatMoney(wagePreview)}/Jahr${cand.isForeign ? " · Auslandswechsel" : ""}`,
       effects: {},
       offerCard,
     };
@@ -3771,6 +3869,7 @@ export function applyClubOfferChoice(
   const oldStrength = player.club.strength;
   const oldClubId = player.club.clubId;
   const oldTier = player.club.tier;
+  const oldClubRelation = player.clubRelation;
   const wageCountryId = movingCountryId ?? player.country;
   player.club = { clubId: chosen.id, name: chosen.city, country: targetLeague.countryName, tier: chosen.tier, strength: chosen.strength };
   const wage = estimateWage(overall, player.reputation, chosen, wageCountryId, clubLeagueRank(chosen.id, chosen.tier, targetLeague));
@@ -3780,7 +3879,15 @@ export function applyClubOfferChoice(
   // vergleichbare Skala wie in `buildClubOfferEvent` (siehe `displayClubStrength`
   // dort), altes UND neues Land jeweils mit dem eigenen Länderansehen normiert.
   const transferOverall = transferEffectiveOverall(player, overall, displayClubStrength(oldStrength, oldCountryId));
-  const promisedRole = squadRoleForOverall(transferOverall, displayClubStrength(chosen.strength, wageCountryId), player.position, player.age);
+  // Kaderbedarf (siehe "TRANSFERLOGIK 2.0" Abschnitt 1): derselbe, in der
+  // Angebots-Vorschau EINMALIG gewürfelte Wert (siehe `rollPositionDemand` in
+  // `buildClubOfferEvent`, gespeichert auf `offerCard.positionDemand`) wird hier
+  // WIEDERVERWENDET statt neu gewürfelt - "Versprechen ≠ Realität" (Abschnitt 5)
+  // bedeutet, dass die Zusage von der GLEICHEN Grundlage abweichen kann (über
+  // `promiseChance`/`promiseKept` unten), nicht von einer zufällig anderen.
+  const positionDemand = decisionOfferCard?.positionDemand ?? 0;
+  const roleFitStrength = displayClubStrength(chosen.strength, wageCountryId) - positionDemand;
+  const promisedRole = squadRoleForOverall(transferOverall, roleFitStrength, player.position, player.age);
   // Das in der Angebots-Vorschau gezeigte Einsatzminuten-Versprechen (siehe
   // `buildClubOfferEvent`) wird hier tatsächlich ausgewürfelt: je größer der
   // Sprung zwischen eigener Stärke und Vereinsniveau, desto eher bleibt es ein
@@ -3789,9 +3896,13 @@ export function applyClubOfferChoice(
   // Transferoptionen" - kleiner Zuschlag auf die Erfolgschance des
   // Einsatzminuten-Versprechens, derselbe Bonus wie in der Angebots-Vorschau
   // (siehe `buildClubOfferEvent`), damit dort gezeigt und hier ausgewürfelt
-  // konsistent bleiben.
+  // konsistent bleiben. "Heimkehrer" (siehe `homecomingInfo` oben) bekommen
+  // ebenfalls einen kleinen Zuschlag - "geringeres Anpassungsrisiko" (Vorgabe
+  // Abschnitt 6), der Verein kennt den Spieler schließlich schon.
   const promiseChance = clamp(
-    rolePromiseChance(transferOverall, displayClubStrength(chosen.strength, wageCountryId)) + (hasActiveInvestment(player, "berater_coach") ? 0.05 : 0),
+    rolePromiseChance(transferOverall, roleFitStrength) +
+      (hasActiveInvestment(player, "berater_coach") ? 0.05 : 0) +
+      (homecomingInfo ? 0.05 : 0),
     0.35,
     0.97
   );
@@ -3801,10 +3912,25 @@ export function applyClubOfferChoice(
   // beim tatsächlichen Vertragsabschluss.
   const negotiatedWage = hasActiveInvestment(player, "berater_coach") ? Math.round((wage * 1.04) / 100) * 100 : wage;
   player.contract = { club: chosen.city, yearsLeft: 3, wagePerYear: negotiatedWage, squadRole: newRole };
-  player.clubRelation = promiseKept ? 60 : 45;
+  // Vertrauensvorschuss (siehe "TRANSFERLOGIK 2.0" Abschnitt 2, `computeArrivalTrust`)
+  // ersetzt den früheren starren 60/45-Wert - Ruf, jüngste Form, ein kleiner Teil
+  // des alten Vertrauens und das konkrete Interesse des neuen Vereins fließen mit ein.
+  player.clubRelation = computeArrivalTrust(player, promiseKept, reason, positionDemand, oldClubRelation);
   if (!promiseKept) player.morale = clamp(player.morale - 8, 0, 100);
   player.wantsTransfer = false;
   player.consecutiveBenchSeasons = 0;
+  // "Eingewöhnungsphase" (siehe Vorgabe Abschnitt 3): JEDER Wechsel bekommt eine
+  // moderate Anlaufzeit - Rollen-Bodensatz "Rotation" (NICHT die stärkere
+  // Stammspieler-Garantie unten), unabhängig davon, welche Rolle die Formel oben
+  // unmittelbar ergeben hat. Ein als "Ersatzbank" gestarteter Neuzugang bekommt
+  // dadurch eine echte erste Chance statt sofort zu versauern - der Bodensatz
+  // greift ohnehin nur, wenn er tatsächlich etwas anhebt (siehe
+  // `resolveClubSituation`). Heimkehrer ("geringeres Anpassungsrisiko", Abschnitt
+  // 6) bekommen eine Saison länger. Wichtig gegen einen harten Cliff beim
+  // Auslaufen (siehe Abschnitt 3): die anschließende `currentSquadRole`-Neube-
+  // wertung ist bereits kontinuierlich (Form/Vereinsbeziehung, kein Sprung-Reset)
+  // - die Anlaufzeit gibt genau diesen Werten Zeit, sich aufzubauen.
+  player.roleProtectionSeasons = Math.max(player.roleProtectionSeasons, homecomingInfo ? 3 : 2);
   // Eine vertragliche Stammplatzgarantie war an den ALTEN Vertrag gebunden - sie
   // reist nicht mit zum neuen Verein (siehe `startingRoleGuaranteeSeasons`,
   // garantiert dort ausschließlich "Stammspieler", was nicht zu jedem hier

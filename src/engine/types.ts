@@ -607,6 +607,14 @@ export interface OfferCardData {
   roleSub?: string;
   typeLabel: string;
   isStay: boolean;
+  /** Der EINMALIG gewürfelte, abstrahierte Kaderbedarf auf der eigenen Position für
+   * DIESES Angebot (siehe `rollPositionDemand` in careerEngine.ts, "TRANSFERLOGIK
+   * 2.0" Abschnitt 1) - `undefined`/0 bei "Bleiben"-Karten, die keinen Vereinswechsel
+   * darstellen. Wird von `applyClubOfferChoice` unverändert wiederverwendet (statt
+   * neu gewürfelt), damit die in der Angebots-Vorschau gezeigte Prognose (siehe
+   * `roleLabel`/`roleSub`) und die beim tatsächlichen Wechsel ausgewürfelte Rolle
+   * auf DERSELBEN Grundlage beruhen. */
+  positionDemand?: number;
 }
 
 export interface EventChoice {
