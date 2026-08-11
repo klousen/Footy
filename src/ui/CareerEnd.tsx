@@ -2,8 +2,8 @@ import type { Achievement, Player, ScoreFactor } from "../engine/types";
 import { buildClubTenures, computeCareerNarrativeState, detectCareerPhenotype } from "../engine/careerEngine";
 import {
   ATTRIBUTE_LABEL,
-  CAREER_PHENOTYPE_DESCRIPTION,
   CAREER_PHENOTYPE_LABEL,
+  describeCareerPhenotype,
   formatMoney,
   formatTrophyList,
   RELATIONSHIP_LABEL,
@@ -78,16 +78,19 @@ export function CareerEnd({
       <div className="panel">
         <h3>Karrierebogen</h3>
         <div className="phenotype-chips">
-          <span className="phenotype-chip phenotype-chip-primary" title={CAREER_PHENOTYPE_DESCRIPTION[phenotype.primary]}>
+          <span className="phenotype-chip phenotype-chip-primary" title={describeCareerPhenotype(phenotype.primary, player, narrativeState)}>
             {CAREER_PHENOTYPE_LABEL[phenotype.primary]}
           </span>
           {phenotype.secondary.map((p) => (
-            <span key={p} className="phenotype-chip" title={CAREER_PHENOTYPE_DESCRIPTION[p]}>
+            <span key={p} className="phenotype-chip" title={describeCareerPhenotype(p, player, narrativeState)}>
               {CAREER_PHENOTYPE_LABEL[p]}
             </span>
           ))}
         </div>
-        <p className="muted">{CAREER_PHENOTYPE_DESCRIPTION[phenotype.primary]}</p>
+        {/* Begründung aus ECHTEN Karrieredaten statt generischem Boilerplate-Satz
+            (siehe `describeCareerPhenotype` - Folgevorgabe "Transferentscheidungen:
+            sichtbare Prognose + Narrative Integration" Abschnitt 9/10). */}
+        <p className="muted">{describeCareerPhenotype(phenotype.primary, player, narrativeState)}</p>
         {narrativeState.definingDecision && narrativeState.definingDecision.perfImpact !== null && (
           <p className="defining-decision">
             <strong>Prägende Entscheidung:</strong> {TRANSFER_DECISION_LABEL[narrativeState.definingDecision.type]} mit{" "}

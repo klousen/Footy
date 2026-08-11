@@ -13,6 +13,7 @@ export {
   overallTier,
   CAREER_PHENOTYPE_LABEL,
   CAREER_PHENOTYPE_DESCRIPTION,
+  describeCareerPhenotype,
   TRANSFER_DECISION_LABEL,
   TRANSFER_DECISION_MEANING,
   describeCareerMomentum,

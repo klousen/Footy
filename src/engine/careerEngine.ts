@@ -2481,6 +2481,19 @@ function advanceNarrativeThread(player: Player, stats: SeasonStats) {
     } else if (thread.stage === "REBUILD" && playtimeDelta >= -3 && perfDelta >= -2) {
       thread.stage = "BREAKTHROUGH";
     } else if (seasonsSinceMove >= 5) {
+      // Kein erzwungenes Happy End (siehe Doc-Kommentar oben) - aber auch kein
+      // stillschweigendes Verschwinden: eine Anpassung, die nie zum Durchbruch
+      // fand, ist selbst ein Wendepunkt ("gescheiterter großer Wechsel", siehe
+      // Folgevorgabe "Transferentscheidungen: sichtbare Prognose + Narrative
+      // Integration" Abschnitt 4/9) - symmetrisch zu BIG_MOVE_BREAKTHROUGH
+      // unten, landet genauso in `narrativeHistory` (CareerEnd "Prägende
+      // Momente" rendert beide generisch).
+      player.narrativeHistory.push({
+        season: currentIdx,
+        age: player.age,
+        type: "BIG_MOVE_STALLED",
+        label: thread.isHomecoming ? "Die Heimkehr brachte nie den erhofften Durchbruch" : "Der große Schritt führte nie zum erhofften Durchbruch",
+      });
       player.activeNarrativeThread = null;
       return;
     }

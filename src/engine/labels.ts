@@ -126,6 +126,67 @@ export const CAREER_PHENOTYPE_DESCRIPTION: Record<CareerPhenotype, string> = {
   PRESTIGE_FIGHTER: "Hat sich früh für einen großen Verein und das Risiko entschieden - und sich nach einer harten Durststrecke zurückgekämpft.",
 };
 
+/** Dynamische, aus ECHTEN Karrieredaten gebaute Begründung für den finalen
+ * Phänotyp am Karriereende (siehe Folgevorgabe "Transferentscheidungen:
+ * sichtbare Prognose + Narrative Integration" Abschnitt 9/10: "Die
+ * Begründung muss aus realen gespeicherten Karriereereignissen entstehen -
+ * keine generischen Texte, die unabhängig von der tatsächlichen Karriere
+ * erscheinen"). Für Phänotypen mit klar verfügbaren, aussagekräftigen Zahlen
+ * (Heimkehr-Details, Vereinswechsel-Anzahl, Titelzahl, Länderspiele,
+ * Verletzungswochen, Boom-/Bust-Ausschläge, Peak-OVR, Ceiling Break) wird
+ * eine konkrete, individuelle Formulierung gebaut; für die übrigen bleibt
+ * die kompakte statische Beschreibung (`CAREER_PHENOTYPE_DESCRIPTION`) als
+ * bewährter Fallback bestehen - kein Zwang, für jeden der 15 Phänotypen eine
+ * eigene Datenkomposition zu erfinden (Vorgabe Abschnitt 10: "keine neue
+ * komplexe Architektur"). */
+export function describeCareerPhenotype(
+  phenotype: CareerPhenotype,
+  player: Player,
+  narrative: CareerNarrativeState
+): string {
+  switch (phenotype) {
+    case "HOMECOMER": {
+      const h = player.homecomings[player.homecomings.length - 1];
+      if (!h) break;
+      return `Nach ${h.yearsAway} ${h.yearsAway === 1 ? "Jahr" : "Jahren"} bei anderen Vereinen kehrtest du zu ${
+        h.clubName
+      } zurück - dort, wo du zwischen ${h.firstSpellStartAge} und ${h.firstSpellEndAge} bereits ${h.firstSpellSeasons} prägende ${
+        h.firstSpellSeasons === 1 ? "Saison" : "Saisons"
+      } verbracht hattest.`;
+    }
+    case "JOURNEYMAN":
+      return `${player.clubChangesCount} Vereinswechsel prägten deine Laufbahn - kaum ein Umfeld, in dem du lange geblieben bist.`;
+    case "ONE_CLUB_LEGEND":
+      return `${player.seasonHistory.length} Saisons lang bist du ${player.club.name} treu geblieben, ohne je den Verein zu wechseln.`;
+    case "TROPHY_COLLECTOR":
+      return `${player.careerTotals.trophies.length} Titel zieren deine Vitrine - eine der großen Titel-Sammlungen des Fußballs.`;
+    case "NATIONAL_TEAM_ICON":
+      return `${player.nationalTeamCaps} Länderspiele${
+        player.nationalTeamGoals > 0 ? ` und ${player.nationalTeamGoals} Tore für die Nationalmannschaft` : ""
+      } - über Jahre fester Bestandteil des Nationalteams.`;
+    case "INJURY_PRONE_SURVIVOR":
+      return `Trotz ${player.totalInjuryWeeks} Wochen Verletzungspause über die Karriere hinweg hast du dich immer wieder zurückgekämpft.`;
+    case "BOOM_OR_BUST_MOVER": {
+      const boomCount = narrative.decisionImpacts.filter((d) => d.perfImpact !== null && d.perfImpact > 15).length;
+      const bustCount = narrative.decisionImpacts.filter((d) => d.perfImpact !== null && d.perfImpact < -15).length;
+      if (boomCount + bustCount === 0) break;
+      return `${boomCount + bustCount} große, riskante Wechsel-Entscheidungen prägten deine Karriere - ${boomCount} davon zahlten sich spürbar aus, ${bustCount} kosteten dich wichtige Zeit.`;
+    }
+    case "WONDERKIND_DELIVERED":
+      return `Als frühes Ausnahmetalent gehandelt, erreichtest du eine Spitzenstärke von ${narrative.peakOverall} - das Versprechen wurde eingelöst.`;
+    case "WONDERKIND_BUST":
+      return `Als frühes Ausnahmetalent gehandelt, blieb deine Karriere bei einer Spitzenstärke von ${narrative.peakOverall} unter den einstigen Erwartungen.`;
+    case "CEILING_BREAKER": {
+      const c = narrative.ceilingBreaks[narrative.ceilingBreaks.length - 1];
+      if (!c) break;
+      return `Mit ${c.age} Jahren bist du über das erwartete Limit bei ${ATTRIBUTE_LABEL[c.attribute]} hinausgewachsen - mehr, als das Talent allein vorgab.`;
+    }
+    default:
+      break;
+  }
+  return CAREER_PHENOTYPE_DESCRIPTION[phenotype];
+}
+
 /** Anzeige-Labels für `TransferDecisionType` (siehe `classifyTransferDecision` in
  * careerEngine.ts). */
 export const TRANSFER_DECISION_LABEL: Record<TransferDecisionType, string> = {
@@ -243,6 +304,14 @@ export function describeCareerMomentum(state: CareerNarrativeState, player: Play
       ? { headline: "Die Heimkehr hat sich ausgezahlt", text: "Die Rückkehr zu vertrautem Umfeld hat sich gelohnt - du hast dich durchgesetzt." }
       : { headline: "Durchbruch", text: "Der mutige Schritt hat sich ausgezahlt - du hast dich durchgesetzt." };
   }
+  // Symmetrisches Gegenstück (siehe `advanceNarrativeThread`, "BIG_MOVE_STALLED") -
+  // kein erzwungenes Happy End, aber auch der ausgebliebene Durchbruch verdient
+  // eine kurze, ehrliche Einordnung, statt kommentarlos zu verschwinden.
+  if (lastHistory?.type === "BIG_MOVE_STALLED" && player.seasonHistory.length - lastHistory.season <= 1) {
+    return lastHistory.label.includes("Heimkehr")
+      ? { headline: "Die Heimkehr blieb eine Randnotiz", text: "Der erhoffte zweite Frühling an alter Wirkungsstätte ist bislang ausgeblieben." }
+      : { headline: "Kein Durchbruch", text: "Der mutige Schritt hat sich bislang nicht ausgezahlt wie erhofft." };
+  }
 
   // Frisch erkannte Heimkehr OHNE (mehr) aktiven Thread - z.B. weil der Thread
   // schon neutral ausgelaufen ist, die Rückkehr aber noch die jüngste prägende
@@ -281,6 +350,22 @@ export function describeCareerMomentum(state: CareerNarrativeState, player: Play
     }
     // Mittleres Feld ohne klare Tendenz: kein erzwungener Text, das generische
     // Trend-System unten übernimmt (siehe Vorgabe: "nicht jede Saison zwanghaft").
+  }
+
+  // Muster über mehrere Transferentscheidungen hinweg (siehe Folgevorgabe
+  // "Transferentscheidungen: sichtbare Prognose + Narrative Integration"
+  // Abschnitt 4/5: "Der Spieler soll nicht mit 22 bereits gesagt bekommen: Du
+  // bist ein Journeyman" - deshalb bewusst nur ein knapper, VORLÄUFIGER Hinweis
+  // aus den letzten 3 Entscheidungen, KEIN Zustand/State, keine Wertung. Der
+  // finale Phänotyp bleibt CareerEnd vorbehalten (siehe Datei-Kommentar oben).
+  const recentDecisions = player.transferDecisions.slice(-3);
+  const recentAmbitious = recentDecisions.filter((d) => d.type === "UPWARD_MOVE" || d.type === "PRESTIGE_RISK_MOVE").length;
+  const recentPlayingTime = recentDecisions.filter((d) => d.type === "PLAYING_TIME_MOVE").length;
+  if (recentAmbitious >= 2) {
+    return { headline: "Ambitionierter Weg", text: "Deine letzten Wechsel waren ungewöhnlich ambitioniert - du suchst konsequent den nächsten großen Schritt." };
+  }
+  if (recentPlayingTime >= 2) {
+    return { headline: "Fokus auf Spielzeit", text: "Du hast dich in den letzten Jahren mehrfach bewusst für Einsatzzeit statt Prestige entschieden." };
   }
 
   const perfRising = state.performanceTrend === "rising";
@@ -325,6 +410,12 @@ export function describeSeasonNarrative(stats: SeasonStats, state: CareerNarrati
     return lastHistory.label.includes("Heimkehr")
       ? { headline: "Die Heimkehr hat sich ausgezahlt", text: "Deine Rückkehr zu vertrautem Umfeld trägt spürbar Früchte." }
       : { headline: "Durchbruch", text: "Deine Leistungen haben ein neues Niveau erreicht." };
+  }
+  // Symmetrisches Gegenstück (siehe `advanceNarrativeThread`, "BIG_MOVE_STALLED").
+  if (lastHistory && lastHistory.season === player.seasonHistory.length - 1 && lastHistory.type === "BIG_MOVE_STALLED") {
+    return lastHistory.label.includes("Heimkehr")
+      ? { headline: "Die Heimkehr blieb eine Randnotiz", text: "Der erhoffte zweite Frühling an alter Wirkungsstätte ist bislang ausgeblieben." }
+      : { headline: "Kein Durchbruch", text: "Der mutige Schritt hat sich bislang nicht ausgezahlt wie erhofft." };
   }
   if (state.activeThread?.isHomecoming && state.activeThread.stage === "STRUGGLE") {
     return { headline: "Schwierige Heimkehr-Saison", text: "Trotz der vertrauten Umgebung war deine Rolle unsicherer, als du es dir erhofft hattest." };
