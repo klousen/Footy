@@ -432,6 +432,26 @@ export function pickSeasonTemplateIds(
     const prev = lastCategorySeason.get(t.category);
     if (prev === undefined || last > prev) lastCategorySeason.set(t.category, last);
   }
+  // Wie STARK eine Kategorie die UNMITTELBAR VORHERIGE Saison geprägt hat (nicht nur
+  // OB sie überhaupt vorkam, siehe `lastCategorySeason`/`categoryRecencyFactor` oben) -
+  // rein aus `recentTemplateSeasons` abgeleitet, kein zusätzliches persistiertes Feld
+  // nötig (derselbe Ableitungs-Trick wie bei `lastCategorySeason`). Eine Saison mit
+  // z.B. drei "training"-Events soll "training" fürs kommende Jahr spürbar seltener
+  // machen als eine Saison mit nur einem solchen Event - Bugreport "fühlt sich
+  // repetitiv an, dieselbe Art Ereignis kommt Jahr für Jahr wieder".
+  const previousSeasonCategoryCount = new Map<string, number>();
+  for (const t of EVENT_TEMPLATES) {
+    if (recentTemplateSeasons[t.id] !== seasonNumber - 1) continue;
+    previousSeasonCategoryCount.set(t.category, (previousSeasonCategoryCount.get(t.category) ?? 0) + 1);
+  }
+  // Harte Obergrenze pro Kategorie UND Saison (siehe unten in der Zieh-Schleife) -
+  // die weichen Faktoren oben/unten dämpfen Wiederholungen nur graduell, eine
+  // ungünstige Zufallsserie konnte trotzdem z.B. drei "training"-Events in
+  // derselben Saison ergeben. Bewusst kein hartes Verbot (nur EIN fallback-freier
+  // Deckel statt eines starren Rotationsmusters, siehe Vorgabe "es muss nicht
+  // immer ein Muster sein") - greift nur, wenn der Pool noch echte Alternativen
+  // in anderen Kategorien hergibt (siehe `hasCategoryAlternative` unten).
+  const CATEGORY_SEASON_CAP = 2;
 
   // Während einer laufenden Verletzung sollen Reha-Ereignisse den Ereignis-Pool
   // spürbar dominieren, statt nur gleichberechtigt neben Medien/Lifestyle/etc.
@@ -439,10 +459,24 @@ export function pickSeasonTemplateIds(
   const injured = !!player.injury && player.injury.weeksOut > 0;
 
   for (let i = 0; i < targetCount && localPool.length > 0; i++) {
+    // Deckel greift NUR, wenn der Pool noch echte Alternativen in ANDEREN
+    // Kategorien hergibt - sonst würde er in einem ohnehin schmalen Pool
+    // (z.B. sehr junger Spieler mit fast nur "jugend"/"training"-Templates)
+    // die Saison unnötig vor `targetCount` abbrechen lassen (dasselbe
+    // "Trim-statt-Erzwingen"-Prinzip wie an anderen Stellen dieser Datei).
+    const overCapCategories = new Set(
+      [...usedCategoriesThisSeason.entries()].filter(([, c]) => c >= CATEGORY_SEASON_CAP).map(([cat]) => cat)
+    );
+    const hasCategoryAlternative = localPool.some((t) => !overCapCategories.has(t.category));
     const weights = localPool.map((t) => {
       // Kategorie-Wiederholungen innerhalb derselben Saison abschwächen
       const usedCount = usedCategoriesThisSeason.get(t.category) ?? 0;
       const categoryFactor = 1 / (1 + usedCount * 1.5);
+      // Harter (aber fallback-freundlicher) Deckel: eine Kategorie, die diese
+      // Saison schon `CATEGORY_SEASON_CAP`-mal dran war, fällt komplett raus,
+      // SOFERN der Pool noch etwas anderes hergibt - kein starres Muster,
+      // sondern nur eine Obergrenze innerhalb der ohnehin gewichteten Auswahl.
+      const categoryCapFactor = hasCategoryAlternative && overCapCategories.has(t.category) ? 0 : 1;
       // Auch nach dem harten Sperrfenster klingt die Wahrscheinlichkeit noch nach
       const lastSeason = recentTemplateSeasons[t.id];
       const recencyFactor =
@@ -452,6 +486,12 @@ export function pickSeasonTemplateIds(
       const catLastSeason = lastCategorySeason.get(t.category);
       const categoryRecencyFactor =
         catLastSeason === undefined ? 1 : clamp((seasonNumber - catLastSeason) / 2, 0.4, 1);
+      // ZUSÄTZLICH zur reinen "war sie kürzlich dran"-Dämpfung oben: WIE OFT die
+      // Kategorie in der UNMITTELBAR VORHERIGEN Saison konkret vorkam - eine Saison
+      // mit drei "training"-Events soll "training" fürs Folgejahr stärker bremsen
+      // als eine mit nur einem. Bodensatz 0.3 statt 0, damit auch eine letztes Jahr
+      // dominante Kategorie theoretisch wieder drankommen kann (keine starre Sperre).
+      const previousSeasonWeightFactor = clamp(1 - (previousSeasonCategoryCount.get(t.category) ?? 0) * 0.25, 0.3, 1);
       const injuryFocusFactor = injured && t.category === "verletzung" ? 4 : 1;
       // "Zweiter Frühling" (siehe `applyEffects`): nach einer kinderlosen Trennung
       // sind "neue Beziehung"-Templates (exclusiveGroup "beziehung_start") für
@@ -464,7 +504,17 @@ export function pickSeasonTemplateIds(
       // erzwingen (bleibt Teil derselben gewichteten Auswahl). Neutral (Faktor 1),
       // wenn kein `dynamicWeight` definiert ist.
       const dynamicFactor = t.dynamicWeight ? Math.max(0, t.dynamicWeight(player)) : 1;
-      return t.weight * categoryFactor * recencyFactor * categoryRecencyFactor * injuryFocusFactor * secondSpringFactor * dynamicFactor;
+      return (
+        t.weight *
+        categoryFactor *
+        categoryCapFactor *
+        recencyFactor *
+        categoryRecencyFactor *
+        previousSeasonWeightFactor *
+        injuryFocusFactor *
+        secondSpringFactor *
+        dynamicFactor
+      );
     });
     const totalWeight = weights.reduce((a, b) => a + b, 0);
     let r = rng() * totalWeight;
@@ -4831,82 +4881,22 @@ export function pickPostCareerPath(player: Player): string {
   return choosePostCareerOutcome(player).path;
 }
 
-function topAttributeHighlight(player: Player): { label: string; value: number } {
-  let bestKey = ATTRIBUTE_ORDER[0];
-  let bestVal = -Infinity;
-  for (const key of ATTRIBUTE_ORDER) {
-    if (player.attributes[key] > bestVal) {
-      bestVal = player.attributes[key];
-      bestKey = key;
-    }
-  }
-  return { label: ATTRIBUTE_LABEL[bestKey], value: bestVal };
-}
-
-function topTraitHighlight(player: Player): { label: string; value: number } {
-  let bestKey = TRAIT_ORDER[0];
-  let bestVal = -Infinity;
-  for (const key of TRAIT_ORDER) {
-    if (player.traits[key] > bestVal) {
-      bestVal = player.traits[key];
-      bestKey = key;
-    }
-  }
-  return { label: TRAIT_LABEL[bestKey], value: bestVal };
-}
-
-/** Fasst den Beziehungsstatus + Kinder zu einem Satz zusammen - die "Lebensentscheidungen"
- * abseits des Platzes, die während der Karriere getroffen wurden. */
-function familyLine(player: Player): string {
-  const hasKidsClause = player.children === 0 ? "" : player.children === 1 ? " und hat ein Kind" : ` und hat ${player.children} Kinder`;
-  switch (player.relationshipStatus) {
-    case "verheiratet":
-      return `Privat ist ${player.name} verheiratet${hasKidsClause}.`;
-    case "verlobt":
-      return `Privat ist ${player.name} verlobt${hasKidsClause}.`;
-    case "in_beziehung":
-      return `Privat führt ${player.name} eine feste Beziehung${hasKidsClause}.`;
-    default:
-      return player.children > 0
-        ? `Privat ist ${player.name} alleinerziehend mit ${player.children === 1 ? "einem Kind" : `${player.children} Kindern`}.`
-        : `Privat blieb ${player.name} während der aktiven Karriere ungebunden.`;
-  }
-}
-
-/** "Vereinsgeschichte" ist nur angebracht, wenn ein Klub tatsächlich die Mehrheit
- * der Karriere getragen hat - bei einer Karriere quer durch mehrere Vereine ohne
- * klaren Schwerpunkt wäre die Zuschreibung an einen einzelnen Verein irreführend,
- * dann geht die Karriere allgemeiner in die "Fußballgeschichte" ein. */
-function clubLegacyPhrase(player: Player, tier: string): string {
-  const dominance = clubDominance(player);
-  if (dominance && dominance.share > 0.5) {
-    return `Die Karriere geht als "${tier}" in die Vereinsgeschichte von ${dominance.club} ein.`;
-  }
-  return `Die Karriere geht als "${tier}" in die Fußballgeschichte ein.`;
-}
-
-export function buildEpilogue(player: Player, tier: string): string {
+/**
+ * Bewusst NUR der eine knappe Eröffnungssatz (Jahre/Tore/Vorlagen/Titel) - das
+ * ausführlichere Vereins-/Charakter-/Familien-/Post-Karriere-Prosa lebte hier
+ * früher als mehrsätziger Fließtext, wurde aber als redundant zum direkt
+ * darunter angezeigten "Karrierebogen"-Panel empfunden (Phänotyp-Chips,
+ * prägende Entscheidung, prägende Momente - siehe `CareerEnd.tsx`). Ein
+ * einziger, knackiger Einstiegssatz vor diesem Panel wirkt weniger redundant
+ * als zwei sich überschneidende Erzähl-Blöcke direkt untereinander.
+ */
+export function buildEpilogue(player: Player, _tier: string): string {
   const years = player.age - player.birthAge;
   const trophyText =
     player.careerTotals.trophies.length > 0
       ? `${player.careerTotals.trophies.length} Titel in der Vitrine`
       : "keinem Titel, aber vielen unvergesslichen Momenten";
-  const intro = `Nach ${years} Jahren im Profifußball beendet ${player.name} die aktive Karriere mit ${player.careerTotals.goals} Toren, ${player.careerTotals.assists} Vorlagen und ${trophyText}. ${clubLegacyPhrase(player, tier)}`;
-
-  const topAttr = topAttributeHighlight(player);
-  const topTrait = topTraitHighlight(player);
-  const attrLine = `Auf dem Platz war ${player.name} vor allem für ${topAttr.label} (${topAttr.value}) bekannt, abseits des Rasens für ${topTrait.label} (${topTrait.value}).`;
-
-  const outcome = choosePostCareerOutcome(player);
-
-  // Ein karriereprägender Moment (siehe "historisches_spiel_1") rahmt die Karriere
-  // rückblickend - namentlich für immer mit diesem einen Ereignis verknüpft, egal
-  // wie die restliche Karriere sonst verlief.
-  const definingMomentLine = player.definingMoment
-    ? ` Bis heute wird ${player.name} vor allem mit einem einzigen Moment in Verbindung gebracht: ${player.definingMoment.text}`
-    : "";
-
-  return [intro, attrLine, familyLine(player), outcome.line(player.name) + definingMomentLine].join(" ");
+  return `Nach ${years} Jahren im Profifußball beendet ${player.name} die aktive Karriere mit ${player.careerTotals.goals} Toren, ${player.careerTotals.assists} Vorlagen und ${trophyText}.`;
 }
 
 export function buildRetirementEvent(player: Player): GameEvent {
