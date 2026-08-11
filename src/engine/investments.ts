@@ -21,7 +21,7 @@
 // entspricht der Vorgabe "Investments sollen bestehende Narrative unterstützen,
 // nicht die Narrative-Engine aufblasen".
 import { clamp } from "./data";
-import type { Player, PersonalInvestmentId, LogEntry } from "./types";
+import type { AttributeKey, Player, PersonalInvestmentId, LogEntry } from "./types";
 import { ATTRIBUTE_LABEL } from "./labels";
 
 export interface InvestmentDefinition {
@@ -30,8 +30,11 @@ export interface InvestmentDefinition {
   /** Kurzer, nutzerfacing Effekt-Text OHNE Zahlen (siehe Vorgabe "keine
    * komplizierten Zahlenboni") - für die Angebots-Karte im Dashboard-Panel. */
   effectSummary: string;
-  /** Etwas ausführlicherer Flavor-Satz für den Log-Eintrag bei Aktivierung. */
-  narrativeFlavor: (player: Player) => string;
+  /** Etwas ausführlicherer Flavor-Satz für den Log-Eintrag bei Aktivierung.
+   * `targetAttribute` ist NUR bei "spezialtraining" gesetzt (das bei jeder
+   * Aktivierung frei wählbare Fokusattribut, siehe `ActiveInvestment.
+   * targetAttribute`). */
+  narrativeFlavor: (player: Player, targetAttribute?: AttributeKey) => string;
   durationSeasons: number;
   cooldownSeasons: number;
   /** Kostenformel (siehe Vorgabe): `clamp(Jahresgehalt × investmentFactor,
@@ -63,7 +66,8 @@ const investmentDefinitions: InvestmentDefinition[] = [
     id: "spezialtraining",
     label: "Spezialtraining",
     effectSummary: `Erhöht die Chance auf kleine Fortschritte beim gewählten Fokusattribut.`,
-    narrativeFlavor: (p) => `${p.name} bucht ein maßgeschneidertes Spezialtraining mit Schwerpunkt ${ATTRIBUTE_LABEL[p.focusAttribute]}.`,
+    narrativeFlavor: (p, targetAttribute) =>
+      `${p.name} bucht ein maßgeschneidertes Spezialtraining mit Schwerpunkt ${ATTRIBUTE_LABEL[targetAttribute ?? p.focusAttribute]}.`,
     durationSeasons: 2,
     cooldownSeasons: 2,
     costFactor: 0.1,
@@ -160,13 +164,27 @@ export function hasActiveInvestment(player: Player, id: PersonalInvestmentId): b
   return player.activeInvestment?.id === id;
 }
 
+/** Dieselben vier Kombinationen wie bei der "Frühe Stärke"-Wahl der
+ * Charaktererstellung (siehe `EARLY_FOCUS_OPTIONS` in ui/labels.ts) - hier als
+ * reine Attribut-Liste für die Validierung in `activateInvestment` (KEINE
+ * Duplikation der UI-Hinweistexte, die bleiben Sache der UI-Schicht). */
+export const SPECIAL_TRAINING_FOCUS_ATTRIBUTES: AttributeKey[] = ["technik", "tempo", "physis", "mentalitaet"];
+
 /** Aktiviert ein Investment - zieht die Kosten ab, setzt `activeInvestment`,
  * gibt einen Log-Eintrag zurück (`null`, falls die Voraussetzungen nicht mehr
  * gelten - Sicherheitsnetz für den Event-Auslöse-Pfad, siehe
  * `EffectDelta.activateInvestmentId`, dasselbe Prinzip wie `quietWeekFallback`
  * bei Events: zwischen Anzeige und tatsächlicher Anwendung kann sich der
- * Spielerzustand geändert haben). */
-export function activateInvestment(player: Player, id: PersonalInvestmentId, season: number): LogEntry | null {
+ * Spielerzustand geändert haben). `targetAttribute` ist NUR für
+ * "spezialtraining" relevant (siehe `ActiveInvestment.targetAttribute`) - bei
+ * fehlender/ungültiger Wahl (z.B. Aktivierung über ein Event statt das
+ * Dashboard-Panel) fällt es auf `Player.focusAttribute` zurück. */
+export function activateInvestment(
+  player: Player,
+  id: PersonalInvestmentId,
+  season: number,
+  targetAttribute?: AttributeKey
+): LogEntry | null {
   const def = INVESTMENT_DEFINITIONS[id];
   if (!def.isUnlocked(player)) return null;
   if (player.activeInvestment) return null;
@@ -175,7 +193,13 @@ export function activateInvestment(player: Player, id: PersonalInvestmentId, sea
   if (player.wealth < cost) return null;
 
   player.wealth -= cost;
-  player.activeInvestment = { id, seasonsRemaining: def.durationSeasons };
+  const resolvedTarget =
+    id === "spezialtraining"
+      ? targetAttribute && SPECIAL_TRAINING_FOCUS_ATTRIBUTES.includes(targetAttribute)
+        ? targetAttribute
+        : player.focusAttribute
+      : undefined;
+  player.activeInvestment = { id, seasonsRemaining: def.durationSeasons, targetAttribute: resolvedTarget };
 
   // Reha-Experte: sofortige, moderate Verkürzung der LAUFENDEN Ausfallzeit
   // statt eines mehrjährigen Passiv-Effekts (siehe Definitions-Kommentar oben).
@@ -188,7 +212,7 @@ export function activateInvestment(player: Player, id: PersonalInvestmentId, sea
   return {
     season,
     age: player.age,
-    text: def.narrativeFlavor(player),
+    text: def.narrativeFlavor(player, resolvedTarget),
     kind: "positive",
   };
 }

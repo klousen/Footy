@@ -21,3 +21,16 @@ export {
   TREND_LABEL,
 } from "../engine/labels";
 export type { OverallTier, NarrativeMomentumText } from "../engine/labels";
+
+import type { AttributeKey } from "../engine/types";
+
+/** Dieselben vier Kombinationen wie bei der "Frühe Stärke"-Wahl in der
+ * Charaktererstellung (siehe `CreatePlayer.tsx`) - EINE gemeinsame Quelle,
+ * damit z.B. das Spezialtraining-Investment (siehe `InvestmentPanel.tsx`)
+ * exakt dieselbe Auswahl anbietet statt einer eigenen, abweichenden Liste. */
+export const EARLY_FOCUS_OPTIONS: { value: AttributeKey; hint: string }[] = [
+  { value: "technik", hint: "Ballgefühl, Dribbling, Präzision" },
+  { value: "tempo", hint: "Antritt, Sprintstärke" },
+  { value: "physis", hint: "Kraft, Zweikampf, Ausdauer" },
+  { value: "mentalitaet", hint: "Nervenstärke, Wille" },
+];

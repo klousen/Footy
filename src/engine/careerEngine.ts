@@ -1918,8 +1918,14 @@ export function ageUpPlayer(player: Player): void {
       // "Spezialtraining" (siehe investments.ts): erhöht die Wahrscheinlichkeit
       // kleiner Fortschritte GEZIELT beim gewählten Fokusattribut, statt pauschal
       // auf alle sechs Attribute zu wirken wie der Privattrainer oben - deutlich
-      // kleiner Multiplikator, betrifft nur `player.focusAttribute`.
-      const specialTrainingMultiplier = hasActiveInvestment(player, "spezialtraining") && key === player.focusAttribute ? 1.12 : 1;
+      // kleiner Multiplikator, betrifft nur das bei DIESER Aktivierung gewählte
+      // Attribut (`activeInvestment.targetAttribute`), nicht zwingend das feste
+      // `player.focusAttribute` aus der Charaktererstellung (siehe
+      // `ActiveInvestment.targetAttribute` in types.ts).
+      const specialTrainingMultiplier =
+        hasActiveInvestment(player, "spezialtraining") && key === (player.activeInvestment?.targetAttribute ?? player.focusAttribute)
+          ? 1.12
+          : 1;
       rawDelta =
         gRate *
         room *

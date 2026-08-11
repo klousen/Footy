@@ -928,6 +928,16 @@ export interface ActiveInvestment {
    * (careerEngine.ts, über `tickInvestments` in investments.ts) am Saisonende
    * dekrementiert; bei 0 läuft das Investment aus und der Cooldown startet. */
   seasonsRemaining: number;
+  /** NUR für "spezialtraining" relevant: bei JEDER Aktivierung frei wählbares
+   * Fokusattribut (dieselben vier Kombinationen wie bei der "Frühe Stärke"-Wahl
+   * der Charaktererstellung, siehe `EARLY_FOCUS_OPTIONS` in ui/labels.ts) -
+   * unabhängig von `Player.focusAttribute` (der einmalige Wert aus der
+   * Charaktererstellung selbst), damit sich der Trainingsschwerpunkt über die
+   * Karriere hinweg verschieben kann. `undefined` bei allen anderen
+   * Investments sowie bei einer Aktivierung ohne explizite Wahl (z.B. über ein
+   * Event statt das Dashboard-Panel) - fällt dann auf `Player.focusAttribute`
+   * zurück (siehe `ageUpPlayer`). */
+  targetAttribute?: AttributeKey;
 }
 
 /**

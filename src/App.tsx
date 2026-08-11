@@ -580,10 +580,10 @@ export default function App() {
   // Persönliches Investment-Panel im Dashboard (siehe investments.ts) -
   // Aktivierung ist eine direkte Nutzeraktion, kein Event-/Entscheidungs-Flow,
   // daher hier eine eigene, schlanke Handler-Funktion statt über `handleChoice`.
-  function handleActivateInvestment(id: PersonalInvestmentId) {
+  function handleActivateInvestment(id: PersonalInvestmentId, targetAttribute?: AttributeKey) {
     if (!game.player) return;
     const player = game.player;
-    const entry = activateInvestment(player, id, game.seasonNumber);
+    const entry = activateInvestment(player, id, game.seasonNumber, targetAttribute);
     if (entry) player.log.push(entry);
     setGame({ ...game, player: { ...player } });
   }

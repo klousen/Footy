@@ -1,5 +1,5 @@
 import { useState } from "react";
-import type { LeagueState, Player, PersonalInvestmentId } from "../engine/types";
+import type { AttributeKey, LeagueState, Player, PersonalInvestmentId } from "../engine/types";
 import { POSITION_LABEL, overallRatingFromAttributes } from "../engine/types";
 import { computeCareerNarrativeState, overallRating, seasonLabelForNumber, squadRoleLabel } from "../engine/careerEngine";
 import { availableInvestmentIds, INVESTMENT_DEFINITIONS } from "../engine/investments";
@@ -7,7 +7,7 @@ import { leagueNameForTier } from "../engine/leagueEngine";
 import { AttributeBars } from "./AttributeBars";
 import { TraitBars } from "./TraitBars";
 import { StoryThreads } from "./StoryThreads";
-import { describeCareerMomentum, formatMoney, overallTier, RELATIONSHIP_LABEL } from "./labels";
+import { ATTRIBUTE_LABEL, describeCareerMomentum, formatMoney, overallTier, RELATIONSHIP_LABEL } from "./labels";
 import { StatBox } from "./StatBox";
 import { Timeline } from "./Timeline";
 import { InvestmentPanel } from "./InvestmentPanel";
@@ -23,7 +23,7 @@ export function Dashboard({
   league: LeagueState;
   seasonNumber: number;
   onStartSeason: () => void;
-  onActivateInvestment: (id: PersonalInvestmentId) => void;
+  onActivateInvestment: (id: PersonalInvestmentId, targetAttribute?: AttributeKey) => void;
 }) {
   const [showTimeline, setShowTimeline] = useState(false);
   const [showInvestments, setShowInvestments] = useState(false);
@@ -113,9 +113,11 @@ export function Dashboard({
           aktiv ist, ohne das Panel extra öffnen zu müssen. */}
       <button type="button" className="btn btn-outline-gold" onClick={() => setShowInvestments(true)}>
         {player.activeInvestment
-          ? `💼 ${INVESTMENT_DEFINITIONS[player.activeInvestment.id].label} · noch ${player.activeInvestment.seasonsRemaining} Saison${
-              player.activeInvestment.seasonsRemaining === 1 ? "" : "en"
-            }`
+          ? `💼 ${INVESTMENT_DEFINITIONS[player.activeInvestment.id].label}${
+              player.activeInvestment.id === "spezialtraining"
+                ? ` (${ATTRIBUTE_LABEL[player.activeInvestment.targetAttribute ?? player.focusAttribute]})`
+                : ""
+            } · noch ${player.activeInvestment.seasonsRemaining} Saison${player.activeInvestment.seasonsRemaining === 1 ? "" : "en"}`
           : availableInvestmentIds(player).length > 0
           ? "💼 Investment verfügbar"
           : "💼 Persönliches Umfeld"}
@@ -171,8 +173,8 @@ export function Dashboard({
       {showInvestments && (
         <InvestmentPanel
           player={player}
-          onActivate={(id) => {
-            onActivateInvestment(id);
+          onActivate={(id, targetAttribute) => {
+            onActivateInvestment(id, targetAttribute);
             setShowInvestments(false);
           }}
           onClose={() => setShowInvestments(false)}

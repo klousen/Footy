@@ -1,14 +1,7 @@
 import { useState } from "react";
 import type { AttributeKey, Position } from "../engine/types";
 import { POSITION_OPTIONS } from "../engine/data";
-import { ATTRIBUTE_LABEL } from "./labels";
-
-const FOCUS_OPTIONS: { value: AttributeKey; hint: string }[] = [
-  { value: "technik", hint: "Ballgefühl, Dribbling, Präzision" },
-  { value: "tempo", hint: "Antritt, Sprintstärke" },
-  { value: "physis", hint: "Kraft, Zweikampf, Ausdauer" },
-  { value: "mentalitaet", hint: "Nervenstärke, Wille" },
-];
+import { ATTRIBUTE_LABEL, EARLY_FOCUS_OPTIONS } from "./labels";
 
 export function CreatePlayer({ onCreate }: { onCreate: (name: string, position: Position, focus: AttributeKey) => void }) {
   const [name, setName] = useState("");
@@ -52,7 +45,7 @@ export function CreatePlayer({ onCreate }: { onCreate: (name: string, position: 
       <div className="field">
         <span>Frühe Stärke</span>
         <div className="option-grid">
-          {FOCUS_OPTIONS.map((opt) => (
+          {EARLY_FOCUS_OPTIONS.map((opt) => (
             <button
               key={opt.value}
               type="button"

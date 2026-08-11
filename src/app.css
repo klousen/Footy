@@ -2684,3 +2684,23 @@ input:focus {
 .investment-card .btn {
   align-self: flex-start;
 }
+
+/* Fokusattribut-Wahl beim Spezialtraining-Investment (siehe InvestmentPanel.tsx) -
+   dasselbe .option-grid/.option-card-Muster wie bei der "Frühe Stärke"-Wahl in
+   der Charaktererstellung, hier etwas kompakter, da bereits in einer engeren
+   .investment-card verschachtelt statt auf einem eigenen Vollbild-Screen. */
+.investment-focus-field {
+  gap: 6px;
+}
+
+.option-grid-compact {
+  gap: 6px;
+}
+
+.option-grid-compact .option-card {
+  padding: 8px 10px;
+}
+
+.option-grid-compact .option-card span {
+  font-size: 0.72rem;
+}
