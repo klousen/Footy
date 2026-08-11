@@ -230,7 +230,7 @@ export function createPlayer(
 
   const league = buildLeagueState(countryId, rng);
 
-  // Drei Vereine aus Liga 2 bieten dem 14-jährigen Talent einen Akademieplatz an -
+  // Drei Vereine aus Liga 2 bieten dem 16-jährigen Talent einen Akademieplatz an -
   // bewusst über die Stärkespanne verteilt (schwach/mittel/stark), damit es eine
   // echte Wahl ist.
   const offers = pickSpreadClubOffers(league.tier2, rng, 3);
@@ -244,10 +244,7 @@ export function createPlayer(
     strength: placeholder.strength,
   };
 
-  return {
-    league,
-    offers,
-    player: {
+  const player: Player = {
       name,
       country: countryId,
       homeCountryId: countryId,
@@ -334,8 +331,24 @@ export function createPlayer(
       focusAttribute: focusAttr,
       activeInvestment: null,
       investmentCooldowns: {},
-    },
   };
+
+  // Der Spieler wird erst mit 16 steuerbar (siehe `birthAge`/`age` oben, Basis-
+  // Wurf ist bewusst weiter der eines 14-Jährigen) - die zwei "unsichtbaren"
+  // Jugendjahre 14->16 werden hier mit derselben Wachstumsformel simuliert, die
+  // auch sonst jede Saison anwendet (`ageUpPlayer`), statt die Start-Attribute
+  // separat von Hand hochzurechnen. Dadurch bleiben Potenzial-Streuung,
+  // Archetyp-Skew, Wunderkind-Bonus und Entwicklungstrajektorie exakt so
+  // wirksam wie im echten Wachstumsmodell, nur eben schon "vorgespult". Alle
+  // Nebenwirkungen von `ageUpPlayer` (Fitness-Reset, Vertragslaufzeit, ...)
+  // sind bei einem frisch erstellten Spieler unbedenklich bzw. werden direkt im
+  // Anschluss (Vertrag) oder in `finalizeYouthClub` (Log, Vertrag) überschrieben.
+  ageUpPlayer(player);
+  ageUpPlayer(player);
+  player.birthAge = 16;
+  player.contract.yearsLeft = 3;
+
+  return { league, offers, player };
 }
 
 /** Schließt die Auswahl der Jugendakademie ab (Karrierestart-Bildschirm). */

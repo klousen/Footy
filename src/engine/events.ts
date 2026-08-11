@@ -186,7 +186,7 @@ export const EVENT_TEMPLATES: EventTemplate[] = [
     id: "jugend_schule",
     category: "jugend",
     minAge: 14,
-    maxAge: 16,
+    maxAge: 17,
     weight: 3,
     build: (p) => ({
       category: "jugend",
@@ -217,8 +217,8 @@ export const EVENT_TEMPLATES: EventTemplate[] = [
   {
     id: "jugend_probetraining",
     category: "jugend",
-    minAge: 14,
-    maxAge: 15,
+    minAge: 16,
+    maxAge: 17,
     weight: 2,
     unique: true,
     build: () => ({
@@ -267,7 +267,7 @@ export const EVENT_TEMPLATES: EventTemplate[] = [
     id: "jugend_wachstumsschub",
     category: "jugend",
     minAge: 14,
-    maxAge: 16,
+    maxAge: 17,
     weight: 2,
     build: () => ({
       category: "jugend",
@@ -421,7 +421,7 @@ export const EVENT_TEMPLATES: EventTemplate[] = [
     id: "jugend_elternehrgeiz",
     category: "jugend",
     minAge: 14,
-    maxAge: 16,
+    maxAge: 17,
     weight: 1,
     build: () => ({
       category: "jugend",
@@ -445,7 +445,7 @@ export const EVENT_TEMPLATES: EventTemplate[] = [
     id: "jugend_heimweh_internat",
     category: "lifestyle",
     minAge: 14,
-    maxAge: 16,
+    maxAge: 17,
     weight: 1,
     build: (p) => ({
       category: "lifestyle",
