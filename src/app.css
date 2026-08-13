@@ -2798,11 +2798,24 @@ input:focus {
 }
 
 .tw-rays {
+  /* Vorher exakt `inset: 0` (gleich groß wie `.tw-backdrop`) - ein gleich
+     großes Rechteck, das um einen Punkt rotiert, deckt sein eigenes
+     Overflow-Clip-Fenster aber NICHT bei jedem Winkel voll ab: die geraden
+     Kanten des Rechtecks wandern sichtbar durchs Bild (Nutzer-Feedback "man
+     sieht seinen Rahmen"). Stattdessen ein deutlich größeres Quadrat (400% der
+     Backdrop-Breite/Höhe), zentriert auf denselben Drehpunkt wie vorher
+     (50%/34% der Backdrop-Fläche) statt auf die eigene Mitte - so bleibt der
+     sichtbare Ausschnitt bei jeder Rotation lückenlos gefüllt. */
   position: absolute;
-  inset: 0;
+  top: 34%;
+  left: 50%;
+  width: 400%;
+  height: 400%;
+  margin-top: -200%;
+  margin-left: -200%;
   pointer-events: none;
   background: conic-gradient(
-    from 0deg at 50% 34%,
+    from 0deg at 50% 50%,
     rgba(201, 168, 106, 0.1) 0deg,
     transparent 18deg,
     rgba(201, 168, 106, 0.1) 24deg,
@@ -2835,7 +2848,7 @@ input:focus {
     transparent 360deg
   );
   animation: tw-spin 40s linear infinite;
-  transform-origin: 50% 34%;
+  transform-origin: 50% 50%;
 }
 
 @keyframes tw-spin {
