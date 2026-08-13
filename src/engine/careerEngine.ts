@@ -32,7 +32,7 @@ import type {
 import { detectClubHomecoming, HOMECOMING_MIN_AGE, isNearRetirement, overallRatingFromAttributes } from "./types";
 import { clamp } from "./data";
 import { ATTRIBUTE_LABEL, ATTRIBUTE_ORDER, formatMoney, RELATIONSHIP_LABEL, SQUAD_ROLE_RANK, TRAIT_LABEL, TRAIT_ORDER } from "./labels";
-import { eligibleTemplates, getTemplateById, EVENT_TEMPLATES } from "./events";
+import { eligibleTemplates, getTemplateById, EVENT_TEMPLATES, NATIONAL_CUP_WIN_TEMPLATE_ID } from "./events";
 import {
   computeLoanSummaryTier,
   deriveLoanReason,
@@ -2206,15 +2206,29 @@ function rolePrognosisLabel(role: SquadRole, promiseChance: number): string {
   return "Große Konkurrenz";
 }
 
-/** Kurzer, optionaler Begründungssatz zur Prognose-Kategorie (siehe Vorgabe
- * Abschnitt 4, "optional ein kurzer Grund") - nur gesetzt, wenn der Kaderbedarf
- * (oder bei "lockruf" das aktive Interesse) tatsächlich den Ausschlag gibt,
- * sonst `undefined` (die Prognose-Kategorie allein trägt dann genug Aussage). */
-function rolePrognosisReason(positionDemand: number, reason: ClubOfferReason): string | undefined {
+/** Ampel-Ton für die "Rolle"-Pill der Angebotskarte (siehe `OfferCardData.roleTone`,
+ * Nutzer-Feedback "Stammplatz grün, unklar gelb, rotation usw rot") - ein sicher
+ * versprochener Stammplatz ist grün, derselbe Stammplatz mit unsicherer
+ * Versprechens-Chance (< 70%, siehe `rolePromiseChance`) gilt als "unklar" und
+ * wird gelb (in der UI mit Farbverlauf statt Vollton dargestellt), jede
+ * Rotations-/Bankrolle darunter ist rot. `promiseChance` default 1 für Fälle ohne
+ * echtes Versprechen (z.B. die eigene, aktuell erwartete Rolle beim Profidebüt). */
+function rolePrognosisTone(role: SquadRole, promiseChance = 1): "green" | "yellow" | "red" {
+  if (role === "Stammspieler") return promiseChance >= 0.7 ? "green" : "yellow";
+  return "red";
+}
+
+/** Kurzer Begründungssatz zur Prognose-Kategorie (siehe Vorgabe Abschnitt 4,
+ * "ein kurzer Grund") - IMMER gesetzt (siehe Nutzer-Feedback "bei manchen
+ * Angeboten fehlt der Kontext/Subhead-Text"): bei deutlichem Kaderbedarf (oder
+ * bei "lockruf" dem aktiven Interesse) ein konkreter Grund, sonst ein
+ * neutraler Fallback-Satz für den ausgeglichenen Mittelbereich, statt gar
+ * keinen Subhead anzuzeigen. */
+function rolePrognosisReason(positionDemand: number, reason: ClubOfferReason): string {
   if (positionDemand >= 5) return "Der Verein sucht auf deiner Position nach Verstärkung.";
   if (positionDemand <= -5) return "Auf deiner Position ist der Kader bereits stark besetzt.";
   if (reason === "lockruf") return "Der Verein sieht dich als wichtige Verstärkung.";
-  return undefined;
+  return "Ausgeglichener Konkurrenzkampf um die Position.";
 }
 
 /** Ersetzt den früheren, starren 60/45-Wert für die Vereinsbeziehung nach einem
@@ -2242,7 +2256,12 @@ function computeArrivalTrust(
   const priorRelationCarry = clamp((oldClubRelation - 50) * 0.15, -3, 3);
   const interestBonus = reason === "lockruf" ? 4 : reason === "pressure" ? -2 : 0;
   const positionFitBonus = clamp(positionDemand * 0.3, -3, 3);
-  return clamp(base + reputationBonus + formBonus + priorRelationCarry + interestBonus + positionFitBonus, 28, 82);
+  // Gerundet auf eine ganze Zahl (siehe Nutzer-Feedback "Vereinsbeziehung hat zu
+  // viele Nachkommastellen") - ohne Rundung hier wäre `player.clubRelation` ab
+  // dem ersten Wechsel dauerhaft ein Fließkommawert, weil jede spätere
+  // `clamp(player.clubRelation + X, 0, 100)`-Änderung die Nachkommastellen nur
+  // weiterträgt statt sie zu beseitigen.
+  return Math.round(clamp(base + reputationBonus + formBonus + priorRelationCarry + interestBonus + positionFitBonus, 28, 82));
 }
 
 /**
@@ -3334,6 +3353,7 @@ function buildClubOfferEvent(
       wageDelta,
       roleLabel: reason === "loan" ? "Leihe" : rolePrognosisLabel(promisedRole, promiseChance),
       roleSub: reason === "loan" ? `Rückkehr zu ${player.club.name}` : rolePrognosisReason(positionDemand, reason),
+      roleTone: reason === "loan" ? undefined : rolePrognosisTone(promisedRole, promiseChance),
       typeLabel: reason === "loan" ? "Leihe" : cand.isForeign ? "Ausland" : "Inland",
       isStay: false,
       positionDemand,
@@ -3389,6 +3409,7 @@ function buildClubOfferEvent(
         wage: stayWagePreview,
         roleLabel: squadRoleLabel(squadRoleForOverall(overall, currentStrength, player.position, player.age), player.position),
         roleSub: "Vertrauensbonus durch die vertraute Umgebung",
+        roleTone: rolePrognosisTone(squadRoleForOverall(overall, currentStrength, player.position, player.age)),
         typeLabel: "Bleiben",
         isStay: true,
       },
@@ -4364,6 +4385,15 @@ export function buildClubTenures(player: Player): ClubTenure[] {
   return tenures;
 }
 
+/** Anzahl UNTERSCHIEDLICHER Vereine der Karriere (siehe `buildClubTenures`) - bewusst
+ * NICHT dasselbe wie `clubChangesCount` (zählt JEDEN Wechsel, auch eine Rückkehr zu
+ * einem bereits bekannten Verein z.B. nach einer Leihe erneut) - siehe Nutzer-
+ * Feedback "4 Wechsel, aber nur 3 Vereine ist kein Zugvogel". Verwendet vom
+ * JOURNEYMAN/"Zugvogel"-Achievement (siehe `computeAchievements`). */
+export function distinctClubCount(player: Player): number {
+  return new Set(buildClubTenures(player).map((t) => t.club)).size;
+}
+
 /** Baut den Bestenlisten-Eintrag für die geräteweite Rangliste (siehe `storage.ts`,
  * `rankingArchive`) - wird bei JEDEM Karriereende geschrieben, unabhängig vom
  * Karriere-Pass-Status (nur die spätere ANZEIGE ist gated, das Tracking läuft immer). */
@@ -4722,7 +4752,12 @@ export function detectCareerPhenotype(player: Player): CareerPhenotypeResult {
   }
 
   if (player.clubChangesCount === 0 && hist.length >= 5) matches.push("ONE_CLUB_LEGEND");
-  if (player.clubChangesCount >= 5) matches.push("JOURNEYMAN");
+  // "Zugvogel" (JOURNEYMAN) fragt nach unterschiedlichen VEREINEN, nicht nach der
+  // Anzahl der Wechsel (siehe Nutzer-Feedback "4 Wechsel, aber nur 3 Vereine ist
+  // kein Zugvogel") - `clubChangesCount` zählt auch eine Rückkehr zu einem bereits
+  // bekannten Verein (z.B. nach einer Leihe) als weiteren Wechsel, `distinctClubCount`
+  // dagegen zählt jeden Verein nur einmal, egal wie oft man dort war.
+  if (distinctClubCount(player) >= 5) matches.push("JOURNEYMAN");
 
   if (player.nationalTeamCaps >= 40) matches.push("NATIONAL_TEAM_ICON");
   if (narrative.nationalTeamSnub) matches.push("NATIONAL_TEAM_SNUB");
@@ -5049,6 +5084,44 @@ export function buildEpilogue(player: Player, _tier: string): string {
       ? `${player.careerTotals.trophies.length} Titel in der Vitrine`
       : "keinem Titel, aber vielen unvergesslichen Momenten";
   return `Nach ${years} Jahren im Profifußball beendet ${player.name} die aktive Karriere mit ${player.careerTotals.goals} Toren, ${player.careerTotals.assists} Vorlagen und ${trophyText}.`;
+}
+
+/** Landespokalsieg-Feier (siehe Bugreport "keine eigene Pop-up-Animation beim
+ * Landespokal-Gewinn"): vorher gab es dieses erzwungene Feier-Event nur für den
+ * echten Außenseiter-Coup (`underdog === true`) - ein Titel als ohnehin
+ * favorisierter Topklub bekam gar kein eigenes Ereignis, sondern tauchte nur
+ * als Text im Trophäen-Banner der Saisonbilanz auf. Jetzt feiert JEDER
+ * Landespokalsieg mit demselben eigenen Ereignis, nur mit angepasstem Text und
+ * einem kleineren Bonus als beim echten Überraschungscoup. Direkt als
+ * `GameEvent`-Literal gebaut (wie `buildRetirementEvent`/`buildLoanFutureEvent`)
+ * statt über die normale Template-Auswahl, siehe `NATIONAL_CUP_WIN_TEMPLATE_ID`
+ * in events.ts für den Grund (Pokalergebnis steht erst nach `simulateSeason`
+ * fest, zu spät für die normale gewichtete Saison-Event-Auswahl). */
+export function buildNationalCupWinEvent(player: Player, underdog: boolean): GameEvent {
+  return {
+    id: `landespokal-sieg-${player.age}-${Math.round(rng() * 1e6)}`,
+    templateId: NATIONAL_CUP_WIN_TEMPLATE_ID,
+    category: "meilenstein",
+    title: underdog ? "Außenseiter-Sensation im Landespokal" : "Landespokalsieg!",
+    description: underdog
+      ? `Niemand hatte ${player.club.name} auf der Rechnung - und doch steht der Pokal am Ende der Saison in der Vereinsvitrine. Eine echte Außenseiter-Sensation.`
+      : `${player.club.name} sichert sich am Ende der Saison den Landespokal - ein verdienter Titel in der Vereinsvitrine.`,
+    choices: [
+      {
+        id: "geniessen",
+        label: underdog ? "Den Coup feiern" : "Den Titel feiern",
+        effects: {
+          reputation: underdog ? 8 : 5,
+          morale: underdog ? 6 : 5,
+          attributes: { mentalitaet: 1 },
+          logText: underdog
+            ? "krönt eine echte Außenseiter-Saison mit dem Gewinn des Landespokals."
+            : "feiert den Gewinn des Landespokals.",
+          logKind: "milestone",
+        },
+      },
+    ],
+  };
 }
 
 export function buildRetirementEvent(player: Player): GameEvent {

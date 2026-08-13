@@ -94,7 +94,7 @@ export const CAREER_PHENOTYPE_LABEL: Record<CareerPhenotype, string> = {
   LATE_BLOOMER: "Spätzünder",
   STEADY_PROFESSIONAL: "Verlässlicher Profi",
   ONE_CLUB_LEGEND: "Ein-Klub-Legende",
-  JOURNEYMAN: "Wandervogel",
+  JOURNEYMAN: "Zugvogel",
   NATIONAL_TEAM_ICON: "Nationalmannschafts-Ikone",
   NATIONAL_TEAM_SNUB: "Übersehenes Talent",
   TROPHY_COLLECTOR: "Titelsammler",
@@ -142,7 +142,13 @@ export const CAREER_PHENOTYPE_DESCRIPTION: Record<CareerPhenotype, string> = {
 export function describeCareerPhenotype(
   phenotype: CareerPhenotype,
   player: Player,
-  narrative: CareerNarrativeState
+  narrative: CareerNarrativeState,
+  // Anzahl UNTERSCHIEDLICHER Vereine (siehe `distinctClubCount` in careerEngine.ts) -
+  // als Parameter statt hier neu berechnet, um keinen Ringimport auf careerEngine.ts
+  // aufzumachen (careerEngine.ts importiert bereits AUS labels.ts). Nur für
+  // "JOURNEYMAN"/"Zugvogel" gebraucht, daher optional mit Fallback auf
+  // `clubChangesCount` für Aufrufer, die den Wert (noch) nicht mitgeben.
+  distinctClubs?: number
 ): string {
   switch (phenotype) {
     case "HOMECOMER": {
@@ -154,8 +160,13 @@ export function describeCareerPhenotype(
         h.firstSpellSeasons === 1 ? "Saison" : "Saisons"
       } verbracht hattest.`;
     }
-    case "JOURNEYMAN":
-      return `${player.clubChangesCount} Vereinswechsel prägten deine Laufbahn - kaum ein Umfeld, in dem du lange geblieben bist.`;
+    case "JOURNEYMAN": {
+      // Zählt VEREINE, nicht Wechsel (siehe Nutzer-Feedback "4 Wechsel, aber nur
+      // 3 Vereine ist kein Zugvogel") - eine Rückkehr zu einem bereits bekannten
+      // Verein soll den Text nicht aufblähen.
+      const clubs = distinctClubs ?? player.clubChangesCount + 1;
+      return `${clubs} verschiedene Vereine prägten deine Laufbahn - kaum ein Umfeld, in dem du lange geblieben bist.`;
+    }
     case "ONE_CLUB_LEGEND":
       return `${player.seasonHistory.length} Saisons lang bist du ${player.club.name} treu geblieben, ohne je den Verein zu wechseln.`;
     case "TROPHY_COLLECTOR":
@@ -489,6 +500,10 @@ export function turningPointForSeason(player: Player): string | null {
 export const TITLE_I18N = {
   tagline: { de: "Deine Karriere. Dein Weg.", en: "Your career. Your way." },
   yearsAbbr: { de: "J.", en: "y." },
+  // Präposition vor dem längsten Verein in der Bestenliste (siehe Nutzer-Feedback
+  // "8 J. Hoffenheim" war ohne "bei" nicht klar als "8 Jahre BEI Hoffenheim"
+  // erkennbar) - eigener i18n-Key statt hartkodiertem "bei" im JSX.
+  yearsAtClub: { de: "bei", en: "at" },
   continueCareer: { de: "Karriere fortsetzen", en: "Continue career" },
   newCareer: { de: "Neue Karriere starten", en: "Start new career" },
   viewLeaderboard: { de: "Bestenliste ansehen", en: "View leaderboard" },

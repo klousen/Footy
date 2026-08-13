@@ -605,6 +605,12 @@ export interface OfferCardData {
   wageDelta?: number;
   roleLabel: string;
   roleSub?: string;
+  /** Ampel-Status für die "Rolle"-Pill (siehe `rolePrognosisTone` in careerEngine.ts,
+   * Nutzer-Feedback "Farbe von Stammplatz und Co soll mit einer Art Statusleuchte
+   * in Ampelfarben versehen sein") - `undefined` nur bei den generischen "Bleiben"-
+   * Aktionslabels ("Treue"/"Kämpfen"/"Kitten"), die keine echte Rollen-Prognose
+   * abbilden. */
+  roleTone?: "green" | "yellow" | "red";
   typeLabel: string;
   isStay: boolean;
   /** Der EINMALIG gewürfelte, abstrahierte Kaderbedarf auf der eigenen Position für

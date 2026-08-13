@@ -33,6 +33,11 @@ export function CareerEnd({
   const positiveAchievements = (achievements ?? []).filter((a) => a.positive);
   const negativeAchievements = (achievements ?? []).filter((a) => !a.positive);
   const clubTenures = buildClubTenures(player);
+  // Für "Zugvogel"/JOURNEYMAN (siehe `describeCareerPhenotype`): Anzahl
+  // UNTERSCHIEDLICHER Vereine, nicht Anzahl der Wechsel - aus den bereits
+  // gebauten `clubTenures` abgeleitet statt `buildClubTenures` ein zweites Mal
+  // aufzurufen (siehe `distinctClubCount` in careerEngine.ts für dieselbe Logik).
+  const distinctClubs = new Set(clubTenures.map((t) => t.club)).size;
   const totalMinutesPlayed = player.seasonHistory.reduce((s, h) => s + h.minutesPlayed, 0);
   const totalPossibleMinutes = player.seasonHistory.reduce((s, h) => s + h.possibleMinutes, 0);
   const isGoalkeeper = player.position === "TW";
@@ -78,11 +83,14 @@ export function CareerEnd({
       <div className="panel">
         <h3>Karrierebogen</h3>
         <div className="phenotype-chips">
-          <span className="phenotype-chip phenotype-chip-primary" title={describeCareerPhenotype(phenotype.primary, player, narrativeState)}>
+          <span
+            className="phenotype-chip phenotype-chip-primary"
+            title={describeCareerPhenotype(phenotype.primary, player, narrativeState, distinctClubs)}
+          >
             {CAREER_PHENOTYPE_LABEL[phenotype.primary]}
           </span>
           {phenotype.secondary.map((p) => (
-            <span key={p} className="phenotype-chip" title={describeCareerPhenotype(p, player, narrativeState)}>
+            <span key={p} className="phenotype-chip" title={describeCareerPhenotype(p, player, narrativeState, distinctClubs)}>
               {CAREER_PHENOTYPE_LABEL[p]}
             </span>
           ))}
@@ -90,7 +98,7 @@ export function CareerEnd({
         {/* Begründung aus ECHTEN Karrieredaten statt generischem Boilerplate-Satz
             (siehe `describeCareerPhenotype` - Folgevorgabe "Transferentscheidungen:
             sichtbare Prognose + Narrative Integration" Abschnitt 9/10). */}
-        <p className="muted">{describeCareerPhenotype(phenotype.primary, player, narrativeState)}</p>
+        <p className="muted">{describeCareerPhenotype(phenotype.primary, player, narrativeState, distinctClubs)}</p>
         {narrativeState.definingDecision && narrativeState.definingDecision.perfImpact !== null && (
           <p className="defining-decision">
             <strong>Prägende Entscheidung:</strong> {TRANSFER_DECISION_LABEL[narrativeState.definingDecision.type]} mit{" "}

@@ -17,12 +17,15 @@ import { availableInvestmentIds, investmentCost } from "./investments";
  * App.tsx nicht denselben String-Literal duplizieren muss. */
 export const VACATION_TEMPLATE_ID = "urlaub_sommerpause";
 
-/** Außenseiter-Pokalsieg-Event (siehe Template weiter unten) - wird NIE über die
- * normale Gewichtungs-Auswahl gezogen, sondern von App.tsx `handleContinueFromSummary`
- * explizit als letztes Ereignis GENAU DER Saison erzwungen, in der der Pokal
- * tatsächlich gewonnen wurde (siehe dortiger Kommentar). Als Konstante exportiert,
- * damit App.tsx nicht denselben String-Literal dupliziert. */
-export const UNDERDOG_CUP_TEMPLATE_ID = "landespokal_aussenseitersieg";
+/** Landespokalsieg-Feier-Event - wird NIE über die normale Gewichtungs-Auswahl
+ * gezogen, sondern von App.tsx `handleContinueFromSummary` explizit als letztes
+ * Ereignis GENAU DER Saison erzwungen, in der der Pokal tatsächlich gewonnen
+ * wurde (siehe dortiger Kommentar). Deckt seit dem Nutzer-Feedback "keine eigene
+ * Pop-up-Animation beim Landespokal-Gewinn" JEDEN Pokalsieg ab, nicht mehr nur
+ * den Außenseiter-Coup (siehe `buildNationalCupWinEvent` in careerEngine.ts, wo
+ * das Event tatsächlich gebaut wird - hier nur die ID als geteilte Konstante,
+ * damit App.tsx keinen eigenen String-Literal dupliziert). */
+export const NATIONAL_CUP_WIN_TEMPLATE_ID = "landespokal_sieg";
 
 /** "Heimkehrer"-Info-Event (siehe Template weiter unten) - wird NIE über die
  * normale Gewichtungs-Auswahl gezogen, sondern von App.tsx `handleChoice` direkt
@@ -399,23 +402,30 @@ export const EVENT_TEMPLATES: EventTemplate[] = [
     minAge: 14,
     maxAge: 17,
     weight: 1.2,
-    build: (p) => ({
-      category: "jugend",
-      title: "Das noch größere Talent",
-      description: `Ein Mitspieler in der Jugendmannschaft von ${club(p)} gilt als noch größeres Ausnahmetalent - die Vergleiche mit ihm/ihr sind allgegenwärtig.`,
-      choices: [
-        {
-          id: "anspornen",
-          label: "Sich davon anspornen lassen",
-          effects: { attributes: { technik: 1 }, traitDeltas: { arbeitsmoral: 3 }, logText: "hat sich vom Vergleich mit dem Ausnahmetalent zusätzlich anspornen lassen.", logKind: "positive" },
-        },
-        {
-          id: "resignieren",
-          label: "Sich im Vergleich klein fühlen",
-          effects: { morale: -4, traitDeltas: { arbeitsmoral: -1 }, logText: "hat sich im Schatten des Ausnahmetalents zunehmend klein gefühlt.", logKind: "negative" },
-        },
-      ],
-    }),
+    build: (p, ctx) => {
+      // Range statt Fixwerten (siehe Nutzer-Feedback "zu vorhersehbar").
+      const anspornenTechnik = rInt(ctx, 1, 2);
+      const anspornenArbeitsmoral = rInt(ctx, 2, 4);
+      const resignierenMorale = -rInt(ctx, 2, 6);
+      const resignierenArbeitsmoral = -rInt(ctx, 1, 2);
+      return {
+        category: "jugend",
+        title: "Das noch größere Talent",
+        description: `Ein Mitspieler in der Jugendmannschaft von ${club(p)} gilt als noch größeres Ausnahmetalent - die Vergleiche mit ihm/ihr sind allgegenwärtig.`,
+        choices: [
+          {
+            id: "anspornen",
+            label: "Sich davon anspornen lassen",
+            effects: { attributes: { technik: anspornenTechnik }, traitDeltas: { arbeitsmoral: anspornenArbeitsmoral }, logText: "hat sich vom Vergleich mit dem Ausnahmetalent zusätzlich anspornen lassen.", logKind: "positive" },
+          },
+          {
+            id: "resignieren",
+            label: "Sich im Vergleich klein fühlen",
+            effects: { morale: resignierenMorale, traitDeltas: { arbeitsmoral: resignierenArbeitsmoral }, logText: "hat sich im Schatten des Ausnahmetalents zunehmend klein gefühlt.", logKind: "negative" },
+          },
+        ],
+      };
+    },
   },
   {
     id: "jugend_elternehrgeiz",
@@ -423,23 +433,30 @@ export const EVENT_TEMPLATES: EventTemplate[] = [
     minAge: 14,
     maxAge: 17,
     weight: 1,
-    build: () => ({
-      category: "jugend",
-      title: "Elternehrgeiz",
-      description: "Ein Elternteil mischt sich zunehmend in Training und Aufstellung ein und setzt dich mit hohen Erwartungen unter Druck.",
-      choices: [
-        {
-          id: "abgrenzen",
-          label: "Sich klar abgrenzen",
-          effects: { attributes: { mentalitaet: 1 }, morale: 2, traitDeltas: { disziplin: 1 }, logText: "hat sich klar von elterlichem Druck abgegrenzt.", logKind: "positive" },
-        },
-        {
-          id: "fuegen",
-          label: "Sich den Erwartungen fügen",
-          effects: { morale: -3, educationPoints: 2, logText: "hat sich dem elterlichen Ehrgeiz gefügt, statt sich abzugrenzen.", logKind: "negative" },
-        },
-      ],
-    }),
+    build: (_p, ctx) => {
+      // Range statt Fixwerten (siehe Nutzer-Feedback "zu vorhersehbar").
+      const abgrenzenMorale = rInt(ctx, 1, 4);
+      const abgrenzenDisziplin = rInt(ctx, 1, 2);
+      const fuegenMorale = -rInt(ctx, 1, 5);
+      const fuegenEducation = rInt(ctx, 1, 3);
+      return {
+        category: "jugend",
+        title: "Elternehrgeiz",
+        description: "Ein Elternteil mischt sich zunehmend in Training und Aufstellung ein und setzt dich mit hohen Erwartungen unter Druck.",
+        choices: [
+          {
+            id: "abgrenzen",
+            label: "Sich klar abgrenzen",
+            effects: { attributes: { mentalitaet: 1 }, morale: abgrenzenMorale, traitDeltas: { disziplin: abgrenzenDisziplin }, logText: "hat sich klar von elterlichem Druck abgegrenzt.", logKind: "positive" },
+          },
+          {
+            id: "fuegen",
+            label: "Sich den Erwartungen fügen",
+            effects: { morale: fuegenMorale, educationPoints: fuegenEducation, logText: "hat sich dem elterlichen Ehrgeiz gefügt, statt sich abzugrenzen.", logKind: "negative" },
+          },
+        ],
+      };
+    },
   },
   {
     id: "jugend_heimweh_internat",
@@ -661,23 +678,36 @@ export const EVENT_TEMPLATES: EventTemplate[] = [
     minAge: 17,
     maxAge: 36,
     weight: 2,
-    build: () => ({
-      category: "lifestyle",
-      title: "Einladung zur Release-Party",
-      description: "Ein Bekannter lädt dich zu einer großen Party ein - genau vor einem wichtigen Trainingsblock.",
-      choices: [
-        {
-          id: "hingehen",
-          label: "Hingehen und feiern",
-          effects: { morale: 8, reputation: 2, fitness: -8, traitDeltas: { disziplin: -4 }, logText: "hat ausgelassen gefeiert.", logKind: "info" },
-        },
-        {
-          id: "absagen",
-          label: "Absagen und früh schlafen",
-          effects: { fitness: 5, clubRelation: 1, traitDeltas: { disziplin: 2, arbeitsmoral: 1 }, logText: "hat auf die Party verzichtet und sich ausgeruht.", logKind: "info" },
-        },
-      ],
-    }),
+    build: (_p, ctx) => {
+      // Range statt Fixwerten (siehe Nutzer-Feedback "zu vorhersehbar") - beide
+      // Entscheidungen sollen sich über mehrere Ziehungen hinweg unterschiedlich
+      // stark anfühlen, nicht jedes Mal exakt gleich.
+      const hingehenMorale = rInt(ctx, 5, 10);
+      const hingehenRep = rInt(ctx, 1, 3);
+      const hingehenFitness = -rInt(ctx, 5, 10);
+      const hingehenDisziplin = -rInt(ctx, 2, 5);
+      const absagenFitness = rInt(ctx, 3, 7);
+      const absagenClubRelation = rInt(ctx, 1, 2);
+      const absagenDisziplin = rInt(ctx, 1, 3);
+      const absagenArbeitsmoral = rInt(ctx, 1, 2);
+      return {
+        category: "lifestyle",
+        title: "Einladung zur Release-Party",
+        description: "Ein Bekannter lädt dich zu einer großen Party ein - genau vor einem wichtigen Trainingsblock.",
+        choices: [
+          {
+            id: "hingehen",
+            label: "Hingehen und feiern",
+            effects: { morale: hingehenMorale, reputation: hingehenRep, fitness: hingehenFitness, traitDeltas: { disziplin: hingehenDisziplin }, logText: "hat ausgelassen gefeiert.", logKind: "info" },
+          },
+          {
+            id: "absagen",
+            label: "Absagen und früh schlafen",
+            effects: { fitness: absagenFitness, clubRelation: absagenClubRelation, traitDeltas: { disziplin: absagenDisziplin, arbeitsmoral: absagenArbeitsmoral }, logText: "hat auf die Party verzichtet und sich ausgeruht.", logKind: "info" },
+          },
+        ],
+      };
+    },
   },
   {
     id: "lifestyle_ernaehrung",
@@ -6756,49 +6786,11 @@ export const EVENT_TEMPLATES: EventTemplate[] = [
   },
 
   // ---------------------------------------------------------------------
-  // NATIONALER POKAL (siehe nationalCup.ts) - anders als beim Europapokal gibt es
-  // hier nur EIN Event, und zwar bewusst nur für den echten Außenseiter-Coup (siehe
-  // `NationalCupResult.underdog`) - ein Titel als ohnehin favorisierter Topklub ist
-  // bereits durch den Trophäen-Eintrag "Landespokal" selbst abgedeckt (Score/
-  // Achievements/Sharepic), ohne dass es dafür noch ein eigenes Ereignis bräuchte.
-  //
-  // `storylineOnly: true` (siehe Bugreport): über die normale gewichtete
-  // Saisonauswahl (`pickSeasonTemplateIds`) gezogen, wäre dieses Event immer erst
-  // in der NÄCHSTEN Saison möglich (der Pokalsieg steht ja erst nach `simulateSeason`
-  // fest, die Event-Queue der laufenden Saison ist zu dem Zeitpunkt längst gebaut) -
-  // spürbar zu spät für einen Moment, der sich auf "gerade eben" bezieht. Wird
-  // deshalb wie das Leihjahr/Rücktrittsangebot NICHT gezogen, sondern von App.tsx
-  // `handleContinueFromSummary` explizit als letztes Ereignis GENAU DER Saison
-  // erzwungen, in der der Pokal tatsächlich gewonnen wurde (siehe
-  // `UNDERDOG_CUP_TEMPLATE_ID`).
-  // ---------------------------------------------------------------------
-  {
-    id: UNDERDOG_CUP_TEMPLATE_ID,
-    category: "meilenstein",
-    minAge: 17,
-    maxAge: 40,
-    weight: 0,
-    storylineOnly: true,
-    build: (p) => ({
-      category: "meilenstein",
-      title: "Außenseiter-Sensation im Landespokal",
-      description: `Niemand hatte ${club(p)} auf der Rechnung - und doch steht der Pokal am Ende der Saison in der Vereinsvitrine. Eine echte Außenseiter-Sensation.`,
-      choices: [
-        {
-          id: "geniessen",
-          label: "Den Coup feiern",
-          effects: {
-            reputation: 8,
-            morale: 6,
-            attributes: { mentalitaet: 1 },
-            logText: "krönt eine echte Außenseiter-Saison mit dem Gewinn des Landespokals.",
-            logKind: "milestone",
-          },
-        },
-      ],
-    }),
-  },
-
+  // NATIONALER POKAL (siehe nationalCup.ts): das eigentliche Feier-Event wird
+  // NICHT hier als Template definiert, sondern direkt als `GameEvent`-Literal in
+  // `buildNationalCupWinEvent` (careerEngine.ts) gebaut - siehe dort für den
+  // Grund (`NATIONAL_CUP_WIN_TEMPLATE_ID` oben), warum es überhaupt erzwungen
+  // statt über die normale Gewichtungs-Auswahl gezogen wird.
   // ---------------------------------------------------------------------
   // "HEIMKEHRER" (siehe HOMECOMING_TEMPLATE_ID/`detectClubHomecoming` in types.ts):
   // eine echte Rückkehr zu einem Verein, an dem der Spieler in frühen Jahren

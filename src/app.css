@@ -1179,13 +1179,49 @@ input:focus {
   margin-top: 1px;
 }
 
-.offer-pill .v.strength-up,
 .offer-pill .v.salary-up {
   color: var(--green);
 }
 
-.offer-pill .v.strength-down {
-  color: var(--red);
+/* Rolle-Pill: Ampel-Statusleuchte vor dem Label (siehe `OfferCardData.roleTone`,
+   Nutzer-Feedback "Farbe von Stammplatz und Co soll mit einer Art Statusleuchte
+   in Ampelfarben versehen sein"). Grün/Rot als klarer Vollton, Gelb ("unklar")
+   bewusst als Farbverlauf statt Vollton - visualisiert die Unsicherheit selbst,
+   statt nur ihre Farbe zu zeigen. */
+.role-v {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.role-status-light {
+  flex: none;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.25) inset;
+}
+
+.role-status-light.green {
+  background: var(--green);
+}
+
+.role-status-light.red {
+  background: var(--red);
+}
+
+.role-status-light.yellow {
+  background: linear-gradient(135deg, var(--gold-bright), var(--red) 140%);
+}
+
+/* Statusleuchte im "Persönliches Umfeld"-Button (siehe Dashboard.tsx) - der
+   Button ist kein Flex-Container, daher inline-block mit Baseline-Korrektur
+   statt `align-items` auf dem `.role-v`-Wrapper. */
+.investment-status-light {
+  display: inline-block;
+  vertical-align: middle;
+  margin-right: 6px;
+  margin-bottom: 2px;
 }
 
 .offer-pill .sub {

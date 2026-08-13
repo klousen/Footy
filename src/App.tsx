@@ -24,6 +24,7 @@ import {
   buildEpilogue,
   buildEventFromId,
   buildLoanFutureEvent,
+  buildNationalCupWinEvent,
   buildRankingEntry,
   buildRetirementEvent,
   clubOfferTemplateId,
@@ -52,7 +53,7 @@ import {
 import { LOAN_DECISION_TEMPLATE_IDS } from "./engine/loanStory";
 import { activateInvestment } from "./engine/investments";
 import type { PersonalInvestmentId } from "./engine/types";
-import { HOMECOMING_TEMPLATE_ID, UNDERDOG_CUP_TEMPLATE_ID, VACATION_TEMPLATE_ID } from "./engine/events";
+import { HOMECOMING_TEMPLATE_ID, NATIONAL_CUP_WIN_TEMPLATE_ID, VACATION_TEMPLATE_ID } from "./engine/events";
 import { pickSpreadClubOffers } from "./engine/leagueEngine";
 import { TRANSFER_DECISION_MEANING } from "./ui/labels";
 import { useLanguage } from "./ui/LanguageContext";
@@ -507,7 +508,7 @@ export default function App() {
     // Saisonbilanz, kein Teil einer neuen laufenden Saison - darf nach dem
     // Feedback NICHT `finishSeasonEvents` erneut auslösen (siehe
     // `handleContinueFromSummary`).
-    const isUnderdogCupEvent = game.currentEvent.templateId === UNDERDOG_CUP_TEMPLATE_ID;
+    const isNationalCupWinEvent = game.currentEvent.templateId === NATIONAL_CUP_WIN_TEMPLATE_ID;
     const choiceId = game.feedback.choiceId;
     const player = game.player;
 
@@ -525,7 +526,7 @@ export default function App() {
       return;
     }
 
-    if (isUnderdogCupEvent) {
+    if (isNationalCupWinEvent) {
       if (shouldOfferRetirement(player)) {
         setGame({ ...game, player: { ...player }, currentEvent: buildRetirementEvent(player), feedback: null });
       } else {
@@ -554,12 +555,15 @@ export default function App() {
       setGame({ ...game, currentEvent: buildLoanFutureEvent(game.player), feedback: null, screen: "event" });
       return;
     }
-    // Außenseiter-Pokalsieg (siehe Bugreport + `UNDERDOG_CUP_TEMPLATE_ID` in
-    // events.ts): erzwungen als letztes Ereignis GENAU der Saison, deren
-    // Bilanz gerade angezeigt wurde (`game.lastSeasonStats`) - dieselbe
-    // "erzwungenes Spezial-Event"-Weiche wie beim Leihjahr/Rücktritt oben.
-    if (game.lastSeasonStats?.nationalCup?.champion && game.lastSeasonStats.nationalCup.underdog && game.leagueState) {
-      const cupEvent = buildEventFromId(UNDERDOG_CUP_TEMPLATE_ID, game.player, game.leagueState, game.foreignLeagues);
+    // Landespokalsieg (siehe Bugreport "keine eigene Pop-up-Animation beim
+    // Landespokal-Gewinn" + `NATIONAL_CUP_WIN_TEMPLATE_ID` in events.ts):
+    // erzwungen als letztes Ereignis GENAU der Saison, deren Bilanz gerade
+    // angezeigt wurde (`game.lastSeasonStats`) - dieselbe "erzwungenes
+    // Spezial-Event"-Weiche wie beim Leihjahr/Rücktritt oben. Feuert für JEDEN
+    // Pokalsieg, nicht mehr nur den Außenseiter-Coup - `underdog` steuert nur
+    // noch Text/Bonushöhe innerhalb des Events (siehe `buildNationalCupWinEvent`).
+    if (game.lastSeasonStats?.nationalCup?.champion) {
+      const cupEvent = buildNationalCupWinEvent(game.player, game.lastSeasonStats.nationalCup.underdog);
       setGame({ ...game, currentEvent: cupEvent, feedback: null, screen: "event" });
       return;
     }

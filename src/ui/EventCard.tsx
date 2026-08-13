@@ -115,7 +115,12 @@ export function EventCard({
  * Pill-Inhalte unterscheiden sich sinngemäß. */
 function OfferCard({ choice, data, onChoose }: { choice: EventChoice; data: OfferCardData; onChoose: (choice: EventChoice) => void }) {
   const hasTrend = data.strengthPrev !== undefined && data.strengthPrev !== data.strength;
-  const trendUp = hasTrend && data.strength > (data.strengthPrev as number);
+  // Zeigt die DIFFERENZ zum aktuellen Verein statt dessen absolutem Wert (siehe
+  // Nutzer-Feedback: der bisherige Klammerwert "(63)" duplizierte den eigenen
+  // Vereinswert, ohne dass auf einen Blick klar war, wie groß der Sprung
+  // tatsächlich ist). Bewusst ohne Farbe/Pfeil - ein schwächerer Verein ist
+  // nicht per se "negativ" (siehe Feedback), daher rein neutral als Vorzeichen-Zahl.
+  const strengthDiff = hasTrend ? data.strength - (data.strengthPrev as number) : 0;
 
   return (
     <button type="button" className={`offer-card${data.isStay ? " stay" : ""}`} onClick={() => onChoose(choice)}>
@@ -131,9 +136,9 @@ function OfferCard({ choice, data, onChoose }: { choice: EventChoice; data: Offe
       <div className="offer-pills">
         <div className="offer-pill">
           <div className="l">Vereinsstärke</div>
-          <div className={hasTrend ? `v ${trendUp ? "strength-up" : "strength-down"}` : "v"}>
+          <div className="v">
             {data.strength}
-            {hasTrend && ` ${trendUp ? "▲" : "▼"} (${data.strengthPrev})`}
+            {hasTrend && ` (${strengthDiff > 0 ? "+" : ""}${strengthDiff})`}
           </div>
         </div>
         <div className="offer-pill">
@@ -148,7 +153,10 @@ function OfferCard({ choice, data, onChoose }: { choice: EventChoice; data: Offe
         </div>
         <div className="offer-pill">
           <div className="l">{data.isStay ? "Effekt" : "Rolle"}</div>
-          <div className="v">{data.roleLabel}</div>
+          <div className="v role-v">
+            {data.roleTone && <span className={`role-status-light ${data.roleTone}`} aria-hidden="true" />}
+            {data.roleLabel}
+          </div>
           {data.roleSub && <div className="sub">{data.roleSub}</div>}
         </div>
         <div className="offer-pill">
