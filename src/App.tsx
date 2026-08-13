@@ -23,6 +23,7 @@ import {
   applyLoanDecisionChoice,
   buildEpilogue,
   buildEventFromId,
+  buildLeagueTitleWinEvent,
   buildLoanFutureEvent,
   buildNationalCupWinEvent,
   buildRankingEntry,
@@ -53,7 +54,7 @@ import {
 import { LOAN_DECISION_TEMPLATE_IDS } from "./engine/loanStory";
 import { activateInvestment } from "./engine/investments";
 import type { PersonalInvestmentId } from "./engine/types";
-import { HOMECOMING_TEMPLATE_ID, NATIONAL_CUP_WIN_TEMPLATE_ID, VACATION_TEMPLATE_ID } from "./engine/events";
+import { HOMECOMING_TEMPLATE_ID, LEAGUE_TITLE_WIN_TEMPLATE_ID, NATIONAL_CUP_WIN_TEMPLATE_ID, VACATION_TEMPLATE_ID } from "./engine/events";
 import { pickSpreadClubOffers } from "./engine/leagueEngine";
 import { TRANSFER_DECISION_MEANING } from "./ui/labels";
 import { useLanguage } from "./ui/LanguageContext";
@@ -509,6 +510,11 @@ export default function App() {
     // Feedback NICHT `finishSeasonEvents` erneut auslösen (siehe
     // `handleContinueFromSummary`).
     const isNationalCupWinEvent = game.currentEvent.templateId === NATIONAL_CUP_WIN_TEMPLATE_ID;
+    // Wie `isNationalCupWinEvent`: erzwungenes Spezial-Event nach der Saisonbilanz
+    // (siehe `handleContinueFromSummary`) - nach dem Feedback geht es weiter zum
+    // Pokalsieg-Event (falls in derselben Saison ZUSÄTZLICH gewonnen), sonst zur
+    // Rücktritts-Weiche/zum Dashboard (siehe `showCupOrRetirementOrDashboard`).
+    const isLeagueTitleWinEvent = game.currentEvent.templateId === LEAGUE_TITLE_WIN_TEMPLATE_ID;
     const choiceId = game.feedback.choiceId;
     const player = game.player;
 
@@ -523,6 +529,11 @@ export default function App() {
 
     if (isLoanFutureDecision) {
       setGame({ ...game, player: { ...player }, currentEvent: null, feedback: null, screen: "dashboard" });
+      return;
+    }
+
+    if (isLeagueTitleWinEvent) {
+      showCupOrRetirementOrDashboard(player);
       return;
     }
 
@@ -544,6 +555,26 @@ export default function App() {
     }
   }
 
+  // Nach einem Landespokalsieg-Event (oder direkt aus der Saisonbilanz, falls kein
+  // Meisterschafts-Titel gewonnen wurde): Pokalsieg-Event falls (zusätzlich)
+  // gewonnen, sonst Rücktritts-Weiche, sonst Dashboard. Geteilte Fortsetzung für
+  // `handleContinueFromSummary` UND `handleFeedbackContinue` (siehe
+  // `isLeagueTitleWinEvent`), damit ein Titel-UND-Pokal-Double in derselben
+  // Saison beide eigenen Feier-Events nacheinander zeigt statt nur eines.
+  function showCupOrRetirementOrDashboard(player: typeof game.player) {
+    if (!player) return;
+    if (game.lastSeasonStats?.nationalCup?.champion) {
+      const cupEvent = buildNationalCupWinEvent(player, game.lastSeasonStats.nationalCup.underdog);
+      setGame({ ...game, player: { ...player }, currentEvent: cupEvent, feedback: null, screen: "event" });
+      return;
+    }
+    if (shouldOfferRetirement(player)) {
+      setGame({ ...game, player: { ...player }, currentEvent: buildRetirementEvent(player), feedback: null, screen: "event" });
+    } else {
+      setGame({ ...game, player: { ...player }, currentEvent: null, feedback: null, screen: "dashboard" });
+    }
+  }
+
   function handleContinueFromSummary() {
     if (!game.player) return;
     // Abschnitt 7+8: nach der Saisonbilanz eines Leihjahres folgt zwingend die
@@ -555,23 +586,22 @@ export default function App() {
       setGame({ ...game, currentEvent: buildLoanFutureEvent(game.player), feedback: null, screen: "event" });
       return;
     }
-    // Landespokalsieg (siehe Bugreport "keine eigene Pop-up-Animation beim
-    // Landespokal-Gewinn" + `NATIONAL_CUP_WIN_TEMPLATE_ID` in events.ts):
-    // erzwungen als letztes Ereignis GENAU der Saison, deren Bilanz gerade
-    // angezeigt wurde (`game.lastSeasonStats`) - dieselbe "erzwungenes
-    // Spezial-Event"-Weiche wie beim Leihjahr/Rücktritt oben. Feuert für JEDEN
-    // Pokalsieg, nicht mehr nur den Außenseiter-Coup - `underdog` steuert nur
-    // noch Text/Bonushöhe innerhalb des Events (siehe `buildNationalCupWinEvent`).
-    if (game.lastSeasonStats?.nationalCup?.champion) {
-      const cupEvent = buildNationalCupWinEvent(game.player, game.lastSeasonStats.nationalCup.underdog);
-      setGame({ ...game, currentEvent: cupEvent, feedback: null, screen: "event" });
+    // Meisterschafts- und Landespokalsieg (siehe Bugreport "keine eigene Pop-up-
+    // Animation beim Titelgewinn" + `LEAGUE_TITLE_WIN_TEMPLATE_ID`/
+    // `NATIONAL_CUP_WIN_TEMPLATE_ID` in events.ts): erzwungen als letztes(s)
+    // Ereignis(se) GENAU der Saison, deren Bilanz gerade angezeigt wurde
+    // (`game.lastSeasonStats`) - dieselbe "erzwungenes Spezial-Event"-Weiche wie
+    // beim Leihjahr/Rücktritt oben. Meisterschale/Zweitliga-Meisterschaft zuerst
+    // (die Reihenfolge nach Prestige steigend zu spiegeln fühlt sich falsch an -
+    // der Liga-Titel ist die "Hauptüberschrift" der Saison), danach ggf. der
+    // Pokal über `showCupOrRetirementOrDashboard` bei einem Double.
+    const trophies = game.lastSeasonStats?.trophies ?? [];
+    if (trophies.includes("Meisterschale") || trophies.includes("Zweitliga-Meisterschaft")) {
+      const titleEvent = buildLeagueTitleWinEvent(game.player, trophies.includes("Meisterschale"));
+      setGame({ ...game, currentEvent: titleEvent, feedback: null, screen: "event" });
       return;
     }
-    if (shouldOfferRetirement(game.player)) {
-      setGame({ ...game, currentEvent: buildRetirementEvent(game.player), feedback: null, screen: "event" });
-    } else {
-      setGame({ ...game, screen: "dashboard" });
-    }
+    showCupOrRetirementOrDashboard(game.player);
   }
 
   // "Neue Karriere starten" nach Karriereende führt zurück ins Titelmenü statt

@@ -32,7 +32,7 @@ import type {
 import { detectClubHomecoming, HOMECOMING_MIN_AGE, isNearRetirement, overallRatingFromAttributes } from "./types";
 import { clamp } from "./data";
 import { ATTRIBUTE_LABEL, ATTRIBUTE_ORDER, formatMoney, RELATIONSHIP_LABEL, SQUAD_ROLE_RANK, TRAIT_LABEL, TRAIT_ORDER } from "./labels";
-import { eligibleTemplates, getTemplateById, EVENT_TEMPLATES, NATIONAL_CUP_WIN_TEMPLATE_ID } from "./events";
+import { eligibleTemplates, getTemplateById, EVENT_TEMPLATES, LEAGUE_TITLE_WIN_TEMPLATE_ID, NATIONAL_CUP_WIN_TEMPLATE_ID } from "./events";
 import {
   computeLoanSummaryTier,
   deriveLoanReason,
@@ -5117,6 +5117,40 @@ export function buildNationalCupWinEvent(player: Player, underdog: boolean): Gam
           logText: underdog
             ? "krönt eine echte Außenseiter-Saison mit dem Gewinn des Landespokals."
             : "feiert den Gewinn des Landespokals.",
+          logKind: "milestone",
+        },
+      },
+    ],
+  };
+}
+
+/** Meisterschafts-Feier (siehe Nutzer-Klarstellung zu Bugreport 5: der ursprünglich
+ * gebaute, aber nie gepushte "Title win"-Popup war der LIGA-Titel, nicht der
+ * Pokal) - analog zu `buildNationalCupWinEvent`, nur für die Meisterschale
+ * (Liga 1) bzw. Zweitliga-Meisterschaft (Liga 2). Beide bekamen bisher KEIN
+ * eigenes Ereignis, sondern tauchten nur als Text im Trophäen-Banner der
+ * Saisonbilanz auf. Etwas größerer Bonus als beim Landespokal (siehe
+ * `LEGACY_TROPHY_WEIGHTS`: Meisterschale wiegt dort spürbar schwerer als
+ * Landespokal), Zweitliga-Meisterschaft etwas kleiner als die echte
+ * Meisterschale, aber immer noch ein eigener Feier-Moment statt gar keinem. */
+export function buildLeagueTitleWinEvent(player: Player, tier1: boolean): GameEvent {
+  return {
+    id: `meisterschaft-sieg-${player.age}-${Math.round(rng() * 1e6)}`,
+    templateId: LEAGUE_TITLE_WIN_TEMPLATE_ID,
+    category: "meilenstein",
+    title: tier1 ? "Meisterschale!" : "Zweitliga-Meister!",
+    description: tier1
+      ? `${player.club.name} ist am Saisonende verdient Meister - der größte Titel im Vereinsfußball.`
+      : `${player.club.name} sichert sich die Zweitliga-Meisterschaft und damit den direkten Aufstieg.`,
+    choices: [
+      {
+        id: "geniessen",
+        label: "Den Titel feiern",
+        effects: {
+          reputation: tier1 ? 10 : 6,
+          morale: tier1 ? 8 : 6,
+          attributes: { mentalitaet: 1 },
+          logText: tier1 ? "krönt die Saison mit dem Gewinn der Meisterschale." : "krönt die Saison mit der Zweitliga-Meisterschaft.",
           logKind: "milestone",
         },
       },

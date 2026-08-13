@@ -27,6 +27,13 @@ export const VACATION_TEMPLATE_ID = "urlaub_sommerpause";
  * damit App.tsx keinen eigenen String-Literal dupliziert). */
 export const NATIONAL_CUP_WIN_TEMPLATE_ID = "landespokal_sieg";
 
+/** Meisterschafts-Feier-Event (Meisterschale/Zweitliga-Meisterschaft) - dasselbe
+ * "erzwungenes Spezial-Event nach der Saisonbilanz"-Muster wie
+ * `NATIONAL_CUP_WIN_TEMPLATE_ID` (siehe dort), nur für den Liga-Titel statt des
+ * Pokals. Gebaut in `buildLeagueTitleWinEvent` (careerEngine.ts) - hier nur die
+ * ID als geteilte Konstante. */
+export const LEAGUE_TITLE_WIN_TEMPLATE_ID = "meisterschaft_sieg";
+
 /** "Heimkehrer"-Info-Event (siehe Template weiter unten) - wird NIE über die
  * normale Gewichtungs-Auswahl gezogen, sondern von App.tsx `handleChoice` direkt
  * nach einem echten Wechsel erzwungen, wenn `applyClubOfferChoice` eine Heimkehr
