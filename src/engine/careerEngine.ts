@@ -36,7 +36,7 @@ import type {
 import { detectClubHomecoming, HOMECOMING_MIN_AGE, isNearRetirement, overallRatingFromAttributes } from "./types";
 import { clamp } from "./data";
 import { ATTRIBUTE_LABEL, ATTRIBUTE_ORDER, formatMoney, RELATIONSHIP_LABEL, SQUAD_ROLE_RANK, TRAIT_LABEL, TRAIT_ORDER } from "./labels";
-import { eligibleTemplates, getTemplateById, EVENT_TEMPLATES, LEAGUE_TITLE_WIN_TEMPLATE_ID, NATIONAL_CUP_WIN_TEMPLATE_ID } from "./events";
+import { eligibleTemplates, getTemplateById, EVENT_TEMPLATES } from "./events";
 import {
   computeLoanSummaryTier,
   deriveLoanReason,
@@ -5237,78 +5237,6 @@ export function buildEpilogue(player: Player, _tier: string): string {
       ? `${player.careerTotals.trophies.length} Titel in der Vitrine`
       : "keinem Titel, aber vielen unvergesslichen Momenten";
   return `Nach ${years} Jahren im Profifußball beendet ${player.name} die aktive Karriere mit ${player.careerTotals.goals} Toren, ${player.careerTotals.assists} Vorlagen und ${trophyText}.`;
-}
-
-/** Landespokalsieg-Feier (siehe Bugreport "keine eigene Pop-up-Animation beim
- * Landespokal-Gewinn"): vorher gab es dieses erzwungene Feier-Event nur für den
- * echten Außenseiter-Coup (`underdog === true`) - ein Titel als ohnehin
- * favorisierter Topklub bekam gar kein eigenes Ereignis, sondern tauchte nur
- * als Text im Trophäen-Banner der Saisonbilanz auf. Jetzt feiert JEDER
- * Landespokalsieg mit demselben eigenen Ereignis, nur mit angepasstem Text und
- * einem kleineren Bonus als beim echten Überraschungscoup. Direkt als
- * `GameEvent`-Literal gebaut (wie `buildRetirementEvent`/`buildLoanFutureEvent`)
- * statt über die normale Template-Auswahl, siehe `NATIONAL_CUP_WIN_TEMPLATE_ID`
- * in events.ts für den Grund (Pokalergebnis steht erst nach `simulateSeason`
- * fest, zu spät für die normale gewichtete Saison-Event-Auswahl). */
-export function buildNationalCupWinEvent(player: Player, underdog: boolean): GameEvent {
-  return {
-    id: `landespokal-sieg-${player.age}-${Math.round(rng() * 1e6)}`,
-    templateId: NATIONAL_CUP_WIN_TEMPLATE_ID,
-    category: "meilenstein",
-    title: underdog ? "Außenseiter-Sensation im Landespokal" : "Landespokalsieg!",
-    description: underdog
-      ? `Niemand hatte ${player.club.name} auf der Rechnung - und doch steht der Pokal am Ende der Saison in der Vereinsvitrine. Eine echte Außenseiter-Sensation.`
-      : `${player.club.name} sichert sich am Ende der Saison den Landespokal - ein verdienter Titel in der Vereinsvitrine.`,
-    choices: [
-      {
-        id: "geniessen",
-        label: underdog ? "Den Coup feiern" : "Den Titel feiern",
-        effects: {
-          reputation: underdog ? 8 : 5,
-          morale: underdog ? 6 : 5,
-          attributes: { mentalitaet: 1 },
-          logText: underdog
-            ? "krönt eine echte Außenseiter-Saison mit dem Gewinn des Landespokals."
-            : "feiert den Gewinn des Landespokals.",
-          logKind: "milestone",
-        },
-      },
-    ],
-  };
-}
-
-/** Meisterschafts-Feier (siehe Nutzer-Klarstellung zu Bugreport 5: der ursprünglich
- * gebaute, aber nie gepushte "Title win"-Popup war der LIGA-Titel, nicht der
- * Pokal) - analog zu `buildNationalCupWinEvent`, nur für die Meisterschale
- * (Liga 1) bzw. Zweitliga-Meisterschaft (Liga 2). Beide bekamen bisher KEIN
- * eigenes Ereignis, sondern tauchten nur als Text im Trophäen-Banner der
- * Saisonbilanz auf. Etwas größerer Bonus als beim Landespokal (siehe
- * `LEGACY_TROPHY_WEIGHTS`: Meisterschale wiegt dort spürbar schwerer als
- * Landespokal), Zweitliga-Meisterschaft etwas kleiner als die echte
- * Meisterschale, aber immer noch ein eigener Feier-Moment statt gar keinem. */
-export function buildLeagueTitleWinEvent(player: Player, tier1: boolean): GameEvent {
-  return {
-    id: `meisterschaft-sieg-${player.age}-${Math.round(rng() * 1e6)}`,
-    templateId: LEAGUE_TITLE_WIN_TEMPLATE_ID,
-    category: "meilenstein",
-    title: tier1 ? "Meisterschale!" : "Zweitliga-Meister!",
-    description: tier1
-      ? `${player.club.name} ist am Saisonende verdient Meister - der größte Titel im Vereinsfußball.`
-      : `${player.club.name} sichert sich die Zweitliga-Meisterschaft und damit den direkten Aufstieg.`,
-    choices: [
-      {
-        id: "geniessen",
-        label: "Den Titel feiern",
-        effects: {
-          reputation: tier1 ? 10 : 6,
-          morale: tier1 ? 8 : 6,
-          attributes: { mentalitaet: 1 },
-          logText: tier1 ? "krönt die Saison mit dem Gewinn der Meisterschale." : "krönt die Saison mit der Zweitliga-Meisterschaft.",
-          logKind: "milestone",
-        },
-      },
-    ],
-  };
 }
 
 export function buildRetirementEvent(player: Player): GameEvent {

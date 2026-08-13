@@ -17,23 +17,6 @@ import { availableInvestmentIds, investmentCost } from "./investments";
  * App.tsx nicht denselben String-Literal duplizieren muss. */
 export const VACATION_TEMPLATE_ID = "urlaub_sommerpause";
 
-/** Landespokalsieg-Feier-Event - wird NIE über die normale Gewichtungs-Auswahl
- * gezogen, sondern von App.tsx `handleContinueFromSummary` explizit als letztes
- * Ereignis GENAU DER Saison erzwungen, in der der Pokal tatsächlich gewonnen
- * wurde (siehe dortiger Kommentar). Deckt seit dem Nutzer-Feedback "keine eigene
- * Pop-up-Animation beim Landespokal-Gewinn" JEDEN Pokalsieg ab, nicht mehr nur
- * den Außenseiter-Coup (siehe `buildNationalCupWinEvent` in careerEngine.ts, wo
- * das Event tatsächlich gebaut wird - hier nur die ID als geteilte Konstante,
- * damit App.tsx keinen eigenen String-Literal dupliziert). */
-export const NATIONAL_CUP_WIN_TEMPLATE_ID = "landespokal_sieg";
-
-/** Meisterschafts-Feier-Event (Meisterschale/Zweitliga-Meisterschaft) - dasselbe
- * "erzwungenes Spezial-Event nach der Saisonbilanz"-Muster wie
- * `NATIONAL_CUP_WIN_TEMPLATE_ID` (siehe dort), nur für den Liga-Titel statt des
- * Pokals. Gebaut in `buildLeagueTitleWinEvent` (careerEngine.ts) - hier nur die
- * ID als geteilte Konstante. */
-export const LEAGUE_TITLE_WIN_TEMPLATE_ID = "meisterschaft_sieg";
-
 /** "Heimkehrer"-Info-Event (siehe Template weiter unten) - wird NIE über die
  * normale Gewichtungs-Auswahl gezogen, sondern von App.tsx `handleChoice` direkt
  * nach einem echten Wechsel erzwungen, wenn `applyClubOfferChoice` eine Heimkehr
@@ -6792,12 +6775,6 @@ export const EVENT_TEMPLATES: EventTemplate[] = [
     },
   },
 
-  // ---------------------------------------------------------------------
-  // NATIONALER POKAL (siehe nationalCup.ts): das eigentliche Feier-Event wird
-  // NICHT hier als Template definiert, sondern direkt als `GameEvent`-Literal in
-  // `buildNationalCupWinEvent` (careerEngine.ts) gebaut - siehe dort für den
-  // Grund (`NATIONAL_CUP_WIN_TEMPLATE_ID` oben), warum es überhaupt erzwungen
-  // statt über die normale Gewichtungs-Auswahl gezogen wird.
   // ---------------------------------------------------------------------
   // "HEIMKEHRER" (siehe HOMECOMING_TEMPLATE_ID/`detectClubHomecoming` in types.ts):
   // eine echte Rückkehr zu einem Verein, an dem der Spieler in frühen Jahren
