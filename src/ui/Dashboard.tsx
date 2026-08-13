@@ -99,7 +99,11 @@ export function Dashboard({
         <StatBox label="Bekannt." value={`${player.reputation}%`} />
       </div>
       <div className="stat-row-secondary">
-        <StatBox label="Verein" value={`${player.clubRelation}%`} />
+        {/* "Vereinsbez." statt bloß "Verein" (siehe Nutzer-Feedback: unklar, ob der
+            VereinsNAME oder das Verhältnis zum Verein gemeint ist) - `Math.round`
+            als zusätzliches Sicherheitsnetz gegen Nachkommastellen (siehe
+            `computeArrivalTrust`, der eigentlichen Rundungsquelle). */}
+        <StatBox label="Vereinsbez." value={`${Math.round(player.clubRelation)}%`} />
         <StatBox label="Vermögen" value={formatMoney(player.wealth)} />
         <StatBox
           label="Privat"
@@ -110,8 +114,16 @@ export function Dashboard({
 
       {/* Persönliches Umfeld: kompakter Statustext statt eines eigenen Screens
           (siehe investments.ts) - zeigt beim Laden bereits an, ob gerade etwas
-          aktiv ist, ohne das Panel extra öffnen zu müssen. */}
+          aktiv ist, ohne das Panel extra öffnen zu müssen. Zusätzlich eine
+          Ampel-Statusleuchte (siehe Nutzer-Feedback): grün, wenn ein Investment
+          verfügbar ist, gelb, solange eines aktiv läuft - ohne Leuchte, wenn
+          gerade nichts davon zutrifft. */}
       <button type="button" className="btn btn-outline-gold" onClick={() => setShowInvestments(true)}>
+        {player.activeInvestment ? (
+          <span className="role-status-light yellow investment-status-light" aria-hidden="true" />
+        ) : availableInvestmentIds(player).length > 0 ? (
+          <span className="role-status-light green investment-status-light" aria-hidden="true" />
+        ) : null}
         {player.activeInvestment
           ? `💼 ${INVESTMENT_DEFINITIONS[player.activeInvestment.id].label}${
               player.activeInvestment.id === "spezialtraining"

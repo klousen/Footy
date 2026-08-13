@@ -12,6 +12,9 @@ export function emptyState(): GameState {
     currentEvent: null,
     feedback: null,
     lastSeasonStats: null,
+    currentTitlePopup: null,
+    pendingTitlePopups: [],
+    shownTitlePopupsThisSeason: [],
     usedTemplateIds: [],
     recentTemplateSeasons: {},
   };

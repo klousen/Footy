@@ -403,6 +403,13 @@ export interface SeasonStats {
   scoreFactors: ScoreFactor[];
   /** In dieser Saison neu freigeschaltete Erfolge - für kontextualisiertes Feedback direkt im Saisonrückblick. */
   newAchievements: Achievement[];
+  /** In dieser Saison gewonnene Titel (Meisterschaft/Pokal/Champions Cup/Europa Cup),
+   * aufbereitet für das vorgeschaltete Titelgewinn-Popup (siehe `TitleWin`, `App.tsx`
+   * `finishSeasonEvents`) - bei einem Doublé/Triple mehr als ein Eintrag. Wird HIER nur
+   * mit `[]` initialisiert und erst danach (nach `ageUpPlayer`, siehe dortiger Kommentar
+   * an `Player.lastTitleSeasonByType`) über `buildTitleWinsForSeason` befüllt, analog zu
+   * `newAchievements` oben. */
+  titleWins: TitleWin[];
   /** Tabellen-Ausschnitt (3 Vereine über/unter dem eigenen) für den Saisonrückblick. */
   tableSnapshot: TableRow[];
   /** Champions-/Europa-League-Teilnahme dieser Saison, `null` wenn nicht qualifiziert
@@ -605,6 +612,12 @@ export interface OfferCardData {
   wageDelta?: number;
   roleLabel: string;
   roleSub?: string;
+  /** Ampel-Status für die "Rolle"-Pill (siehe `rolePrognosisTone` in careerEngine.ts,
+   * Nutzer-Feedback "Farbe von Stammplatz und Co soll mit einer Art Statusleuchte
+   * in Ampelfarben versehen sein") - `undefined` nur bei den generischen "Bleiben"-
+   * Aktionslabels ("Treue"/"Kämpfen"/"Kitten"), die keine echte Rollen-Prognose
+   * abbilden. */
+  roleTone?: "green" | "yellow" | "red";
   typeLabel: string;
   isStay: boolean;
   /** Der EINMALIG gewürfelte, abstrahierte Kaderbedarf auf der eigenen Position für
@@ -916,6 +929,66 @@ export interface Player {
   /** Saisons bis ein zuletzt abgelaufenes Investment erneut aktivierbar ist -
    * Key = `PersonalInvestmentId`, fehlender Eintrag = kein Cooldown aktiv. */
   investmentCooldowns: Partial<Record<PersonalInvestmentId, number>>;
+  /** Saison (siehe `seasonHistory.length`-Zählweise), in der zuletzt ein Titel dieses
+   * Typs GEWONNEN WURDE, AM AKTUELLEN VEREIN (siehe `lastTitleClubIdByType`) -
+   * Grundlage für `TitleWin.yearsSinceLastTitle` (siehe dort). `null` = noch nie mit
+   * dem aktuellen Verein gewonnen (unabhängig davon, ob früher bei einem ANDEREN
+   * Verein schon einmal). */
+  lastTitleSeasonByType: Record<TitleType, number | null>;
+  /** Verein (`Club.clubId`), an dem `lastTitleSeasonByType[type]` zuletzt aktualisiert
+   * wurde - ein Vereinswechsel macht den Eintrag faktisch ungültig (neuer Verein, neue
+   * eigene Titel-Vorgeschichte), siehe `buildTitleWinsForSeason` in careerEngine.ts. */
+  lastTitleClubIdByType: Record<TitleType, string | null>;
+}
+
+/**
+ * Titelgewinn-Popup (siehe Handoff "Titelgewinn-Popup", `TitleWinPopup.tsx`) - die
+ * vier Wettbewerbe, die einen eigenen, der Saisonbilanz vorgeschalteten Zwischenschritt
+ * bekommen. Bewusst KEIN eigener Typ für "Zweitliga-Meisterschaft" - beide Meisterschafts-
+ * Varianten (Liga 1/Liga 2, siehe `TROPHY_POOL_BY_TIER` in careerEngine.ts) laufen unter
+ * `"meisterschaft"`, die Liga-Zugehörigkeit fließt nur in den Anzeigetext ein.
+ */
+export type TitleType = "meisterschaft" | "pokal" | "championscup" | "europacup";
+
+/** Vereinfachte, popup-taugliche Kaderrollen-Einordnung (siehe `TitleWin.contribution`) -
+ * grober als `SquadRole`, da die Popup-Karte nur "gesetzt vs. Rotation" unterscheiden
+ * will, für Torhüter zusätzlich "Nummer 1 vs. Nummer 2" (siehe `goalkeeperRoleLabel`
+ * in careerEngine.ts, dieselbe Zweiteilung). Mapping siehe `mapContributionSquadRole`. */
+export type TitleContributionSquadRole = "stammspieler" | "rotationsspieler" | "nummer1" | "nummer2";
+
+/** Der eigene, quantifizierte Anteil an EINEM Titelgewinn (siehe `TitleWin`) - je nach
+ * Position entweder das Feldspieler- oder das Torwart-Statblock (nie beides gesetzt),
+ * dieselbe Unterscheidung wie im bestehenden Saison-Bilanz-Screen (siehe SeasonSummary.tsx). */
+export interface TitleWinContribution {
+  goals?: number;
+  assists?: number;
+  cleanSheets?: number;
+  /** In %, nur für Torhüter. */
+  saveRate?: number;
+  avgRating: number;
+  /** Einsätze IM RELEVANTEN FENSTER dieses Titels (ganze Saison bei Meisterschaft,
+   * nur die K.o.-/Wettbewerbsrunden bei Pokal/Champions Cup/Europa Cup) - siehe
+   * `titleContributionWindow` in careerEngine.ts für die genaue Herleitung. */
+  appearances: number;
+  maxPossibleAppearances: number;
+  squadRole: TitleContributionSquadRole;
+}
+
+/** EIN im Popup gezeigter Titelgewinn dieser Saison (siehe Handoff "Titelgewinn-Popup"
+ * Abschnitt 2) - `SeasonStats.titleWins` kann bei einem Doublé/Triple mehrere Einträge
+ * enthalten, `App.tsx` zeigt sie sequenziell über `GameState.currentTitlePopup`/
+ * `pendingTitlePopups`. Bewusst KEIN Feld für die Doublé/Triple-Referenzierung (Eyebrow-
+ * Text, Referenzsatz, gedimmte Vorgänger-Icons) - das ist reine Render-Logik der Popup-
+ * Queue in App.tsx anhand der Position im Array (siehe `Player.lastTitleSeasonByType`-
+ * Kommentar), damit dieser Kern-Typ wettbewerbsneutral bleibt.
+ */
+export interface TitleWin {
+  type: TitleType;
+  season: number;
+  yearsSinceLastTitle: number | null;
+  contribution: TitleWinContribution;
+  overallBefore: number;
+  overallAfter: number;
 }
 
 /** Siehe "investments.ts" für die vollständige Definition/Freischaltung/Kosten
@@ -1171,6 +1244,20 @@ export interface GameState {
   /** Sofort-Feedback zur zuletzt getroffenen Entscheidung, bevor es weitergeht. */
   feedback: ChoiceFeedback | null;
   lastSeasonStats: SeasonStats | null;
+  /** Aktuell angezeigtes Titelgewinn-Popup (siehe Handoff "Titelgewinn-Popup"), `null`
+   * außerhalb von `screen === "titlePopup"`. Läuft VOR der Saisonbilanz als eigener
+   * Zwischenschritt (siehe `finishSeasonEvents`/`handleContinueFromTitlePopup` in App.tsx),
+   * bei mehreren Titeln derselben Saison sequenziell nacheinander. */
+  currentTitlePopup: TitleWin | null;
+  /** Noch nicht gezeigte Titel-Popups dieser Saison, OHNE das aktuell angezeigte
+   * (`currentTitlePopup`) - dasselbe "aktuelles Element + Restwarteschlange"-Muster wie
+   * `currentEvent`/`pendingEventIds`. */
+  pendingTitlePopups: TitleWin[];
+  /** `TitleType`s, die in DIESER Popup-Sequenz bereits mit "Weiter" bestätigt wurden -
+   * steuert Doublé/Triple-Eyebrow, Referenzsatz und gedimmte Vorgänger-Icons im NÄCHSTEN
+   * Popup (siehe `TitleWinPopup.tsx`). Wird bei jedem neuen `finishSeasonEvents`-Aufruf
+   * geleert, ist also bewusst KEINE Karriere-weite Historie. */
+  shownTitlePopupsThisSeason: TitleType[];
   usedTemplateIds: string[];
   /** Saison, in der ein Template zuletzt gezogen wurde (für Wiederholungs-Cooldown). */
   recentTemplateSeasons: Record<string, number>;
@@ -1190,5 +1277,6 @@ export type Screen =
   | "youthOffer"
   | "dashboard"
   | "event"
+  | "titlePopup"
   | "seasonSummary"
   | "careerEnd";

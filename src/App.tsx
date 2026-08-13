@@ -26,6 +26,7 @@ import {
   buildLoanFutureEvent,
   buildRankingEntry,
   buildRetirementEvent,
+  buildTitleWinsForSeason,
   clubOfferTemplateId,
   computeAchievements,
   computeLegacy,
@@ -46,13 +47,14 @@ import {
   shouldOfferRetirement,
   shouldTriggerVacationEvent,
   simulateSeason,
+  sortTitleWins,
   STALE_AFTER_TRANSFER_TEMPLATE_IDS,
   summarizeEffects,
 } from "./engine/careerEngine";
 import { LOAN_DECISION_TEMPLATE_IDS } from "./engine/loanStory";
 import { activateInvestment } from "./engine/investments";
 import type { PersonalInvestmentId } from "./engine/types";
-import { HOMECOMING_TEMPLATE_ID, UNDERDOG_CUP_TEMPLATE_ID, VACATION_TEMPLATE_ID } from "./engine/events";
+import { HOMECOMING_TEMPLATE_ID, VACATION_TEMPLATE_ID } from "./engine/events";
 import { pickSpreadClubOffers } from "./engine/leagueEngine";
 import { TRANSFER_DECISION_MEANING } from "./ui/labels";
 import { useLanguage } from "./ui/LanguageContext";
@@ -67,6 +69,7 @@ import { YouthClubOffer } from "./ui/YouthClubOffer";
 import { Dashboard } from "./ui/Dashboard";
 import { EventCard } from "./ui/EventCard";
 import { SeasonSummary } from "./ui/SeasonSummary";
+import { TitleWinPopup } from "./ui/TitleWinPopup";
 import { CareerEnd } from "./ui/CareerEnd";
 import { EndCareerMenu } from "./ui/EndCareerMenu";
 import "./app.css";
@@ -358,6 +361,15 @@ export default function App() {
     }
     const stats = simulateSeason(player, current.seasonNumber, league, current.foreignLeagues, current.europeanLeagueDrift);
     ageUpPlayer(player);
+
+    // Titelgewinn-Popup(s) (siehe Handoff "Titelgewinn-Popup") - bewusst NACH
+    // `ageUpPlayer` (damit `TitleWin.overallAfter` den Wachstumsschub dieser Saison
+    // einschließt), aber VOR `resolveClubSituation` (das `player.contract.squadRole`
+    // schon für die NÄCHSTE Saison neu berechnet - hier soll noch die Rolle WÄHREND
+    // der gerade simulierten Saison einfließen, siehe `buildTitleWinsForSeason`).
+    const titleWins = sortTitleWins(buildTitleWinsForSeason(player, stats, current.seasonNumber));
+    stats.titleWins = titleWins;
+
     const clubEntry = resolveClubSituation(player, league);
     if (clubEntry) player.log.push(clubEntry);
     const promotionEntry = applyLeaguePromotionRelegation(player, league);
@@ -370,6 +382,8 @@ export default function App() {
     player.unlockedAchievementIds = [...player.unlockedAchievementIds, ...newAchievements.map((a) => a.id)];
     stats.newAchievements = newAchievements;
 
+    const [firstTitlePopup, ...restTitlePopups] = titleWins;
+
     setGame({
       ...current,
       player: { ...player },
@@ -379,8 +393,35 @@ export default function App() {
       currentEvent: null,
       pendingEventIds: [],
       feedback: null,
-      screen: "seasonSummary",
+      // Bei mindestens einem Titel dieser Saison läuft das Popup ZUERST, die
+      // Saisonbilanz folgt erst über `handleContinueFromTitlePopup` (siehe dort).
+      currentTitlePopup: firstTitlePopup ?? null,
+      pendingTitlePopups: restTitlePopups,
+      shownTitlePopupsThisSeason: [],
+      screen: firstTitlePopup ? "titlePopup" : "seasonSummary",
     });
+  }
+
+  // "Weiter" im Titelgewinn-Popup (siehe Handoff "Titelgewinn-Popup") - zeigt den
+  // nächsten Titel dieser Saison (falls noch einer in der Warteschlange steht,
+  // siehe `GameState.pendingTitlePopups`) oder geht andernfalls zur regulären
+  // Saisonbilanz weiter, exakt dorthin, wo `finishSeasonEvents` ohne Titelgewinn
+  // direkt hingeführt hätte.
+  function handleContinueFromTitlePopup() {
+    if (!game.player || !game.currentTitlePopup) return;
+    const shownSoFar = [...game.shownTitlePopupsThisSeason, game.currentTitlePopup.type];
+    const [next, ...rest] = game.pendingTitlePopups;
+    if (next) {
+      setGame({ ...game, currentTitlePopup: next, pendingTitlePopups: rest, shownTitlePopupsThisSeason: shownSoFar });
+    } else {
+      setGame({
+        ...game,
+        currentTitlePopup: null,
+        pendingTitlePopups: [],
+        shownTitlePopupsThisSeason: [],
+        screen: "seasonSummary",
+      });
+    }
   }
 
   // Schritt 1: Wahl treffen -> Effekte sofort anwenden, Ergebnis als Feedback zeigen
@@ -503,11 +544,6 @@ export default function App() {
     // Feedback NICHT `finishSeasonEvents` auslösen, sondern führt direkt
     // zurück ins Dashboard (dieselbe Weiche wie beim Rücktritts-Event).
     const isLoanFutureDecision = game.currentEvent.templateId === clubOfferTemplateId("loan-keep");
-    // Wie `isLoanFutureDecision`: ein erzwungenes Spezial-Event NACH der
-    // Saisonbilanz, kein Teil einer neuen laufenden Saison - darf nach dem
-    // Feedback NICHT `finishSeasonEvents` erneut auslösen (siehe
-    // `handleContinueFromSummary`).
-    const isUnderdogCupEvent = game.currentEvent.templateId === UNDERDOG_CUP_TEMPLATE_ID;
     const choiceId = game.feedback.choiceId;
     const player = game.player;
 
@@ -522,15 +558,6 @@ export default function App() {
 
     if (isLoanFutureDecision) {
       setGame({ ...game, player: { ...player }, currentEvent: null, feedback: null, screen: "dashboard" });
-      return;
-    }
-
-    if (isUnderdogCupEvent) {
-      if (shouldOfferRetirement(player)) {
-        setGame({ ...game, player: { ...player }, currentEvent: buildRetirementEvent(player), feedback: null });
-      } else {
-        setGame({ ...game, player: { ...player }, currentEvent: null, feedback: null, screen: "dashboard" });
-      }
       return;
     }
 
@@ -552,15 +579,6 @@ export default function App() {
     // Mechanismus wie beim Rücktritts-Angebot unten.
     if (game.player.loanNarrative) {
       setGame({ ...game, currentEvent: buildLoanFutureEvent(game.player), feedback: null, screen: "event" });
-      return;
-    }
-    // Außenseiter-Pokalsieg (siehe Bugreport + `UNDERDOG_CUP_TEMPLATE_ID` in
-    // events.ts): erzwungen als letztes Ereignis GENAU der Saison, deren
-    // Bilanz gerade angezeigt wurde (`game.lastSeasonStats`) - dieselbe
-    // "erzwungenes Spezial-Event"-Weiche wie beim Leihjahr/Rücktritt oben.
-    if (game.lastSeasonStats?.nationalCup?.champion && game.lastSeasonStats.nationalCup.underdog && game.leagueState) {
-      const cupEvent = buildEventFromId(UNDERDOG_CUP_TEMPLATE_ID, game.player, game.leagueState, game.foreignLeagues);
-      setGame({ ...game, currentEvent: cupEvent, feedback: null, screen: "event" });
       return;
     }
     if (shouldOfferRetirement(game.player)) {
@@ -694,6 +712,15 @@ export default function App() {
           feedback={game.feedback}
           onChoose={handleChoice}
           onContinue={handleFeedbackContinue}
+        />
+      )}
+      {game.screen === "titlePopup" && game.player && game.currentTitlePopup && (
+        <TitleWinPopup
+          titleWin={game.currentTitlePopup}
+          player={game.player}
+          precedingTypes={game.shownTitlePopupsThisSeason}
+          isLastPopup={game.pendingTitlePopups.length === 0}
+          onContinue={handleContinueFromTitlePopup}
         />
       )}
       {game.screen === "seasonSummary" && game.player && game.lastSeasonStats && (

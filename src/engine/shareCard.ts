@@ -12,7 +12,7 @@
 import type { Achievement, Player, SeasonStats } from "./types";
 import { POSITION_LABEL } from "./types";
 import { COUNTRIES } from "./leagues";
-import { overallRating } from "./careerEngine";
+import { buildClubTenures, overallRating } from "./careerEngine";
 import { overallTier } from "./labels";
 
 /** Aufschlüsselung der Titel-Gesamtzahl nach den fünf in der Sharepic-Trophäenreihe
@@ -47,6 +47,18 @@ function computeTrophyBreakdown(player: Player): TrophyBreakdown {
     cl: t.filter((x) => x === "Champions Cup").length,
     aufstieg: player.seasonHistory.filter((s) => s.promoted).length,
   };
+}
+
+/** Kompakte Vereinszugehörigkeit nach Alter fürs Sharepic (siehe Nutzer-Feedback
+ * "Vereinszugehörigkeit nach Alter, möglichst kompakt") - EIN Zeilentext aus
+ * `buildClubTenures` (dieselbe Grundlage wie der Karriereverlauf am Karriereende,
+ * siehe CareerEnd.tsx), z.B. "14-17 SC Freiburg · 18-21 Hoffenheim · 22-26 Bayern".
+ * Ersetzt die bisherige reine "Letzter Verein: X"-Zeile - der letzte Verein steckt
+ * als letzter Zeitleisten-Eintrag ohnehin schon mit drin. */
+function buildClubTimeline(player: Player): string {
+  return buildClubTenures(player)
+    .map((t) => `${t.fromAge === t.toAge ? `${t.fromAge}` : `${t.fromAge}-${t.toAge}`} ${t.club}`)
+    .join(" · ");
 }
 
 /** Extrahiert die erste vierstellige Jahreszahl aus einem Saison-Label
@@ -99,6 +111,8 @@ export interface ShareCardData {
   flag: string;
   countryName: string;
   finalClub: string;
+  /** Kompakte Vereinszugehörigkeit nach Alter, siehe `buildClubTimeline`. */
+  clubTimeline: string;
   ageRange: string;
   /** Karriere-Bestwert (höchste je erreichte Gesamtstärke) - das ist die Zahl, die groß im Badge steht. */
   overall: number;
@@ -155,6 +169,7 @@ export function buildShareCardData(
     flag: country?.flag ?? "🏳️",
     countryName: country?.name ?? player.club.country,
     finalClub: player.club.name,
+    clubTimeline: buildClubTimeline(player),
     ageRange: `${player.birthAge}-${player.age}`,
     overall,
     tierLabel: tier.label,
@@ -457,8 +472,14 @@ export function drawShareCard(canvas: HTMLCanvasElement, data: ShareCardData): v
   ctx.fillText(ellipsize(ctx, metaLine, identityW), identityX, idY);
 
   idY += 38;
-  const clubLine = `Letzter Verein: ${data.finalClub}`;
-  const clubSize = fitTextSize(ctx, clubLine, identityW, 23, 16, "500");
+  // Vereinszugehörigkeit nach Alter statt nur des letzten Vereins (siehe
+  // Nutzer-Feedback "Vereinszugehörigkeit nach Alter, möglichst kompakt") - eine
+  // einzelne, ggf. per `ellipsize` gekürzte Zeile, damit der bestehende Zeilen-
+  // Platz in der Kopfzeile ausreicht (siehe `buildClubTimeline`). Fällt auf den
+  // reinen letzten Verein zurück, falls (z.B. bei einer noch laufenden Jugend-
+  // karriere ohne Profisaison) keine Zeitleiste existiert.
+  const clubLine = data.clubTimeline || `Letzter Verein: ${data.finalClub}`;
+  const clubSize = fitTextSize(ctx, clubLine, identityW, 22, 14, "500");
   ctx.font = `500 ${clubSize}px "Segoe UI", system-ui, sans-serif`;
   ctx.fillStyle = CHALK_DIM;
   ctx.globalAlpha = 0.85;

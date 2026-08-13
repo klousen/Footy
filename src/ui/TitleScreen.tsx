@@ -35,7 +35,7 @@ function RankingPreviewPanel({
           <div className="tm-rank-main">
             <div className="tm-rank-name">{entry.playerName}</div>
             <div className="tm-rank-meta">
-              {entry.nationFlag} {entry.nation} · {entry.longestClub.years} {t("yearsAbbr")} {entry.longestClub.name}
+              {entry.nationFlag} {entry.nation} · {entry.longestClub.years} {t("yearsAbbr")} {t("yearsAtClub")} {entry.longestClub.name}
             </div>
           </div>
           <div className="tm-rank-scores">

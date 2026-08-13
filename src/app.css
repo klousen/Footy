@@ -31,6 +31,13 @@
   --red: #8b3a3a;
   --green: #4e9e6e;
 
+  /* Nur fürs Titelgewinn-Popup gebraucht (Silber-Tier: Landespokal/Europa Cup, siehe
+     TitleWinPopup.tsx ".tw-*") - bislang existierte kein Silber-Token, nur lokale
+     Hex-Werte in shareCard.ts (dortige Canvas-Karte bleibt bewusst unverändert). */
+  --silver: #c7cdd2;
+  --silver-bright: #e6ebee;
+  --silver-dim: #7d858c;
+
   /* ---- Semantische Aliase - bestehende Komponentenklassen referenzieren
      diese Namen, damit die neuen Kern-Tokens ohne Änderungen an jeder
      einzelnen Regel greifen. Gold übernimmt hier zusätzlich die Rolle von
@@ -1179,13 +1186,49 @@ input:focus {
   margin-top: 1px;
 }
 
-.offer-pill .v.strength-up,
 .offer-pill .v.salary-up {
   color: var(--green);
 }
 
-.offer-pill .v.strength-down {
-  color: var(--red);
+/* Rolle-Pill: Ampel-Statusleuchte vor dem Label (siehe `OfferCardData.roleTone`,
+   Nutzer-Feedback "Farbe von Stammplatz und Co soll mit einer Art Statusleuchte
+   in Ampelfarben versehen sein"). Grün/Rot als klarer Vollton, Gelb ("unklar")
+   bewusst als Farbverlauf statt Vollton - visualisiert die Unsicherheit selbst,
+   statt nur ihre Farbe zu zeigen. */
+.role-v {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.role-status-light {
+  flex: none;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.25) inset;
+}
+
+.role-status-light.green {
+  background: var(--green);
+}
+
+.role-status-light.red {
+  background: var(--red);
+}
+
+.role-status-light.yellow {
+  background: linear-gradient(135deg, var(--gold-bright), var(--red) 140%);
+}
+
+/* Statusleuchte im "Persönliches Umfeld"-Button (siehe Dashboard.tsx) - der
+   Button ist kein Flex-Container, daher inline-block mit Baseline-Korrektur
+   statt `align-items` auf dem `.role-v`-Wrapper. */
+.investment-status-light {
+  display: inline-block;
+  vertical-align: middle;
+  margin-right: 6px;
+  margin-bottom: 2px;
 }
 
 .offer-pill .sub {
@@ -2727,4 +2770,446 @@ input:focus {
   font-size: 0.75rem;
   color: var(--muted);
   white-space: nowrap;
+}
+
+/* ====================================================================
+   Titelgewinn-Popup ("tw-" = Title Win) - eigener Klassen-Namespace, siehe
+   Kommentar an "tm-" oben: 1:1 am Referenz-Mockup orientiert (Handoff
+   "Titelgewinn-Popup"), inkl. eigenem Gold-/Silber-Gradient-Button statt des
+   sonst app-weiten Grün-Primärtons - der Moment soll sich bewusst von jedem
+   anderen Screen abheben. Bestehende `--gold*`-Tokens werden wiederverwendet,
+   nur `--silver*` ist neu (die Ligapokal-/Europa-Cup-Tier-Farbe existierte
+   bisher nirgends als Token, nur als lokaler Hex-Wert in shareCard.ts).
+   ==================================================================== */
+
+.tw-screen {
+  align-items: center;
+  text-align: center;
+}
+
+.tw-backdrop {
+  position: relative;
+  width: 100%;
+  max-width: 360px;
+  margin: 12px auto 0;
+  border-radius: 20px;
+  overflow: hidden;
+  background: radial-gradient(120% 80% at 50% -10%, var(--bg-panel-2) 0%, var(--bg-deep) 60%);
+}
+
+.tw-rays {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: conic-gradient(
+    from 0deg at 50% 34%,
+    rgba(201, 168, 106, 0.1) 0deg,
+    transparent 18deg,
+    rgba(201, 168, 106, 0.1) 24deg,
+    transparent 42deg,
+    rgba(201, 168, 106, 0.1) 48deg,
+    transparent 66deg,
+    rgba(201, 168, 106, 0.1) 72deg,
+    transparent 90deg,
+    rgba(201, 168, 106, 0.1) 96deg,
+    transparent 114deg,
+    rgba(201, 168, 106, 0.1) 120deg,
+    transparent 138deg,
+    rgba(201, 168, 106, 0.1) 144deg,
+    transparent 162deg,
+    rgba(201, 168, 106, 0.1) 168deg,
+    transparent 186deg,
+    rgba(201, 168, 106, 0.1) 192deg,
+    transparent 210deg,
+    rgba(201, 168, 106, 0.1) 216deg,
+    transparent 234deg,
+    rgba(201, 168, 106, 0.1) 240deg,
+    transparent 258deg,
+    rgba(201, 168, 106, 0.1) 264deg,
+    transparent 282deg,
+    rgba(201, 168, 106, 0.1) 288deg,
+    transparent 306deg,
+    rgba(201, 168, 106, 0.1) 312deg,
+    transparent 330deg,
+    rgba(201, 168, 106, 0.1) 336deg,
+    transparent 360deg
+  );
+  animation: tw-spin 40s linear infinite;
+  transform-origin: 50% 34%;
+}
+
+@keyframes tw-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.tw-confetti {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.tw-confetti span {
+  position: absolute;
+  top: -10%;
+  width: 6px;
+  height: 12px;
+  opacity: 0;
+  animation: tw-fall 2.6s ease-in forwards;
+}
+
+@keyframes tw-fall {
+  0% {
+    opacity: 0;
+    transform: translateY(0) rotate(0deg);
+  }
+  8% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(680px) rotate(540deg);
+  }
+}
+
+.tw-card {
+  position: relative;
+  padding: 28px 0 24px;
+  border: 1px solid var(--gold-dim);
+  border-radius: 20px;
+  box-shadow: 0 0 0 1px rgba(201, 162, 39, 0.08), 0 30px 60px -20px rgba(0, 0, 0, 0.7), 0 0 60px -10px rgba(201, 162, 39, 0.15);
+  transform: scale(0.85) translateY(18px);
+  opacity: 0;
+  animation: tw-card-in 0.55s cubic-bezier(0.2, 1.4, 0.4, 1) 0.1s forwards;
+}
+
+.tw-card.tw-tier-silver {
+  border-color: var(--silver-dim);
+  box-shadow: 0 0 0 1px rgba(199, 205, 210, 0.08), 0 30px 60px -20px rgba(0, 0, 0, 0.7), 0 0 50px -10px rgba(199, 205, 210, 0.14);
+}
+
+@keyframes tw-card-in {
+  to {
+    transform: scale(1) translateY(0);
+    opacity: 1;
+  }
+}
+
+.tw-preceding-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  margin-bottom: 6px;
+  opacity: 0;
+  animation: tw-fade-up 0.5s ease 0.38s forwards;
+}
+
+.tw-preceding-row .tw-mini {
+  width: 26px;
+  height: 26px;
+  opacity: 0.55;
+  filter: grayscale(0.15);
+}
+
+.tw-preceding-row .tw-mini svg {
+  width: 100%;
+  height: 100%;
+}
+
+.tw-preceding-row .tw-plus {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  color: var(--chalk-dim);
+}
+
+.tw-eyebrow {
+  font-family: var(--font-display);
+  font-weight: 600;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  font-size: 10.5px;
+  color: var(--gold);
+  opacity: 0;
+  animation: tw-fade-up 0.5s ease 0.5s forwards;
+}
+
+.tw-tier-silver .tw-eyebrow {
+  color: var(--silver);
+}
+
+.tw-trophy-wrap {
+  position: relative;
+  width: 110px;
+  height: 110px;
+  margin: 12px auto 2px;
+}
+
+.tw-trophy-glow {
+  position: absolute;
+  inset: -28px;
+  background: radial-gradient(circle, rgba(224, 193, 132, 0.35) 0%, transparent 70%);
+}
+
+.tw-tier-silver .tw-trophy-glow {
+  background: radial-gradient(circle, rgba(230, 235, 238, 0.3) 0%, transparent 70%);
+}
+
+.tw-trophy {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transform: scale(0.3) rotate(-8deg);
+  opacity: 0;
+  animation: tw-trophy-pop 0.6s cubic-bezier(0.34, 1.56, 0.64, 1) 0.3s forwards;
+}
+
+.tw-trophy svg {
+  width: 80px;
+  height: 80px;
+  filter: drop-shadow(0 8px 18px rgba(0, 0, 0, 0.5));
+}
+
+@keyframes tw-trophy-pop {
+  to {
+    transform: scale(1) rotate(0deg);
+    opacity: 1;
+  }
+}
+
+.tw-rings {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  border: 1px solid rgba(224, 193, 132, 0.5);
+  opacity: 0;
+  animation: tw-ring-out 1.2s ease-out 0.45s forwards;
+}
+
+.tw-tier-silver .tw-rings {
+  border-color: rgba(230, 235, 238, 0.5);
+}
+
+.tw-rings.tw-ring2 {
+  animation-delay: 0.6s;
+}
+
+@keyframes tw-ring-out {
+  0% {
+    opacity: 0.8;
+    transform: scale(0.5);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1.6);
+  }
+}
+
+.tw-title-line {
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 27px;
+  letter-spacing: 0.01em;
+  color: var(--chalk);
+  text-transform: uppercase;
+  line-height: 1.05;
+  margin-top: 8px;
+  opacity: 0;
+  animation: tw-fade-up 0.5s ease 0.62s forwards;
+}
+
+.tw-title-line .tw-gold-text {
+  color: var(--gold-bright);
+  display: block;
+  font-size: 19px;
+  margin-top: 2px;
+}
+
+.tw-tier-silver .tw-title-line .tw-gold-text {
+  color: var(--silver-bright);
+}
+
+.tw-subline {
+  font-family: var(--font-body);
+  font-size: 13px;
+  color: var(--muted);
+  line-height: 1.5;
+  margin: 11px 26px 0;
+  opacity: 0;
+  animation: tw-fade-up 0.5s ease 0.74s forwards;
+}
+
+.tw-subline b {
+  color: var(--chalk);
+  font-weight: 600;
+}
+
+.tw-divider {
+  width: 80%;
+  height: 1px;
+  margin: 18px auto 15px;
+  background: linear-gradient(90deg, transparent, var(--line-gold), transparent);
+  opacity: 0;
+  animation: tw-fade-up 0.5s ease 0.86s forwards;
+}
+
+.tw-contrib {
+  margin: 0 22px;
+  opacity: 0;
+  animation: tw-fade-up 0.5s ease 0.95s forwards;
+}
+
+.tw-contrib-label {
+  font-family: var(--font-display);
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  font-size: 10px;
+  color: var(--muted);
+  margin-bottom: 9px;
+  text-align: left;
+}
+
+.tw-contrib-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 7px;
+}
+
+.tw-stat-box {
+  background: rgba(0, 0, 0, 0.22);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 9px 3px;
+}
+
+.tw-stat-num {
+  font-family: var(--font-mono);
+  font-weight: 700;
+  font-size: 17px;
+  color: var(--gold-bright);
+}
+
+.tw-tier-silver .tw-stat-num {
+  color: var(--silver-bright);
+}
+
+.tw-stat-tag {
+  font-family: var(--font-display);
+  font-size: 9px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-top: 2px;
+}
+
+.tw-role-row {
+  margin-top: 9px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  font-family: var(--font-body);
+  font-size: 11.5px;
+  color: var(--muted);
+}
+
+.tw-role-pill {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  padding: 3px 9px;
+  border-radius: 20px;
+  background: rgba(201, 162, 39, 0.14);
+  color: var(--gold-bright);
+  border: 1px solid rgba(201, 162, 39, 0.3);
+}
+
+.tw-tier-silver .tw-role-pill {
+  background: rgba(199, 205, 210, 0.12);
+  color: var(--silver-bright);
+  border-color: rgba(199, 205, 210, 0.28);
+}
+
+.tw-ovr-note {
+  margin-top: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  font-family: var(--font-body);
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.tw-ovr-note b {
+  color: var(--chalk);
+}
+
+.tw-ovr-arrow {
+  color: var(--gold);
+  font-family: var(--font-mono);
+  font-weight: 700;
+}
+
+.tw-tier-silver .tw-ovr-arrow {
+  color: var(--silver);
+}
+
+.tw-cta {
+  margin: 20px 22px 0;
+  opacity: 0;
+  animation: tw-fade-up 0.5s ease 1.12s forwards;
+}
+
+.tw-btn {
+  display: block;
+  width: 100%;
+  padding: 12px 0;
+  background: linear-gradient(180deg, var(--gold-bright), var(--gold));
+  color: #1a1508;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 14px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  border: none;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: transform 0.15s var(--ease), filter 0.15s ease;
+}
+
+.tw-btn:hover {
+  filter: brightness(1.06);
+}
+
+.tw-btn:active {
+  transform: scale(0.98);
+}
+
+.tw-btn:focus-visible {
+  outline: 2px solid var(--gold);
+  outline-offset: 2px;
+}
+
+.tw-tier-silver .tw-btn {
+  background: linear-gradient(180deg, var(--silver-bright), var(--silver));
+  color: #14181a;
+}
+
+@keyframes tw-fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }

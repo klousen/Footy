@@ -4,8 +4,12 @@ import type {
   CareerPhenotype,
   NarrativeTrend,
   Player,
+  Position,
   RelationshipStatus,
   SeasonStats,
+  TitleContributionSquadRole,
+  TitleType,
+  TitleWin,
   TraitKey,
   TransferDecisionType,
 } from "./types";
@@ -94,7 +98,7 @@ export const CAREER_PHENOTYPE_LABEL: Record<CareerPhenotype, string> = {
   LATE_BLOOMER: "Spätzünder",
   STEADY_PROFESSIONAL: "Verlässlicher Profi",
   ONE_CLUB_LEGEND: "Ein-Klub-Legende",
-  JOURNEYMAN: "Wandervogel",
+  JOURNEYMAN: "Zugvogel",
   NATIONAL_TEAM_ICON: "Nationalmannschafts-Ikone",
   NATIONAL_TEAM_SNUB: "Übersehenes Talent",
   TROPHY_COLLECTOR: "Titelsammler",
@@ -142,7 +146,13 @@ export const CAREER_PHENOTYPE_DESCRIPTION: Record<CareerPhenotype, string> = {
 export function describeCareerPhenotype(
   phenotype: CareerPhenotype,
   player: Player,
-  narrative: CareerNarrativeState
+  narrative: CareerNarrativeState,
+  // Anzahl UNTERSCHIEDLICHER Vereine (siehe `distinctClubCount` in careerEngine.ts) -
+  // als Parameter statt hier neu berechnet, um keinen Ringimport auf careerEngine.ts
+  // aufzumachen (careerEngine.ts importiert bereits AUS labels.ts). Nur für
+  // "JOURNEYMAN"/"Zugvogel" gebraucht, daher optional mit Fallback auf
+  // `clubChangesCount` für Aufrufer, die den Wert (noch) nicht mitgeben.
+  distinctClubs?: number
 ): string {
   switch (phenotype) {
     case "HOMECOMER": {
@@ -154,8 +164,13 @@ export function describeCareerPhenotype(
         h.firstSpellSeasons === 1 ? "Saison" : "Saisons"
       } verbracht hattest.`;
     }
-    case "JOURNEYMAN":
-      return `${player.clubChangesCount} Vereinswechsel prägten deine Laufbahn - kaum ein Umfeld, in dem du lange geblieben bist.`;
+    case "JOURNEYMAN": {
+      // Zählt VEREINE, nicht Wechsel (siehe Nutzer-Feedback "4 Wechsel, aber nur
+      // 3 Vereine ist kein Zugvogel") - eine Rückkehr zu einem bereits bekannten
+      // Verein soll den Text nicht aufblähen.
+      const clubs = distinctClubs ?? player.clubChangesCount + 1;
+      return `${clubs} verschiedene Vereine prägten deine Laufbahn - kaum ein Umfeld, in dem du lange geblieben bist.`;
+    }
     case "ONE_CLUB_LEGEND":
       return `${player.seasonHistory.length} Saisons lang bist du ${player.club.name} treu geblieben, ohne je den Verein zu wechseln.`;
     case "TROPHY_COLLECTOR":
@@ -481,6 +496,216 @@ export function turningPointForSeason(player: Player): string | null {
 }
 
 // -----------------------------------------------------------------------------
+// Titelgewinn-Popup (siehe Handoff "Titelgewinn-Popup", `TitleWinPopup.tsx`) - reine
+// Text-/Anzeige-Aufbereitung eines `TitleWin`. Die eigentliche Berechnung (Beitrags-
+// werte, `yearsSinceLastTitle`, Priorisierung) lebt in careerEngine.ts
+// (`buildTitleWinsForSeason`/`sortTitleWins`), hier nur wie andere `describeSeasonNarrative`-
+// artige Helfer: Daten rein, deutscher Anzeigetext raus.
+// -----------------------------------------------------------------------------
+
+export const TITLE_TYPE_VISUAL: Record<TitleType, { tier: "gold" | "silver"; trophySvg: "cup" | "plate" | "bigear"; eyebrow: string }> = {
+  meisterschaft: { tier: "gold", trophySvg: "cup", eyebrow: "Titelgewinn" },
+  championscup: { tier: "gold", trophySvg: "bigear", eyebrow: "Europäischer Titel" },
+  pokal: { tier: "silver", trophySvg: "plate", eyebrow: "Titelgewinn" },
+  europacup: { tier: "silver", trophySvg: "cup", eyebrow: "Europäischer Titel" },
+};
+
+const TITLE_HEADLINE: Record<TitleType, string> = {
+  meisterschaft: "Meister!",
+  pokal: "Pokalsieger!",
+  championscup: "Champion!",
+  europacup: "Europapokalsieger!",
+};
+
+const TITLE_GOLD_TEXT: Record<TitleType, string> = {
+  meisterschaft: "Meisterschaft gewonnen",
+  pokal: "Landespokal gewonnen",
+  championscup: "Champions Cup gewonnen",
+  europacup: "Europa Cup gewonnen",
+};
+
+// Kurz-/Dativ-/Nominativformen je Titel für die Doublé/Triple-Referenzsätze in
+// `titleWinReferenceSentence` (z.B. "Nach DER MEISTERSCHAFT nun auch DER POKAL").
+const TITLE_REF_SHORT: Record<TitleType, string> = {
+  meisterschaft: "Meisterschaft",
+  pokal: "Pokal",
+  championscup: "Champions Cup",
+  europacup: "Europa Cup",
+};
+const TITLE_REF_DATIVE: Record<TitleType, string> = {
+  meisterschaft: "der Meisterschaft",
+  pokal: "dem Pokal",
+  championscup: "dem Champions Cup",
+  europacup: "dem Europa Cup",
+};
+const TITLE_REF_NOMINATIVE: Record<TitleType, string> = {
+  meisterschaft: "die Meisterschaft",
+  pokal: "der Pokal",
+  championscup: "der Champions Cup",
+  europacup: "der Europa Cup",
+};
+
+export function titleWinHeadline(win: TitleWin): string {
+  return TITLE_HEADLINE[win.type];
+}
+
+export function titleWinGoldText(win: TitleWin): string {
+  return TITLE_GOLD_TEXT[win.type];
+}
+
+/** Namen der "echten" Mannschaftstitel (siehe `TROPHY_POOL_BY_TIER`/`simulateSeason`
+ * in careerEngine.ts) - hier rein string-basiert dupliziert (kein Zirkelimport von
+ * careerEngine.ts), weil `hasWonAnyTitleBefore` nur die Vorgeschichte prüfen muss,
+ * keine `TitleType`-Zuordnung. */
+const REAL_TITLE_TROPHY_NAMES = new Set(["Meisterschale", "Zweitliga-Meisterschaft", "Landespokal", "Champions Cup", "Europa Cup"]);
+
+/** Ob der Spieler VOR der gerade abgeschlossenen Saison (dem letzten Eintrag in
+ * `player.seasonHistory`, siehe `simulateSeason`) schon irgendeinen echten Mannschafts-
+ * titel gewonnen hat (bei JEDEM früheren Verein) - Grundlage für den neutralen "dein
+ * erster Titel in dieser Karriere"-Fallback in `titleWinBaseSubline`, wenn zusätzlich
+ * kein Vorgänger-Titel DESSELBEN Typs am aktuellen Verein bekannt ist
+ * (`TitleWin.yearsSinceLastTitle === null`). */
+export function hasWonAnyTitleBefore(player: Player): boolean {
+  const priorSeasons = player.seasonHistory.slice(0, -1);
+  return priorSeasons.some((s) => s.trophies.some((t) => REAL_TITLE_TROPHY_NAMES.has(t)));
+}
+
+/** Kurzer, positionsabhängiger Hervorhebungs-Halbsatz für die Subline (siehe
+ * `titleWinBaseSubline`) - dieselbe grobe Rollen-Einteilung wie sonst in der App
+ * (Abwehr/Mittelfeld/Offensive/Torwart). */
+function titleContributionPhrase(position: Position): string {
+  if (position === "TW") return "als <b>Rückhalt der Defensive</b>";
+  if (position === "IV" || position === "AV") return "mit einer <b>stabilen Abwehrleistung</b>";
+  if (position === "ZM") return "mit einer <b>prägenden Saison im Mittelfeld</b>";
+  return "mit einer <b>überragenden Saison</b>";
+}
+
+/** Die eigentliche Subline OHNE den Doublé/Triple-Referenzsatz (siehe
+ * `titleWinReferenceSentence` dafür) - enthält bewusst `<b>`-Tags (per
+ * `dangerouslySetInnerHTML` in `TitleWinPopup.tsx` gerendert, 1:1 wie im Mockup),
+ * da reiner Text die Hervorhebung des Mockups nicht abbilden könnte. */
+export function titleWinBaseSubline(win: TitleWin, position: Position, hadTitleBefore: boolean): string {
+  const years = win.yearsSinceLastTitle;
+  // Dativ nach "seit" ("seit 1 Jahr" / "seit 8 Jahren").
+  const yearsDative = years === 1 ? "Jahr" : "Jahren";
+  const phrase = titleContributionPhrase(position);
+  const droughtClause =
+    years !== null
+      ? `zum ersten Titel seit ${years} ${yearsDative}`
+      : hadTitleBefore
+      ? "zum ersten Titel mit diesem Verein"
+      : "zu deinem ersten Titel in dieser Karriere";
+
+  switch (win.type) {
+    case "meisterschaft":
+      return `Glückwunsch — ${phrase} hast du entscheidend ${droughtClause} beigetragen.`;
+    case "pokal": {
+      const drought = years !== null ? ` — der erste Pokal seit ${years} ${yearsDative}` : "";
+      return `Glückwunsch — im Finale warst du <b>auf dem Platz</b>, als der Pokal nach einer intensiven K.o.-Runde geholt wurde${drought}.`;
+    }
+    case "championscup":
+      return "Glückwunsch — der größte Titel deiner Karriere. Du warst Teil des Kaders, der Europa erobert hat.";
+    case "europacup": {
+      const drought = years !== null ? `, den ersten seit ${years} ${yearsDative}` : "";
+      return `Glückwunsch — ${phrase} hast du deinen Verein zum internationalen Titel geführt${drought}.`;
+    }
+  }
+}
+
+const CLASSIC_DOUBLE: TitleType[] = ["meisterschaft", "pokal"];
+const CLASSIC_TRIPLE: TitleType[] = ["meisterschaft", "pokal", "championscup"];
+
+function isExactSet(types: TitleType[], expected: TitleType[]): boolean {
+  return types.length === expected.length && expected.every((t) => types.includes(t));
+}
+
+/** Eyebrow-Text (siehe Handoff Abschnitt 1) - "Doublé"/"Triple" NUR bei der klassischen
+ * Kombination (Meisterschaft+Pokal bzw. +Champions Cup), sonst bleibt der normale
+ * `TITLE_TYPE_VISUAL`-Eyebrow des aktuellen Titels unverändert (z.B. Pokal+Europa Cup
+ * bleibt zweimal "Titelgewinn"/"Europäischer Titel"). */
+export function titleWinEyebrow(win: TitleWin, precedingTypes: TitleType[]): string {
+  const shownSoFar = [...precedingTypes, win.type];
+  if (isExactSet(shownSoFar, CLASSIC_TRIPLE)) return "Triple";
+  if (isExactSet(shownSoFar, CLASSIC_DOUBLE)) return "Doublé";
+  return TITLE_TYPE_VISUAL[win.type].eyebrow;
+}
+
+/** Referenzsatz für Popup 2+ derselben Saison (siehe Handoff Abschnitt 1) - `null` beim
+ * ersten Popup (`precedingTypes` leer). Bei der klassischen Dreier-Kombination ein
+ * eigener, zusammenfassender Satz (siehe Mockup "triple"-Variante), sonst der generische
+ * "Nach X nun auch Y"-Satz (deckt auch die klassische Doublé-Kombination ab - deren
+ * Referenzsatz im Mockup bereits exakt diesem generischen Muster folgt). */
+export function titleWinReferenceSentence(precedingTypes: TitleType[], currentType: TitleType): string | null {
+  if (precedingTypes.length === 0) return null;
+  const shownSoFar = [...precedingTypes, currentType];
+  if (isExactSet(shownSoFar, CLASSIC_TRIPLE)) {
+    const [first, second] = shownSoFar;
+    return `${TITLE_REF_SHORT[first]}, ${TITLE_REF_SHORT[second]} und jetzt ${TITLE_REF_SHORT[currentType]} — der größte Erfolg deiner Karriere.`;
+  }
+  const lastPreceding = precedingTypes[precedingTypes.length - 1];
+  return `Nach ${TITLE_REF_DATIVE[lastPreceding]} nun auch ${TITLE_REF_NOMINATIVE[currentType]} — eine Saison zum Feiern.`;
+}
+
+const TITLE_CONTRIB_ROLE_LABEL: Record<TitleContributionSquadRole, string> = {
+  stammspieler: "Stammspieler",
+  rotationsspieler: "Rotationsspieler",
+  nummer1: "Nummer 1",
+  nummer2: "Nummer 2",
+};
+
+export function titleWinRoleLabel(role: TitleContributionSquadRole): string {
+  return TITLE_CONTRIB_ROLE_LABEL[role];
+}
+
+/** Einsatz-Anzeige im Popup (siehe Handoff Abschnitt 3 "gleiche Formatierung wie die
+ * bestehende Einsatzquote-Metrik im Dashboard") - beim Pokal (kompakte, klar zählbare
+ * K.o.-Runde) als "X von Y K.o.-Spielen" wie im Mockup, bei den anderen drei Fenstern
+ * (ganze Liga-Saison bzw. mehrrundiger Europapokal-Lauf) als Prozent-Einsatzquote. */
+export function titleWinMinutesText(win: TitleWin): string {
+  const { appearances, maxPossibleAppearances } = win.contribution;
+  if (win.type === "pokal") return `${appearances} von ${maxPossibleAppearances} K.o.-Spielen`;
+  const pct = maxPossibleAppearances > 0 ? Math.round((appearances / maxPossibleAppearances) * 100) : 0;
+  return `${pct}% Einsatzquote`;
+}
+
+export function titleWinContribLabel(type: TitleType): string {
+  if (type === "meisterschaft") return "Dein Beitrag zur Saison";
+  if (type === "pokal") return "Dein Beitrag im Pokal";
+  return "Dein Beitrag im Wettbewerb";
+}
+
+/** Die drei Stat-Boxen im Popup (siehe Mockup ".contrib-grid") - Torwart-Statblock
+ * (Weiße Westen/Paradenquote/Ø Note) 1:1 wie im bestehenden Saison-Bilanz-Screen
+ * wiederverwendet (siehe Handoff Abschnitt 3), sonst Tore/Vorlagen bei der Meisterschaft
+ * (ganze Saison bekannt) bzw. Einsätze/Tore bei den rundenbasierten Wettbewerben (siehe
+ * `titleContributionWindow` in careerEngine.ts - dort gibt es keine separat erfasste
+ * Vorlagen-Zahl fürs Wettbewerbsfenster). "Ø Note Finale" nur beim Pokal (einzelnes,
+ * konkretes Finalspiel als Kulminationspunkt), sonst schlicht "Ø Note". */
+export function titleWinStatBoxes(win: TitleWin, position: Position): { num: string; tag: string }[] {
+  const c = win.contribution;
+  const ratingLabel = win.type === "pokal" ? "Ø Note Finale" : "Ø Note";
+  if (position === "TW") {
+    return [
+      { num: String(c.cleanSheets ?? 0), tag: "Weiße Westen" },
+      { num: `${c.saveRate ?? 0}%`, tag: "Paradenquote" },
+      { num: String(c.avgRating), tag: ratingLabel },
+    ];
+  }
+  if (win.type === "meisterschaft") {
+    return [
+      { num: String(c.goals ?? 0), tag: "Tore" },
+      { num: String(c.assists ?? 0), tag: "Vorlagen" },
+      { num: String(c.avgRating), tag: ratingLabel },
+    ];
+  }
+  return [
+    { num: String(c.appearances), tag: "Einsätze" },
+    { num: String(c.goals ?? 0), tag: "Tore" },
+    { num: String(c.avgRating), tag: ratingLabel },
+  ];
+}
+
+// -----------------------------------------------------------------------------
 // i18n (Titelmenü) - siehe Handoff "Titelmenü, Spielstand-Slots & Bestenliste-
 // Gating" Abschnitt 5: fürs Erste nur das Titelmenü selbst zweisprachig, Rest der
 // App bleibt vorerst Deutsch. `{de, en}`-Paare statt reiner Strings, damit sich
@@ -489,6 +714,10 @@ export function turningPointForSeason(player: Player): string | null {
 export const TITLE_I18N = {
   tagline: { de: "Deine Karriere. Dein Weg.", en: "Your career. Your way." },
   yearsAbbr: { de: "J.", en: "y." },
+  // Präposition vor dem längsten Verein in der Bestenliste (siehe Nutzer-Feedback
+  // "8 J. Hoffenheim" war ohne "bei" nicht klar als "8 Jahre BEI Hoffenheim"
+  // erkennbar) - eigener i18n-Key statt hartkodiertem "bei" im JSX.
+  yearsAtClub: { de: "bei", en: "at" },
   continueCareer: { de: "Karriere fortsetzen", en: "Continue career" },
   newCareer: { de: "Neue Karriere starten", en: "Start new career" },
   viewLeaderboard: { de: "Bestenliste ansehen", en: "View leaderboard" },
