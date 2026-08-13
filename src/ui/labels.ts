@@ -20,6 +20,17 @@ export {
   describeSeasonNarrative,
   turningPointForSeason,
   TREND_LABEL,
+  TITLE_TYPE_VISUAL,
+  titleWinHeadline,
+  titleWinGoldText,
+  hasWonAnyTitleBefore,
+  titleWinBaseSubline,
+  titleWinEyebrow,
+  titleWinReferenceSentence,
+  titleWinRoleLabel,
+  titleWinMinutesText,
+  titleWinContribLabel,
+  titleWinStatBoxes,
 } from "../engine/labels";
 export type { OverallTier, NarrativeMomentumText } from "../engine/labels";
 
