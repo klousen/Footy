@@ -4974,6 +4974,15 @@ export function computeAchievements(player: Player): Achievement[] {
   const lowMatchSeasons = player.seasonHistory.filter((s) => s.matches < 10).length;
   const wealthTier = WEALTH_TIERS.find((tier) => player.wealth >= tier.threshold);
   const nationalTeamTier = NATIONAL_TEAM_TIERS.find((tier) => player.nationalTeamCaps >= tier.threshold);
+  // "Pechvogel" (siehe Nutzer-Vorgabe): mindestens 3 Abstiege in der Karriere, UND
+  // mindestens 2 unterschiedliche Vereine darunter - reine Serien-Pechvögel bei
+  // ein und demselben (chronisch abstiegsbedrohten) Verein sollen nicht reichen,
+  // es soll wirklich wie ein persönlicher Fluch wirken, der einen von Verein zu
+  // Verein verfolgt. `clubId` statt `club` (Anzeigename) für den Distinct-Check -
+  // robust gegen zufällige Namensgleichheit über Länder hinweg, dieselbe
+  // Konvention wie bei `detectClubHomecoming`.
+  const relegatedSeasons = player.seasonHistory.filter((s) => s.relegated);
+  const relegatedClubCount = new Set(relegatedSeasons.map((s) => s.clubId)).size;
 
   const defs: { id: string; label: string; description: string; positive: boolean; condition: boolean }[] = [
     { id: "torjaeger", label: "Torjäger", description: "Über 150 Karrieretore erzielt.", positive: true, condition: t.goals >= 150 },
@@ -5002,6 +5011,13 @@ export function computeAchievements(player: Player): Achievement[] {
     { id: "geschichtenerzaehler", label: "Bewegte Karriere", description: "Mindestens drei mehrjährige Geschichten bis zum Ende durchlebt.", positive: true, condition: player.completedStorylines.length >= 3 },
     { id: "verletzungsanfaellig", label: "Verletzungsanfällig", description: "Über 60 Wochen der Karriere verletzt ausgefallen.", positive: false, condition: player.totalInjuryWeeks >= 60 },
     { id: "vielwechsler", label: "Vielwechsler", description: "Sechs oder mehr Vereinswechsel - nie richtig sesshaft geworden.", positive: false, condition: player.clubChangesCount >= 6 },
+    {
+      id: "pechvogel",
+      label: "Pechvogel",
+      description: "Mindestens dreimal abgestiegen - und das bei mindestens zwei verschiedenen Vereinen. Der Fluch scheint einen zu verfolgen.",
+      positive: false,
+      condition: relegatedSeasons.length >= 3 && relegatedClubCount >= 2,
+    },
     { id: "kartenkoenig", label: "Kartenkönig", description: "Über 80 Gelbe Karten oder 5 Platzverweise kassiert.", positive: false, condition: t.yellowCards >= 80 || t.redCards >= 5 },
     { id: "bankdruecker", label: "Bankdrücker", description: "In mindestens 5 Saisons kaum zum Einsatz gekommen.", positive: false, condition: lowMatchSeasons >= 5 },
     {
