@@ -38,6 +38,17 @@
   --silver-bright: #e6ebee;
   --silver-dim: #7d858c;
 
+  /* Sechsstufige Tier-Farbskala (siehe Handoff "Karriereende-Logik neu gewichten"
+     Abschnitt 3: "Tier-Farbklassen dynamisch, nicht fix im CSS ... jede Stelle, die
+     eine Tier-Farbe zeigt, muss die passende tier-{stufe}-Klasse setzen") - EIN
+     gemeinsames Farbvokabular für "wie gut" (OVR-Gesamtstärke UND Legacy-Stufe,
+     siehe `overallTier`/`legacyStufeForScore` in labels.ts). silver/gold/elite
+     nutzen bewusst die bereits bestehenden `--silver`/`--gold`/`--gold-bright`-Token
+     (keine Farbdopplung), amateur/bronze/icon sind neu. */
+  --tier-amateur: #6f8078;
+  --tier-bronze: #b07b3e;
+  --tier-icon: #f4ebd0;
+
   /* ---- Semantische Aliase - bestehende Komponentenklassen referenzieren
      diese Namen, damit die neuen Kern-Tokens ohne Änderungen an jeder
      einzelnen Regel greifen. Gold übernimmt hier zusätzlich die Rolle von
@@ -1375,6 +1386,134 @@ input:focus {
   color: var(--muted);
 }
 
+/* ---------------- Legacy-Score-Gruppen (Karriereende) ----------------
+   Siehe Handoff "Karriereende-Logik neu gewichten" Abschnitt 2/3 - drei Gruppen
+   (Sportliche Leistung/Karriereführung/Umfeld) mit je eigener Zwischensumme,
+   darunter eine Skalenleiste über alle sechs Legacy-Stufen. Wiederverwendet
+   `.bfactor-list`/`.bfactor-row` für die einzelnen Faktoren je Gruppe. */
+
+.panel-note {
+  font-size: 0.72rem;
+  line-height: 1.5;
+  margin: -4px 0 12px;
+}
+
+.legacy-group {
+  margin-bottom: 14px;
+}
+
+.legacy-group-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 4px;
+  padding-bottom: 4px;
+  border-bottom: 1px solid var(--line);
+}
+
+.legacy-group-name {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 0.78rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--chalk);
+}
+
+.legacy-group-sub {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  color: var(--muted);
+}
+
+.legacy-group-sub b {
+  color: var(--chalk);
+  font-weight: 700;
+}
+
+.legacy-factor-max {
+  color: var(--muted);
+  font-weight: 400;
+}
+
+.legacy-total {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 6px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+
+.legacy-total-name {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 1rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.legacy-total-name small {
+  display: block;
+  font-family: var(--font-body);
+  font-weight: 400;
+  font-size: 0.68rem;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--muted);
+  margin-top: 2px;
+}
+
+.legacy-total-value {
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 1.9rem;
+  line-height: 1;
+  color: var(--gold-bright);
+}
+
+.legacy-total-value small {
+  display: block;
+  font-family: var(--font-mono);
+  font-weight: 500;
+  font-size: 0.6rem;
+  color: var(--muted);
+  text-align: right;
+  margin-top: 3px;
+}
+
+.legacy-scale {
+  display: flex;
+  gap: 2px;
+  margin-top: 12px;
+}
+
+.legacy-scale div {
+  flex: 1;
+  text-align: center;
+  padding: 5px 2px 4px;
+  border-top: 2px solid var(--line);
+  font-size: 0.58rem;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--muted);
+  line-height: 1.3;
+}
+
+.legacy-scale div.on {
+  color: var(--chalk);
+  border-top-color: currentColor;
+}
+
+.legacy-scale div span {
+  display: block;
+  font-family: var(--font-mono);
+  font-size: 0.56rem;
+  opacity: 0.75;
+}
+
 .trend-section-label {
   font-family: var(--font-display);
   font-size: 0.75rem;
@@ -1912,6 +2051,36 @@ input:focus {
   color: var(--muted);
   text-align: left;
   font-family: var(--font-body);
+}
+
+/* Sechsstufige Tier-Farbklassen (siehe Custom-Properties in :root oben) - dynamisch
+   auf OVR-Gesamtstärke UND Legacy-Stufe angewendet, nirgends fix verdrahtet (siehe
+   Handoff "Karriereende-Logik neu gewichten" Abschnitt 3). */
+.tier-amateur {
+  color: var(--tier-amateur);
+}
+.tier-bronze {
+  color: var(--tier-bronze);
+}
+.tier-silver {
+  color: var(--silver);
+}
+.tier-gold {
+  color: var(--gold);
+}
+.tier-elite {
+  color: var(--gold-bright);
+}
+.tier-icon {
+  color: var(--tier-icon);
+}
+.tier-elite.glow,
+.tier-icon.glow {
+  text-shadow: 0 0 22px rgba(230, 193, 88, 0.35);
+}
+
+.legacy-stufe-inline {
+  font-weight: 600;
 }
 
 /* ---------------- Gesamtstärke-Verlauf (Liniendiagramm) ---------------- */

@@ -27,6 +27,7 @@ import {
   buildRankingEntry,
   buildRetirementEvent,
   buildTitleWinsForSeason,
+  chooseCareerTitle,
   clubOfferTemplateId,
   computeAchievements,
   computeLegacy,
@@ -34,6 +35,7 @@ import {
   decideClubOfferInjection,
   decideNarrativeEventInjection,
   decideRoleChallengeInjection,
+  detectCareerPhenotype,
   dueStorylineTemplateIds,
   finalizeYouthClub,
   insertWithinBudget,
@@ -734,7 +736,9 @@ export default function App() {
           player={game.player}
           legacyScore={game.legacyScore}
           legacyTier={game.legacyTier}
-          legacyFactors={game.legacyFactors}
+          legacyTierClassName={game.legacyTierClassName}
+          legacyGroups={game.legacyGroups}
+          careerTitle={game.careerTitle}
           achievements={game.achievements}
           epilogue={game.epilogue}
           onNewCareer={handleNewCareerAfterEnd}
@@ -753,8 +757,14 @@ export default function App() {
 function buildCareerEndUpdate(player: NonNullable<GameState["player"]>): Partial<GameState> {
   player.retired = true;
   player.postCareerPath = pickPostCareerPath(player);
-  const { score, tier, factors } = computeLegacy(player);
+  const { score, tier, tierClassName, groups, factors } = computeLegacy(player);
   const achievements = computeAchievements(player);
+  // Karriere-Titel (siehe Handoff "Karriereende-Logik neu gewichten" Abschnitt 6):
+  // braucht den primären Archetyp, um Dimensions-Kollisionen zu vermeiden (siehe
+  // `chooseCareerTitle`) - `detectCareerPhenotype` hier einmalig aufgerufen, statt
+  // es CareerEnd.tsx ein zweites Mal berechnen zu lassen.
+  const phenotype = detectCareerPhenotype(player);
+  const careerTitle = chooseCareerTitle(player, phenotype.primary);
   addRankingEntry(buildRankingEntry(player, score));
   return {
     player: { ...player },
@@ -764,8 +774,11 @@ function buildCareerEndUpdate(player: NonNullable<GameState["player"]>): Partial
     screen: "careerEnd",
     legacyScore: score,
     legacyTier: tier,
+    legacyTierClassName: tierClassName,
     legacyFactors: factors,
+    legacyGroups: groups,
+    careerTitle,
     achievements,
-    epilogue: buildEpilogue(player, tier),
+    epilogue: buildEpilogue(player),
   };
 }

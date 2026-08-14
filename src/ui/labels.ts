@@ -11,6 +11,8 @@ export {
   TRAIT_LABEL,
   TRAIT_ORDER,
   overallTier,
+  LEGACY_STUFEN,
+  legacyStufeForScore,
   CAREER_PHENOTYPE_LABEL,
   CAREER_PHENOTYPE_DESCRIPTION,
   describeCareerPhenotype,
@@ -32,7 +34,7 @@ export {
   titleWinContribLabel,
   titleWinStatBoxes,
 } from "../engine/labels";
-export type { OverallTier, NarrativeMomentumText } from "../engine/labels";
+export type { OverallTier, NarrativeMomentumText, LegacyStufe } from "../engine/labels";
 
 import type { AttributeKey } from "../engine/types";
 

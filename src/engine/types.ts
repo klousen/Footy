@@ -261,6 +261,26 @@ export interface ScoreFactor {
    * ohne dass Spielende die Formel dahinter kennen müssen (siehe Bugreport
    * "hier ist total unklar was gemeint ist"). Wird NUR angezeigt, wenn gesetzt. */
   detail?: string;
+  /** Obergrenze dieses EINZELNEN Faktors (siehe Handoff "Karriereende-Logik neu
+   * gewichten" Abschnitt 2: "harte Obergrenzen") - NUR bei `computeLegacy`-Faktoren
+   * gesetzt (die Saison-Bilanz aus `computeSeasonScore` kennt keine Deckelung pro
+   * Faktor), Basis für die Balkenanzeige im Legacy-Panel. Faktoren mit einem
+   * negativen Wertebereich (z.B. "Vereinstreue", -60..150) tragen hier trotzdem
+   * nur die OBERE Grenze - der Balken clamped `points` bei der Anzeige selbst auf
+   * [0, max]. */
+  max?: number;
+}
+
+/** Eine der drei Legacy-Score-Gruppen (siehe `computeLegacy`, Handoff "Karriereende-
+ * Logik neu gewichten" Abschnitt 2: "drei Gruppen mit harten Obergrenzen") - jede
+ * Gruppe bündelt mehrere `ScoreFactor`s mit einer eigenen Zwischensumme/Obergrenze,
+ * damit das Legacy-Panel sie als eigenen Abschnitt mit Kopfzeile ("Sportliche
+ * Leistung · 242 / 1200") rendern kann statt einer einzigen langen Flachliste. */
+export interface LegacyFactorGroup {
+  label: string;
+  max: number;
+  total: number;
+  factors: ScoreFactor[];
 }
 
 /** Ein zusammenhängender Zeitraum bei einem Verein - abgeleitet aus `seasonHistory`
@@ -1262,8 +1282,21 @@ export interface GameState {
   /** Saison, in der ein Template zuletzt gezogen wurde (für Wiederholungs-Cooldown). */
   recentTemplateSeasons: Record<string, number>;
   legacyScore?: number;
+  /** Legacy-STUFE (siehe `legacyStufeForScore` in labels.ts) - rein score-basiert,
+   * NICHT der Hero-Badge (siehe `careerTitle` dafür). */
   legacyTier?: string;
+  /** Tier-Farbklasse der Legacy-Stufe (amateur/bronze/silver/gold/elite/icon) -
+   * dieselben sechs Klassen wie bei der OVR-Gesamtstärke (siehe `overallTier`). */
+  legacyTierClassName?: string;
   legacyFactors?: ScoreFactor[];
+  /** Legacy-Score nach den drei Gruppen (Sportliche Leistung/Karriereführung/
+   * Umfeld) gebündelt - Grundlage für die gruppierte Anzeige im Legacy-Panel
+   * (siehe `computeLegacy` in careerEngine.ts). */
+  legacyGroups?: LegacyFactorGroup[];
+  /** Der kriterienbasierte "Karriere-Titel" (siehe `chooseCareerTitle` in
+   * careerEngine.ts) - das prominente Hero-Badge am Karriereende, getrennt von
+   * der reinen Punktzahl-Einordnung `legacyTier`. */
+  careerTitle?: { label: string; description: string };
   achievements?: Achievement[];
   epilogue?: string;
 }

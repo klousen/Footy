@@ -88,12 +88,44 @@ function seasonYear(seasonLabel: string): string {
   return seasonLabel.match(/\d{4}/)?.[0] ?? "";
 }
 
-/** Bestimmt das "bedeutendste Ereignis" der Karriere für die Highlight-Zeile:
- * internationaler Titel > nationale Meisterschaft > Pokal > sonstige (positive)
- * Achievements, bei Gleichstand innerhalb einer Stufe das neueste zuerst. Reine
+/** Achievement-IDs, die für den Karrierehöhepunkt NIE als "sportliches Achievement"
+ * (Stufe 8, siehe `computeCareerHighlight`) infrage kommen - Vermögens- und reine
+ * Privatleben-Achievements sind kein sportlicher Höhepunkt (siehe Handoff
+ * "Karriereende-Logik neu gewichten" Abschnitt 4: "Ausgeschlossen: alle
+ * Vermögens-Achievements, alle Verletzungs-/Glücks-Achievements und alle negativen
+ * Achievements" - negative sind über `a.positive` schon draußen, Verletzungspech
+ * hat ohnehin kein POSITIVES Achievement). "gebildet"/"familienmensch" ergänzt
+ * dieselbe Logik - beides reine Privatleben-Meilensteine, kein sportlicher. */
+const HIGHLIGHT_EXCLUDED_ACHIEVEMENT_IDS = new Set([
+  "wirtschaftsimperium",
+  "fussball_kroesus",
+  "multimillionaer",
+  "millionaer",
+  "gebildet",
+  "familienmensch",
+]);
+
+/** Individuelle Auszeichnungen (siehe `INDIVIDUAL_AWARD_NAMES` in careerEngine.ts) -
+ * hier dupliziert statt importiert, um keine neue Abhängigkeit von careerEngine.ts
+ * NUR für diese eine Konstante aufzumachen (shareCard.ts importiert bereits
+ * `overallRating` von dort, ein weiterer Import wäre unproblematisch, aber die
+ * Namensliste selbst ist stabil genug, um hier als reiner String-Vergleich zu
+ * stehen). */
+const INDIVIDUAL_AWARD_TROPHY_NAMES = new Set(["Torschützenkönig", "Spieler der Saison", "Talent der Saison"]);
+
+/**
+ * Bestimmt das "bedeutendste Ereignis" der Karriere für die Karrierehöhepunkt-Zeile
+ * (siehe Handoff "Karriereende-Logik neu gewichten" Abschnitt 4) - erster Treffer
+ * gewinnt, bei Gleichstand innerhalb einer Stufe das jüngste Ereignis:
+ *   1. Champions Cup  2. Euro Cup  3. Meisterschaft  4. Landespokal
+ *   5. individuelle Auszeichnung  6. Aufstieg  7. Nationalmannschafts-Meilenstein
+ *   8. sportliches Achievement (siehe `HIGHLIGHT_EXCLUDED_ACHIEVEMENT_IDS`)
+ * Trifft nichts davon zu, ist die Karriere trotzdem nie ganz ohne Zeile - ein
+ * neutraler Satz aus echten Karrierezahlen springt ein (siehe Rückgabe `null` bei
+ * ALLEN Stufen unten war früher der Fall, jetzt IMMER ein Ergebnis). Reine
  * Priorisierungs-Regel für die Anzeige - das Legacy-/Achievement-System selbst
  * bleibt unverändert. */
-function computeCareerHighlight(player: Player, achievements: Achievement[]): CareerHighlight | null {
+export function computeCareerHighlight(player: Player, achievements: Achievement[]): CareerHighlight {
   const history = player.seasonHistory;
   const findSeason = (has: (s: SeasonStats) => boolean) => {
     for (let i = history.length - 1; i >= 0; i--) {
@@ -102,11 +134,11 @@ function computeCareerHighlight(player: Player, achievements: Achievement[]): Ca
     return null;
   };
 
-  const europeanSeason = findSeason((s) => s.trophies.includes("Champions Cup") || s.trophies.includes("Europa Cup"));
-  if (europeanSeason) {
-    const competition = europeanSeason.trophies.includes("Champions Cup") ? "Champions-Cup-Sieger" : "Europa-Cup-Sieger";
-    return { bold: competition, rest: ` mit ${europeanSeason.club} (${seasonYear(europeanSeason.seasonLabel)})` };
-  }
+  const clSeason = findSeason((s) => s.trophies.includes("Champions Cup"));
+  if (clSeason) return { bold: "Champions-Cup-Sieger", rest: ` mit ${clSeason.club} (${seasonYear(clSeason.seasonLabel)})` };
+
+  const elSeason = findSeason((s) => s.trophies.includes("Europa Cup"));
+  if (elSeason) return { bold: "Europa-Cup-Sieger", rest: ` mit ${elSeason.club} (${seasonYear(elSeason.seasonLabel)})` };
 
   const championSeason = findSeason((s) => s.trophies.includes("Meisterschale") || s.trophies.includes("Zweitliga-Meisterschaft"));
   if (championSeason) {
@@ -115,14 +147,27 @@ function computeCareerHighlight(player: Player, achievements: Achievement[]): Ca
   }
 
   const cupSeason = findSeason((s) => s.trophies.includes("Landespokal"));
-  if (cupSeason) {
-    return { bold: "Pokalsieger", rest: ` mit ${cupSeason.club} (${seasonYear(cupSeason.seasonLabel)})` };
+  if (cupSeason) return { bold: "Pokalsieger", rest: ` mit ${cupSeason.club} (${seasonYear(cupSeason.seasonLabel)})` };
+
+  const awardSeason = findSeason((s) => s.trophies.some((tr) => INDIVIDUAL_AWARD_TROPHY_NAMES.has(tr)));
+  if (awardSeason) {
+    const award = [...awardSeason.trophies].reverse().find((tr) => INDIVIDUAL_AWARD_TROPHY_NAMES.has(tr))!;
+    return { bold: award, rest: ` (${seasonYear(awardSeason.seasonLabel)})` };
   }
 
-  const bestAchievement = achievements.find((a) => a.positive);
-  if (bestAchievement) return { bold: bestAchievement.label, rest: "" };
+  const promotionSeason = findSeason((s) => s.promoted);
+  if (promotionSeason) return { bold: "Aufstieg", rest: ` mit ${promotionSeason.club} (${seasonYear(promotionSeason.seasonLabel)})` };
 
-  return null;
+  if (player.nationalTeamCaptain) return { bold: "Nationalmannschaftskapitän", rest: "" };
+  if (player.nationalTeamCaps >= 50) return { bold: `${player.nationalTeamCaps} Länderspiele`, rest: "" };
+
+  const sportingAchievement = achievements.find((a) => a.positive && !HIGHLIGHT_EXCLUDED_ACHIEVEMENT_IDS.has(a.id));
+  if (sportingAchievement) return { bold: sportingAchievement.label, rest: "" };
+
+  // Fallback: kein einzelnes Ereignis sticht heraus - trotzdem nie ganz ohne
+  // Aussage, ein neutraler Satz aus echten Zahlen (siehe Handoff-Beispiel
+  // "Karrierehöhepunkt: 366 Pflichtspiele in 17 Saisons").
+  return { bold: `${player.careerTotals.matches} Pflichtspiele`, rest: ` in ${history.length} Saison${history.length === 1 ? "" : "en"}` };
 }
 
 export interface ShareCardData {
@@ -138,6 +183,13 @@ export interface ShareCardData {
   overall: number;
   tierLabel: string;
   tierClassName: string;
+  /** Der kriterienbasierte "Karriere-Titel" (siehe `chooseCareerTitle` in
+   * careerEngine.ts) - das große Auszeichnungs-Badge im Sharepic. NICHT dasselbe
+   * wie `legacyTier` (siehe dort). */
+  careerTitle: string;
+  /** Legacy-STUFE (reine Punktzahl-Einordnung, siehe `legacyStufeForScore` in
+   * labels.ts) - eigene, kleinere Zeile im Sharepic ("Legacy-Stufe: X"), NICHT
+   * mehr das große Badge (siehe `careerTitle` dafür). */
   legacyTier: string;
   legacyScore: number;
   matches: number;
@@ -152,7 +204,9 @@ export interface ShareCardData {
    * `careerTotals.trophies.length`, siehe dort. */
   trophies: number;
   trophyBreakdown: TrophyBreakdown;
-  highlight: CareerHighlight | null;
+  /** Nie mehr `null` (siehe `computeCareerHighlight`) - eine Karriere ohne echtes
+   * Ereignis bekommt einen neutralen Zahlen-Fallback statt gar keiner Zeile. */
+  highlight: CareerHighlight;
   caps: number;
   achievementLabels: string[];
 }
@@ -161,7 +215,8 @@ export function buildShareCardData(
   player: Player,
   legacyScore: number | undefined,
   legacyTier: string | undefined,
-  achievements: Achievement[] | undefined
+  achievements: Achievement[] | undefined,
+  careerTitle: { label: string; description: string } | undefined
 ): ShareCardData {
   // Heimatland statt aktuellem/letztem Verein-Land: die Nationalität eines Spielers
   // ändert sich nicht durch Vereinswechsel - im Sharepic soll immer die Flagge des
@@ -194,6 +249,7 @@ export function buildShareCardData(
     overall,
     tierLabel: tier.label,
     tierClassName: tier.className,
+    careerTitle: careerTitle?.label ?? legacyTier ?? "",
     legacyTier: legacyTier ?? "",
     legacyScore: legacyScore ?? 0,
     matches: player.careerTotals.matches,
@@ -519,9 +575,14 @@ export function drawShareCard(canvas: HTMLCanvasElement, data: ShareCardData): v
   roundRect(ctx, PAD, cursorY, contentW, badgeH, 6);
   ctx.stroke();
   ctx.fillStyle = style.accent;
-  const badgeTextSize = fitTextSize(ctx, data.legacyTier.toUpperCase(), contentW - 60, 30, 18, "800");
+  // Das Badge zeigt den kriterienbasierten "Karriere-Titel" (siehe
+  // `chooseCareerTitle` in careerEngine.ts), NICHT mehr die reine Punktzahl-
+  // Einordnung `legacyTier` (siehe Handoff "Karriereende-Logik neu gewichten"
+  // Abschnitt 6) - die Legacy-Stufe steht stattdessen als eigene, kleinere Zeile
+  // weiter unten (siehe "Legacy-Stufe:"-Zeile nach der Statreihe).
+  const badgeTextSize = fitTextSize(ctx, data.careerTitle.toUpperCase(), contentW - 60, 30, 18, "800");
   ctx.font = `800 ${badgeTextSize}px "Segoe UI", system-ui, sans-serif`;
-  ctx.fillText(ellipsize(ctx, data.legacyTier.toUpperCase(), contentW - 60), W / 2, cursorY + badgeH / 2 + badgeTextSize * 0.35);
+  ctx.fillText(ellipsize(ctx, data.careerTitle.toUpperCase(), contentW - 60), W / 2, cursorY + badgeH / 2 + badgeTextSize * 0.35);
   cursorY += badgeH + 32;
 
   // ---- Dichte 6er-Statreihe ----
@@ -562,7 +623,16 @@ export function drawShareCard(canvas: HTMLCanvasElement, data: ShareCardData): v
     ctx.font = `500 ${labelSize}px "Segoe UI", system-ui, sans-serif`;
     ctx.fillText(ellipsize(ctx, stats[i][1], statColW - 6), cx, cursorY + 76);
   }
-  cursorY += statRowH + 28;
+  cursorY += statRowH + 6;
+
+  // ---- Legacy-Stufe (kleine Zeile, siehe `careerTitle` für das große Badge) ----
+  if (data.legacyTier) {
+    ctx.fillStyle = CHALK_DIM;
+    ctx.font = '600 13px "Segoe UI", system-ui, sans-serif';
+    ctx.fillText(`Legacy-Stufe: ${data.legacyTier}`, W / 2, cursorY + 12);
+    cursorY += 26;
+  }
+  cursorY += 6;
 
   // ---- Trophäen-Kategorie-Reihe (Meister/Pokal/Euro Cup/CL/Aufstieg) ----
   ctx.strokeStyle = "rgba(42,74,60,0.8)";
@@ -673,5 +743,5 @@ export function buildShareCaption(data: ShareCardData): string {
     ? `${data.cleanSheets} weiße Westen, ${data.savePercentage}% gehaltene Bälle`
     : `${data.goals} Tore, ${data.assists} Vorlagen`;
   const highlightPart = data.highlight ? ` Karrierehöhepunkt: ${data.highlight.bold}${data.highlight.rest}.` : "";
-  return `⚽ Meine Fußball-Karriere als ${data.name}: ${data.legacyTier} mit ${data.overall} Gesamtstärke (Karriere-Bestwert)! ${data.matches} Spiele, ${productionPart}, ${data.trophies} Titel.${highlightPart}${achievementsPart} Gespielt mit Footca.`;
+  return `⚽ Meine Fußball-Karriere als ${data.name}: ${data.careerTitle} mit ${data.overall} Gesamtstärke (Karriere-Bestwert)! ${data.matches} Spiele, ${productionPart}, ${data.trophies} Titel.${highlightPart}${achievementsPart} Gespielt mit Footca.`;
 }

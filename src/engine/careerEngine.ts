@@ -14,6 +14,7 @@ import type {
   GameEvent,
   GameState,
   LeagueState,
+  LegacyFactorGroup,
   LoanDecisionLogEntry,
   LogEntry,
   NationalCupResult,
@@ -35,7 +36,17 @@ import type {
 } from "./types";
 import { detectClubHomecoming, HOMECOMING_MIN_AGE, isNearRetirement, overallRatingFromAttributes } from "./types";
 import { clamp } from "./data";
-import { ATTRIBUTE_LABEL, ATTRIBUTE_ORDER, formatMoney, RELATIONSHIP_LABEL, SQUAD_ROLE_RANK, TRAIT_LABEL, TRAIT_ORDER } from "./labels";
+import {
+  ATTRIBUTE_LABEL,
+  ATTRIBUTE_ORDER,
+  formatMoney,
+  legacyStufeForScore,
+  overallTier,
+  RELATIONSHIP_LABEL,
+  SQUAD_ROLE_RANK,
+  TRAIT_LABEL,
+  TRAIT_ORDER,
+} from "./labels";
 import { eligibleTemplates, getTemplateById, EVENT_TEMPLATES } from "./events";
 import {
   computeLoanSummaryTier,
@@ -1937,10 +1948,13 @@ function computeSeasonScore(input: {
   const factors: ScoreFactor[] = [
     ratingFactor,
     playTimeFactor,
+    // Nur echte Mannschaftstitel zählen als "Titel" (siehe `isTeamTitle` -
+    // Handoff "Karriereende-Logik neu gewichten": eine individuelle Auszeichnung
+    // wie "Spieler der Saison" ist kein Titel, auch nicht in der Saison-Bilanz).
     {
       label: "Titel",
-      points: input.trophies.length * 50,
-      detail: input.trophies.length > 0 ? input.trophies.join(", ") : "keine Titel diese Saison",
+      points: input.trophies.filter(isTeamTitle).length * 50,
+      detail: input.trophies.some(isTeamTitle) ? input.trophies.filter(isTeamTitle).join(", ") : "keine Titel diese Saison",
     },
     {
       label: "Disziplin",
@@ -4547,6 +4561,64 @@ export function distinctClubCount(player: Player): number {
   return new Set(buildClubTenures(player).map((t) => t.club)).size;
 }
 
+/** Anzahl der Vereins-STATIONEN der Karriere (siehe `buildClubTenures`) - anders als
+ * `distinctClubCount` zählt eine Rückkehr zu einem bereits bekannten Verein hier
+ * erneut mit (zwei getrennte Zeitabschnitte = zwei Stationen), genau wie in der
+ * angezeigten Stationsliste (Karriereverlauf/Sharepic). Grundlage für
+ * `careerClubChangeCount` (siehe dort). */
+export function careerStationCount(player: Player): number {
+  return buildClubTenures(player).length;
+}
+
+/** "Vereinswechsel"-Zahl für die Karrierestatistik/den Legacy-Score - bewusst NICHT
+ * `player.clubChangesCount` (siehe Bugreport "Stationsgruppierung": zählte u.a.
+ * Wechsel während der Jugendakademie-Jahre vor `PRO_DEBUT_AGE` mit, die in der
+ * Stationsliste selbst gar nicht auftauchen - Statistik und Liste widersprachen sich
+ * dadurch). Stattdessen direkt aus der Stationsliste abgeleitet: Stationen − 1, damit
+ * Karriereverlauf, Sharepic-Stationsliste und Karrierestatistik immer exakt
+ * übereinstimmen (dieselbe `buildClubTenures`-Grundlage für alle drei). */
+export function careerClubChangeCount(player: Player): number {
+  return Math.max(0, careerStationCount(player) - 1);
+}
+
+/** Individuelle Auszeichnungen (siehe `simulateSeason`) - laufen im selben
+ * `trophies`-Array wie echte Mannschaftstitel (eine Trophäenliste für "was ist
+ * diese Saison alles passiert"), zählen aber NICHT als Titel. Geteilte Konstante,
+ * damit "Titel" überall (Fließtext, Karrierestatistik, Legacy-Score, Achievements)
+ * exakt dieselbe Definition verwendet - siehe Bugreport "vier verschiedene
+ * Antworten auf die Frage 'wie viele Titel habe ich?'". */
+export const INDIVIDUAL_AWARD_NAMES = new Set(["Torschützenkönig", "Spieler der Saison", "Talent der Saison"]);
+
+/** Echter Mannschaftstitel aus `trophies` (Meisterschaft/Pokal/Champions Cup/Europa
+ * Cup) - alles, was NICHT in `INDIVIDUAL_AWARD_NAMES` steht. */
+export function isTeamTitle(trophy: string): boolean {
+  return !INDIVIDUAL_AWARD_NAMES.has(trophy);
+}
+
+/** Anzahl echter Mannschaftstitel der ganzen Karriere (siehe `isTeamTitle`) - EINZIGE
+ * Quelle der Wahrheit für "wie viele Titel", verwendet von Hero-Text, Karriere-
+ * statistik, Legacy-Score UND Achievements. */
+export function careerTitleCount(player: Player): number {
+  return player.careerTotals.trophies.filter(isTeamTitle).length;
+}
+
+/** Anzahl individueller Auszeichnungen der ganzen Karriere - Torschützenkönig/
+ * Spieler der Saison/Talent der Saison PLUS die separat als Flag getrackte
+ * Nationalmannschafts-Kapitänsbinde (`player.nationalTeamCaptain`), die inhaltlich
+ * in dieselbe Kategorie fällt (siehe Handoff "Karriereende-Logik neu gewichten"
+ * Abschnitt 1, Tabelle "Auszeichnungen"). */
+export function careerAwardCount(player: Player): number {
+  const individualTrophies = player.careerTotals.trophies.filter((tr) => INDIVIDUAL_AWARD_NAMES.has(tr)).length;
+  return individualTrophies + (player.nationalTeamCaptain ? 1 : 0);
+}
+
+/** Anzahl Liga-Aufstiege der ganzen Karriere (auch via Relegations-Play-off) - eigene,
+ * DRITTE Kategorie neben Titeln und Auszeichnungen (siehe Handoff "ein Aufstieg ist
+ * kein Titel und darf nirgends in die Titelsumme einfließen"). */
+export function careerPromotionCount(player: Player): number {
+  return player.seasonHistory.filter((s) => s.promoted).length;
+}
+
 /** Baut den Bestenlisten-Eintrag für die geräteweite Rangliste (siehe `storage.ts`,
  * `rankingArchive`) - wird bei JEDEM Karriereende geschrieben, unabhängig vom
  * Karriere-Pass-Status (nur die spätere ANZEIGE ist gated, das Tracking läuft immer). */
@@ -4599,97 +4671,244 @@ export function rankingScore(entry: RankingEntry): number {
 export const shouldOfferRetirement = isNearRetirement;
 
 /**
- * Titel-Gewichtung nach Wettbewerbsstufe (siehe Vorgabe Abschnitt 33) - ein
- * Champions-Cup-Sieg muss deutlich mehr Legacy erzeugen als ein Landespokal.
- * Individuelle Auszeichnungen (Torschützenkönig etc.) laufen bewusst NICHT hier
- * mit ein - die boosten schon direkt `player.reputation` (siehe `simulateSeason`),
- * fließen also über den Bekanntheits-Faktor unten ein, statt hier doppelt zu zählen.
+ * Titel-Gewichtung nach Wettbewerbsstufe (siehe Handoff "Karriereende-Logik neu
+ * gewichten" Abschnitt 2, Gruppe A "Titel") - ein Champions-Cup-Sieg muss deutlich
+ * mehr Legacy erzeugen als ein Landespokal. Individuelle Auszeichnungen
+ * (Torschützenkönig etc.) laufen bewusst NICHT hier mit ein (siehe
+ * `INDIVIDUAL_AWARD_NAMES`/`isTeamTitle`) - die haben ihren eigenen, separat
+ * gedeckelten Faktor in Gruppe B ("Auszeichnungen"), damit "Titel" wirklich nur
+ * echte Mannschaftstitel meint (siehe Bugreport "vier verschiedene Antworten auf
+ * die Frage 'wie viele Titel'"). "Zweitliga-Meisterschaft" ist im Handoff nicht
+ * explizit beziffert - zwischen Pokal und Meisterschale eingeordnet, da sie zwar
+ * ein echter Meistertitel, aber nur der zweiten Liga ist.
  */
-const TROPHY_LEGACY_POINTS: Record<string, number> = {
-  "Zweitliga-Meisterschaft": 90,
-  Landespokal: 105,
-  Meisterschale: 150,
-  "Europa Cup": 260,
-  "Champions Cup": 420,
+const TITLE_LEGACY_POINTS: Record<string, number> = {
+  Landespokal: 25,
+  "Zweitliga-Meisterschaft": 30,
+  Meisterschale: 45,
+  "Europa Cup": 55,
+  "Champions Cup": 90,
 };
 
-/** Für den Legendary-Season-Bonus (siehe Vorgabe Abschnitt 38): nur die "großen"
- * Wettbewerbstitel zählen, ein Landespokal allein macht noch keine legendäre Saison. */
-const LEGENDARY_SEASON_TROPHIES = new Set(["Meisterschale", "Europa Cup", "Champions Cup"]);
+/**
+ * Positions-Richtwerte für die "Sportliche Produktion" (siehe `productionLegacyFactor`
+ * unten) - JEDE Position nutzt dieselbe eigene "Erfolgsregel", die schon anderswo im
+ * Spiel etabliert ist (siehe `simulateSeason`s "Primär-/Sekundärkanal je Position"),
+ * NICHT pauschal Tore+Vorlagen für alle: ST/FS bleiben bei Torbeteiligung/Spiel (Werte
+ * direkt aus dem Handoff übernommen), IV/AV nutzen ihre bereits vorhandene
+ * "verhinderte Großchancen"-Metrik, ZM die bereits vorhandenen "Ballgewinne &
+ * Pässe", TW die Weiße-Westen-Quote - sonst würden Verteidiger/Mittelfeld/Torhüter
+ * hier strukturell fast leer ausgehen, obwohl sie längst eine eigene, im Spiel
+ * etablierte Erfolgsmetrik haben (siehe Nutzer-Vorgabe: "Defensivspieler auch
+ * mitdenken, sie hatten doch eine eigene Erfolgsregel, nichts bisheriges
+ * überschreiben. Dito Torwart"). Richtwerte für IV/AV/ZM/TW sind eigene Schätzungen
+ * (siehe Kommentare an den jeweiligen Konstanten) - werden über den Backtest
+ * (`sim_legacy_backtest.ts`) gegen echte Simulationsdaten geprüft.
+ */
+const PRODUCTION_RICHTWERT: Record<Position, number> = {
+  // Direkt aus dem Handoff übernommen (Torbeteiligung pro Spiel).
+  ST: 0.7,
+  FS: 0.5, // Handoff-Bezeichnung "OM/FL" - in unserer Positions-Liste "Flügelspieler".
+  // NICHT die Handoff-Werte (die galten für Torbeteiligung/Spiel) - eigene Richtwerte
+  // für die jeweils tatsächlich genutzte Metrik, gegen `sim_legacy_backtest.ts`
+  // kalibriert (erste Schätzung lag spürbar zu niedrig - Ø-Punktzahl über 1000
+  // simulierte Karrieren lag bei 85-90% des Maximalwerts statt einer sinnvoll
+  // differenzierenden Verteilung, siehe Kommentar an `computeLegacy`).
+  ZM: 0.45, // Ballgewinne & Pässe / Spiel.
+  IV: 0.62, // Verhinderte Großchancen / Spiel.
+  AV: 0.46, // Verhinderte Großchancen / Spiel (niedriger als IV, siehe positionFactor dort).
+  TW: 0.42, // Weiße Westen / Spiel.
+};
 
 /**
- * Legacy-Score: bewertet die GESAMTE Karriere (siehe Vorgabe Abschnitt 31/39,
- * Abgrenzung zu `computeSeasonScore`, das nur EINE Saison bewertet). Zielbild
- * der Gewichtung (kalibriert über 1000+ simulierte Karrieren, siehe
- * sim_legacy_*.ts): ~30% Karriere-/Peak-Performance, ~35% sportliche
- * Erfolge/Output (Titel nach Wettbewerbsstufe + Tore/Vorlagen), ~13% Status
- * (Bekanntheit + Nationalmannschaft), ~10% Vermögen (log-skaliert statt linear -
- * siehe Bugreport: die alte lineare `wealth/5000`-Formel machte Vermögen zu
- * knapp 57% des GESAMTEN Scores, weit vor jeder sportlichen Leistung), ~12%
- * Karrieregeschichte/Soft Factors (Charakter, Vereinstreue, Verletzungshistorie,
- * Familie). Diese Prozentsätze sind ein Zielbild, keine exakte Formel - die
- * konkreten Konstanten unten wurden iterativ gegen die Simulation kalibriert.
+ * Legacy-Score: bewertet die GESAMTE Karriere (Abgrenzung zu `computeSeasonScore`,
+ * das nur EINE Saison bewertet) - siehe Handoff "Karriereende-Logik neu gewichten"
+ * Abschnitt 2. Drei Gruppen mit je eigener harter Obergrenze (Gruppe A "Sportliche
+ * Leistung" max 1200, Gruppe B "Karriereführung" max 450, Gruppe C "Umfeld" max
+ * 150), Summe der drei Obergrenzen = 1800 = das maximal erreichbare Gesamtergebnis.
+ * Ersetzt die vorherige flache Faktorenliste, in der Bekanntheit (+180) und
+ * Vermögen (+126) - beides von der eigentlichen Leistung ABGELEITETE Werte - den
+ * größten Einzelposten stellten und Verletzungspech einen eigenen Bonus bekam
+ * (siehe Bugreport, jetzt ersatzlos entfernt).
+ *
+ * Kalibrierung: gegen `sim_legacy_backtest.ts` (1000 simulierte Karrieren) geprüft,
+ * Zielbild aus dem Handoff grob Unbekannt ~15% · Solider Profi ~30% · Etabliert ~30%
+ * · Aushängeschild ~17% · Legende ~6% · Unsterblich ~2%. WICHTIGE EINSCHRÄNKUNG: Das
+ * Backtest-Skript simuliert bewusst nur VOLLSTÄNDIGE Karrieren bis zur natürlichen
+ * Verrentung (kein früher Abbruch, keine bewusst schlechten Entscheidungen) - eine
+ * realistische Spielerpopulation enthält zusätzlich viele kurze/abgebrochene
+ * Karrieren, die in der Simulation fehlen und die unteren Stufen stärker füllen
+ * würden. Die tatsächliche Verteilung lag beim letzten Lauf dadurch spürbar höher
+ * als das Zielbild (Median ~800 statt ~600) - die reine SPANNE (Unbekannter Profi
+ * bis Legende, sauber nach Leistung sortiert) stimmt, die genauen Prozentsätze sind
+ * mit echten Spielstands-Daten erneut zu prüfen, sobald genug vorliegen.
  */
-export function computeLegacy(player: Player): { score: number; tier: string; factors: ScoreFactor[] } {
+export function computeLegacy(player: Player): { score: number; tier: string; tierClassName: string; groups: LegacyFactorGroup[]; factors: ScoreFactor[] } {
   const t = player.careerTotals;
   const history = player.seasonHistory;
+  const totalMatches = history.reduce((s, x) => s + x.matches, 0);
+  const totalMinutes = history.reduce((s, x) => s + x.minutesPlayed, 0);
+  const totalPossibleMinutes = history.reduce((s, x) => s + x.possibleMinutes, 0);
 
-  // --- Sportliche Performance (Karriere-Ø + Peak, siehe Vorgabe Abschnitt 30) ---
-  const careerPerformanceAvg = history.length > 0 ? history.reduce((s, x) => s + x.performanceScore, 0) / history.length : 50;
-  const topSeasons = [...history].sort((a, b) => b.performanceScore - a.performanceScore).slice(0, 3);
-  const peakPerformanceAvg = topSeasons.length > 0 ? topSeasons.reduce((s, x) => s + x.performanceScore, 0) / topSeasons.length : 50;
+  // ---------------------------------------------------------------------
+  // GRUPPE A - Sportliche Leistung (max 1200)
+  // ---------------------------------------------------------------------
 
-  // --- Titel nach Wettbewerbsstufe gewichtet (siehe `TROPHY_LEGACY_POINTS`) ---
-  const titlePoints = t.trophies.reduce((sum, trophy) => sum + (TROPHY_LEGACY_POINTS[trophy] ?? 0), 0);
+  // Karriere-Performance (max 300): minutengewichteter Ø-OVR über alle Profisaisons,
+  // gewichtet mit der Einsatzquote (wer viel spielt, prägt die Karriere stärker als
+  // wer nur gelegentlich zum Zug kam).
+  const minutesWeightedOvr =
+    totalMinutes > 0
+      ? history.reduce((s, x) => s + x.overallRating * x.minutesPlayed, 0) / totalMinutes
+      : history.length > 0
+      ? history.reduce((s, x) => s + x.overallRating, 0) / history.length
+      : 40;
+  const careerPlayTimeShare = totalPossibleMinutes > 0 ? clamp(totalMinutes / totalPossibleMinutes, 0, 1) : 0;
+  const careerPerformancePoints = clamp(
+    Math.round(((minutesWeightedOvr - 40) / 50) * (0.4 + 0.6 * careerPlayTimeShare) * 300),
+    0,
+    300
+  );
 
-  // --- Legendary-Season-Bonus (Vorgabe Abschnitt 38): außergewöhnliche Saison-
-  // Performance (Top-15%-Bereich) KOMBINIERT mit einem großen Titel in derselben
-  // Saison - bewusst selten (braucht beides gleichzeitig) und mit festem, nicht
-  // weiter skalierendem Betrag, damit daraus keine neue dominante Punktquelle wird.
-  const legendarySeasons = history.filter((s) => s.performanceScore >= 85 && s.trophies.some((tr) => LEGENDARY_SEASON_TROPHIES.has(tr)));
-  const legendaryBonus = legendarySeasons.length * 60;
+  // Peak-Performance (max 250): nach Tier des Karriere-Bestwerts gestaffelt (siehe
+  // `overallTier`) - dieselbe sechsstufige Skala wie überall sonst in der App, damit
+  // sich "Peak war Weltklasse" auch bei den Legacy-Punkten wiederfindet.
+  const peakOverall = Math.max(overallRating(player), ...history.map((s) => s.overallRating));
+  const PEAK_TIER_POINTS: Record<string, number> = { amateur: 0, bronze: 60, silver: 110, gold: 175, elite: 220, icon: 250 };
+  const peakPerformancePoints = PEAK_TIER_POINTS[overallTier(peakOverall).className] ?? 0;
 
-  // --- Vermögen: log-skaliert statt linear (siehe Funktions-Kommentar oben) -
-  // zusätzliches Vermögen bleibt immer positiv, der Grenznutzen sinkt aber stark:
-  // 50 Mio. sind bei Weitem nicht doppelt so viel Legacy wert wie 5 Mio.
-  const wealthPoints = Math.round(40 * Math.log(1 + Math.max(0, player.wealth) / 100000));
+  // Titel (max 350): siehe `TITLE_LEGACY_POINTS`/`isTeamTitle` - individuelle
+  // Auszeichnungen zählen hier NICHT mit.
+  const titleNames = t.trophies.filter(isTeamTitle);
+  const titlePoints = clamp(
+    titleNames.reduce((sum, trophy) => sum + (TITLE_LEGACY_POINTS[trophy] ?? 0), 0),
+    0,
+    350
+  );
 
-  const factors: ScoreFactor[] = [
-    { label: "Karriere-Performance", points: Math.round((careerPerformanceAvg - 50) * 18) },
-    { label: "Peak-Performance", points: Math.round((peakPerformanceAvg - 50) * 10) },
-    { label: "Titel", points: titlePoints },
-    { label: "Tore", points: Math.round(t.goals * 0.8) },
-    { label: "Vorlagen", points: Math.round(t.assists * 0.6) },
-    { label: "Bekanntheit", points: Math.round(player.reputation * 1.8) },
-    { label: "Nationalmannschaft", points: Math.round(player.nationalTeamCaps * 4 + player.nationalTeamGoals * 8) },
-    { label: "Vermögen", points: wealthPoints },
-    // Gestaffelt statt einer harten 3-Stufen-Klippe: die allermeisten Karrieren
-    // laufen realistisch über 3-4 Vereine, nicht nur einen einzigen - das zählt
-    // hier bewusst noch als "treu" (spürbar positiv), statt neutral/bestraft zu
-    // werden. Erst ab 5+ Wechseln kippt der Faktor ins Negative.
-    { label: "Vereinstreue", points: clamp(50 - player.clubChangesCount * 10, -35, 55) },
-    { label: "Familie", points: (player.relationshipStatus === "verheiratet" ? 35 : 0) + player.children * 18 },
-    { label: "Verletzungshistorie", points: player.totalInjuryWeeks >= 60 ? -70 : player.totalInjuryWeeks <= 10 ? 40 : 0 },
+  // Sportliche Produktion (max 180): siehe `PRODUCTION_RICHTWERT`.
+  const isGoalkeeper = player.position === "TW";
+  const productionRate = isGoalkeeper
+    ? totalMatches > 0
+      ? t.cleanSheets / totalMatches
+      : 0
+    : player.position === "ZM"
+    ? totalMatches > 0
+      ? t.progressiveActions / totalMatches
+      : 0
+    : player.position === "IV" || player.position === "AV"
+    ? totalMatches > 0
+      ? t.bigChancesPrevented / totalMatches
+      : 0
+    : totalMatches > 0
+    ? (t.goals + t.assists) / totalMatches
+    : 0;
+  const productionPoints = clamp(Math.round((productionRate / PRODUCTION_RICHTWERT[player.position]) * 180), 0, 180);
+  const productionLabel = isGoalkeeper
+    ? "Sportliche Produktion (Weiße Westen)"
+    : player.position === "ZM"
+    ? "Sportliche Produktion (Ballgewinne & Pässe)"
+    : player.position === "IV" || player.position === "AV"
+    ? "Sportliche Produktion (verhinderte Großchancen)"
+    : "Sportliche Produktion (Torbeteiligungen)";
+
+  // Nationalmannschaft (max 120).
+  const nationalTeamPoints = clamp(Math.round(player.nationalTeamCaps * 1.2 + player.nationalTeamGoals * 2.5), 0, 120);
+
+  const groupA: ScoreFactor[] = [
+    { label: "Karriere-Performance", points: careerPerformancePoints, max: 300 },
+    { label: "Peak-Performance", points: peakPerformancePoints, max: 250 },
     {
-      label: "Charakter & Image",
-      points: Math.round(
-        1.6 * (player.traits.arbeitsmoral - 50 + (player.traits.disziplin - 50) + (player.traits.medienimage - 50) + (player.traits.fuehrung - 50))
-      ),
+      label: "Titel",
+      points: titlePoints,
+      max: 350,
+      detail: titleNames.length > 0 ? titleNames.join(", ") : "keine Titel",
     },
+    { label: productionLabel, points: productionPoints, max: 180 },
+    { label: "Nationalmannschaft", points: nationalTeamPoints, max: 120, detail: `${player.nationalTeamCaps} Caps` },
   ];
-  if (legendaryBonus > 0) {
-    factors.push({ label: "Legendäre Saison(s)", points: legendaryBonus });
-  }
 
-  const score = Math.round(factors.reduce((s, f) => s + f.points, 0));
+  // ---------------------------------------------------------------------
+  // GRUPPE B - Karriereführung (max 450)
+  // ---------------------------------------------------------------------
 
-  let tier = "Vereinsspieler";
-  if (score >= 1400) tier = "Weltklasse-Legende";
-  else if (score >= 850) tier = "Nationale Ikone";
-  else if (score >= 500) tier = "Publikumsliebling";
-  else if (score >= 220) tier = "Solider Profi";
+  // Charakter & Image (0..150): Ø-Abweichung der vier Charakterzüge vom neutralen
+  // Mittelwert (50), linear auf [0, 150] normiert - ein durchschnittlicher Charakter
+  // (Ø 50) landet bei 75, die volle Bandbreite (Ø 0..100) deckt [0, 150] ab.
+  const traitAvgDelta =
+    (player.traits.arbeitsmoral - 50 + (player.traits.disziplin - 50) + (player.traits.medienimage - 50) + (player.traits.fuehrung - 50)) / 4;
+  const characterPoints = clamp(Math.round(((traitAvgDelta + 50) / 100) * 150), 0, 150);
 
-  return { score, tier, factors };
+  // Vereinstreue (-60..150): Basis aus der längsten Vereins-Station (siehe
+  // `buildClubTenures`), Abzug bei mehr als 3 Wechseln (siehe `careerClubChangeCount`
+  // - dieselbe Stationen-Grundlage wie Karriereverlauf/Sharepic, siehe dortiger
+  // Kommentar).
+  const tenures = buildClubTenures(player);
+  const longestTenureSeasons = tenures.length > 0 ? Math.max(...tenures.map((tn) => tn.seasons)) : 0;
+  const clubChanges = careerClubChangeCount(player);
+  const loyaltyBase = (Math.min(longestTenureSeasons, 8) / 8) * 150;
+  const loyaltyPenalty = clubChanges > 3 ? (clubChanges - 3) * 15 : 0;
+  const loyaltyPoints = Math.max(-60, Math.round(loyaltyBase - loyaltyPenalty));
+
+  // Karriereweg & Aufstiege (0..100): Aufstiege (siehe `careerPromotionCount`) +
+  // spürbare Aufwärtswechsel (Vereinsstärke-Sprung von mind. 6, siehe
+  // `TransferDecisionEntry.strengthDelta`, gedeckelt auf 4 Wechsel) + höchstes je
+  // erreichtes Vereinsniveau. Das Handoff spezifiziert hierfür genaugenommen einen
+  // Sprung in eine Liga mit höherem UEFA-Koeffizienten - dafür fehlt aktuell eine
+  // Vereins-Land-Historie je Wechsel, daher als Näherung der spürbare Stärke-Sprung
+  // (dieselbe Grundlage, die auch die Wechsel-Erzählung im Spiel selbst nutzt).
+  const promotions = careerPromotionCount(player);
+  const upwardMoves = player.transferDecisions.filter((d) => d.strengthDelta >= 6).length;
+  const peakClubStrength = history.length > 0 ? Math.max(...history.map((s) => s.clubStrength)) : player.club.strength;
+  const peakLevelPoints = peakClubStrength >= 90 ? 40 : peakClubStrength >= 75 ? 28 : peakClubStrength >= 60 ? 16 : peakClubStrength >= 45 ? 8 : 0;
+  const pathPoints = clamp(promotions * 25 + Math.min(upwardMoves, 4) * 15 + peakLevelPoints, 0, 100);
+
+  // Auszeichnungen (0..50): siehe `careerAwardCount`.
+  const awardCount = careerAwardCount(player);
+  const awardPoints = Math.min(50, awardCount * 20);
+
+  const groupB: ScoreFactor[] = [
+    { label: "Charakter & Image", points: characterPoints, max: 150 },
+    { label: "Vereinstreue", points: loyaltyPoints, max: 150, detail: `${clubChanges} Vereinswechsel · längste Station ${longestTenureSeasons} Saisons` },
+    { label: "Karriereweg & Aufstiege", points: pathPoints, max: 100, detail: `${promotions} Aufstieg(e)` },
+    { label: "Auszeichnungen", points: awardPoints, max: 50, detail: awardCount > 0 ? `${awardCount}× ausgezeichnet` : "keine Auszeichnungen" },
+  ];
+
+  // ---------------------------------------------------------------------
+  // GRUPPE C - Umfeld (max 150)
+  // ---------------------------------------------------------------------
+
+  // Quadratische statt linearer Normierung (siehe Backtest `sim_legacy_backtest.ts`):
+  // `player.reputation` sättigt über eine ganze Karriere hinweg fast unabhängig von
+  // der tatsächlichen Qualität nahe 100 (keine Mechanik im Spiel lässt sie sinken,
+  // viele lassen sie nur steigen) - eine lineare Normierung hätte praktisch JEDER
+  // abgeschlossenen Karriere denselben Bekanntheits-Bonus nahe dem Maximum gegeben,
+  // wodurch dieser Faktor nichts mehr differenziert hätte. Die quadratische Kurve
+  // belohnt erst eine WIRKLICH herausragende Bekanntheit (90+) mit annähernd voller
+  // Punktzahl, eine "nur" gute (70-80) deutlich schwächer.
+  const reputationPoints = clamp(Math.round(Math.pow(player.reputation / 100, 2) * 80), 0, 80);
+  const wealthMio = Math.max(0, player.wealth) / 1_000_000;
+  const wealthPoints = clamp(Math.round((Math.log10(wealthMio + 1) / Math.log10(51)) * 50), 0, 50);
+  const relationshipBase =
+    player.relationshipStatus === "verheiratet" ? 16 : player.relationshipStatus === "verlobt" ? 12 : player.relationshipStatus === "in_beziehung" ? 6 : 0;
+  const familyPoints = Math.min(20, relationshipBase + player.children * 4);
+
+  const groupC: ScoreFactor[] = [
+    { label: "Bekanntheit", points: reputationPoints, max: 80 },
+    { label: "Vermögen", points: wealthPoints, max: 50 },
+    { label: "Familie", points: familyPoints, max: 20 },
+  ];
+
+  const groups: LegacyFactorGroup[] = [
+    { label: "Sportliche Leistung", max: 1200, total: groupA.reduce((s, f) => s + f.points, 0), factors: groupA },
+    { label: "Karriereführung", max: 450, total: groupB.reduce((s, f) => s + f.points, 0), factors: groupB },
+    { label: "Umfeld", max: 150, total: groupC.reduce((s, f) => s + f.points, 0), factors: groupC },
+  ];
+
+  const score = groups.reduce((s, g) => s + g.total, 0);
+  const stufe = legacyStufeForScore(score);
+
+  return { score, tier: stufe.label, tierClassName: stufe.className, groups, factors: [...groupA, ...groupB, ...groupC] };
 }
 
 // ---------------------------------------------------------------------------
@@ -4964,6 +5183,102 @@ export function detectCareerPhenotype(player: Player): CareerPhenotypeResult {
   return { primary, secondary };
 }
 
+/** Ein Kandidat für den "Karriere-Titel" (siehe `chooseCareerTitle`) - das
+ * prominente Hero-Badge am Karriereende, KRITERIENBASIERT statt reiner
+ * Punktzahl (siehe Handoff "Karriereende-Logik neu gewichten" Abschnitt 6:
+ * "ein Publikumsliebling HAT ein Publikum, und das setzt Bleiben voraus"). */
+interface CareerTitleCandidate {
+  label: string;
+  description: string;
+  eligible: (player: Player, ctx: { tenures: ClubTenure[]; distinctClubs: number; peakOverall: number }) => boolean;
+  /** `CareerPhenotype`s, die dieselbe Dimension wie dieser Titel beschreiben
+   * (siehe Handoff Abschnitt 6b) - ist der GEWÄHLTE (primäre) Archetyp einer
+   * davon, wird dieser Kandidat übersprungen, auch wenn `eligible` zutrifft,
+   * damit Titel und Archetyp nie dieselbe Aussage doppelt treffen. */
+  conflictsWith: CareerPhenotype[];
+}
+
+const MOVEMENT_PHENOTYPES: CareerPhenotype[] = ["ONE_CLUB_LEGEND", "JOURNEYMAN", "HOMECOMER", "BOOM_OR_BUST_MOVER", "PRESTIGE_FIGHTER", "LATE_CAREER_RESURGENCE"];
+
+/** Priorisierte Kandidatenliste für `chooseCareerTitle` - erster Treffer (erfüllt
+ * `eligible` UND kollidiert nicht mit dem primären Archetyp) gewinnt. Absichtlich
+ * NACH Prestige/Seltenheit sortiert (seltenere, aussagekräftigere Titel zuerst),
+ * nicht nach Dimension - eine Karriere kann mehrere Kriterien gleichzeitig
+ * erfüllen, das seltenste/stärkste Signal soll dann gewinnen. */
+const CAREER_TITLE_CANDIDATES: CareerTitleCandidate[] = [
+  {
+    label: "Weltklasse-Legende",
+    description: "Elite-Niveau erreicht UND mindestens einen echten Mannschaftstitel gewonnen.",
+    eligible: (player, ctx) => ctx.peakOverall >= 80 && careerTitleCount(player) >= 1,
+    conflictsWith: ["TROPHY_COLLECTOR"],
+  },
+  {
+    label: "Serienmeister",
+    description: "Mindestens drei echte Mannschaftstitel in der Vereinsvitrine.",
+    eligible: (player) => careerTitleCount(player) >= 3,
+    conflictsWith: ["TROPHY_COLLECTOR"],
+  },
+  {
+    label: "Klublegende",
+    description: "Mindestens acht Saisons ununterbrochen bei einem einzigen Verein.",
+    eligible: (_player, ctx) => ctx.tenures.some((t) => t.seasons >= 8),
+    conflictsWith: MOVEMENT_PHENOTYPES,
+  },
+  {
+    label: "Dauerbrenner",
+    description: "Über 300 Pflichtspiele in mindestens 14 Saisons bestritten.",
+    eligible: (player) => player.careerTotals.matches >= 300 && player.seasonHistory.length >= 14,
+    conflictsWith: ["STEADY_PROFESSIONAL"],
+  },
+  {
+    label: "Publikumsliebling",
+    description: "Mindestens vier Saisons am Stück bei einem Verein, insgesamt nie mehr als vier Vereine.",
+    eligible: (_player, ctx) => ctx.distinctClubs <= 4 && ctx.tenures.some((t) => t.seasons >= 4),
+    conflictsWith: MOVEMENT_PHENOTYPES,
+  },
+  {
+    label: "Aufstiegsheld",
+    description: "Mindestens zweimal mit einem Verein aufgestiegen.",
+    eligible: (player) => careerPromotionCount(player) >= 2,
+    conflictsWith: [],
+  },
+];
+
+/**
+ * Der "Karriere-Titel" (siehe Handoff "Karriereende-Logik neu gewichten" Abschnitt
+ * 6) - ersetzt die vorherige rein score-basierte Hero-Badge (`computeLegacy().tier`,
+ * jetzt die von-der-Aussage-getrennte "Legacy-Stufe"). Kriterienbasiert statt reiner
+ * Punktzahl, damit ein Publikumsliebling wirklich ein Publikum HAT (Bleiben
+ * vorausgesetzt) statt nur zufällig genug Punkte gesammelt zu haben. Beschreibt
+ * bewusst das SPORTLICHE PROFIL (Niveau/Ertrag/Beständigkeit), nie denselben
+ * Karriereweg-Aspekt wie der bereits gezeigte Archetyp (siehe
+ * `CareerTitleCandidate.conflictsWith`/`detectCareerPhenotype`) - `primaryPhenotype`
+ * kommt bewusst als Parameter rein (nicht hier neu berechnet), damit Aufrufer
+ * (CareerEnd.tsx) `detectCareerPhenotype` nur einmal aufrufen müssen. Trifft kein
+ * Kandidat zu (oder kollidieren alle mit dem Archetyp), fällt die Wahl auf einen
+ * neutralen, nie kollidierenden Fallback-Satz aus echten Karrieredaten - nie ganz
+ * ohne Badge, aber auch nie erfunden.
+ */
+export function chooseCareerTitle(player: Player, primaryPhenotype: CareerPhenotype): { label: string; description: string } {
+  const tenures = buildClubTenures(player);
+  const distinctClubs = new Set(tenures.map((t) => t.club)).size;
+  const peakOverall = Math.max(overallRating(player), ...player.seasonHistory.map((s) => s.overallRating));
+  const ctx = { tenures, distinctClubs, peakOverall };
+
+  for (const candidate of CAREER_TITLE_CANDIDATES) {
+    if (candidate.conflictsWith.includes(primaryPhenotype)) continue;
+    if (candidate.eligible(player, ctx)) return { label: candidate.label, description: candidate.description };
+  }
+
+  // Fallback: nie kollisionsträchtig, rein aus echten Zahlen - analog zum
+  // Karrierehöhepunkt-Fallback (siehe `computeCareerHighlight` in shareCard.ts).
+  const seasons = player.seasonHistory.length;
+  return {
+    label: "Profikarriere",
+    description: seasons > 0 ? `${player.careerTotals.matches} Pflichtspiele in ${seasons} Saisons.` : "Eine Karriere im Profifußball.",
+  };
+}
+
 export function computeAchievements(player: Player): Achievement[] {
   const t = player.careerTotals;
   const avgRatingOverall =
@@ -4987,7 +5302,7 @@ export function computeAchievements(player: Player): Achievement[] {
   const defs: { id: string; label: string; description: string; positive: boolean; condition: boolean }[] = [
     { id: "torjaeger", label: "Torjäger", description: "Über 150 Karrieretore erzielt.", positive: true, condition: t.goals >= 150 },
     { id: "vorlagengeber", label: "Vorlagengeber", description: "Über 100 Karrierevorlagen aufgelegt.", positive: true, condition: t.assists >= 100 },
-    { id: "titelsammler", label: "Titelsammler", description: "Mindestens 5 Titel gewonnen.", positive: true, condition: t.trophies.length >= 5 },
+    { id: "titelsammler", label: "Titelsammler", description: "Mindestens 5 Titel gewonnen.", positive: true, condition: careerTitleCount(player) >= 5 },
     { id: "weltklasse", label: "Weltklasse-Niveau", description: "Karriere-Ø-Bewertung von mindestens 7,5.", positive: true, condition: avgRatingOverall >= 7.5 },
     ...(nationalTeamTier ? [{ id: nationalTeamTier.id, label: nationalTeamTier.label, description: nationalTeamTier.description, positive: true, condition: true }] : []),
     // Schwelle bewusst bei 4 statt 1 (siehe Legacy-Faktor "Vereinstreue" oben) -
@@ -5246,12 +5561,27 @@ export function pickPostCareerPath(player: Player): string {
  * einziger, knackiger Einstiegssatz vor diesem Panel wirkt weniger redundant
  * als zwei sich überschneidende Erzähl-Blöcke direkt untereinander.
  */
-export function buildEpilogue(player: Player, _tier: string): string {
+export function buildEpilogue(player: Player): string {
   const years = player.age - player.birthAge;
-  const trophyText =
-    player.careerTotals.trophies.length > 0
-      ? `${player.careerTotals.trophies.length} Titel in der Vitrine`
-      : "keinem Titel, aber vielen unvergesslichen Momenten";
+  // "Titel" meint hier NUR echte Mannschaftstitel (siehe `careerTitleCount`/
+  // Handoff "Karriereende-Logik neu gewichten" Abschnitt 1) - bei null Titeln wird
+  // das nicht verschwiegen, sondern mit dem gefüllt, was tatsächlich da ist
+  // (Auszeichnungen/Aufstiege), statt pauschal auf "unvergessliche Momente"
+  // auszuweichen, solange echte Zahlen existieren.
+  const titles = careerTitleCount(player);
+  const awards = careerAwardCount(player);
+  const promotions = careerPromotionCount(player);
+  let trophyText: string;
+  if (titles > 0) {
+    trophyText = `${titles} Titel in der Vitrine`;
+  } else if (awards > 0 || promotions > 0) {
+    const parts: string[] = [];
+    if (awards > 0) parts.push(`${awards} ${awards === 1 ? "Auszeichnung" : "Auszeichnungen"}`);
+    if (promotions > 0) parts.push(`${promotions} ${promotions === 1 ? "Aufstieg" : "Aufstiegen"}`);
+    trophyText = `keinem Titel, aber ${parts.join(" und ")}`;
+  } else {
+    trophyText = "keinem Titel, aber vielen unvergesslichen Momenten";
+  }
   return `Nach ${years} Jahren im Profifußball beendet ${player.name} die aktive Karriere mit ${player.careerTotals.goals} Toren, ${player.careerTotals.assists} Vorlagen und ${trophyText}.`;
 }
 
