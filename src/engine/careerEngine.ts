@@ -4739,23 +4739,38 @@ const TITLE_LEGACY_POINTS: Record<string, number> = {
  * hier strukturell fast leer ausgehen, obwohl sie längst eine eigene, im Spiel
  * etablierte Erfolgsmetrik haben (siehe Nutzer-Vorgabe: "Defensivspieler auch
  * mitdenken, sie hatten doch eine eigene Erfolgsregel, nichts bisheriges
- * überschreiben. Dito Torwart"). Richtwerte für IV/AV/ZM/TW sind eigene Schätzungen
- * (siehe Kommentare an den jeweiligen Konstanten) - werden über den Backtest
- * (`sim_legacy_backtest.ts`) gegen echte Simulationsdaten geprüft.
+ * überschreiben. Dito Torwart").
+ *
+ * IV/AV/ZM/TW-Richtwerte NICHT mehr per Backtest-Trial-and-Error geschätzt, sondern
+ * direkt aus der tatsächlichen Erzeugungsformel der jeweiligen Statistik (siehe
+ * `simulateSeason`, `bigChancesPrevented`/`progressiveActions`/`cleanSheets`)
+ * über eine reale Verteilung (300 simulierte Volluakarrieren je Position, Skript
+ * siehe Analyse-Notiz unten) hergeleitet - derselben Kalibrierungs-Philosophie wie
+ * beim Handoff-eigenen ST-Richtwert: nah am oberen Ende der real erreichbaren
+ * Spanne (zwischen P95 und dem beobachteten Maximum), NICHT am Durchschnitt -
+ * ein durchschnittlicher Spieler landet dadurch bei ~60-70% dieses Faktors, nur
+ * die obersten ~5-10% einer Position nähern sich der vollen Punktzahl. Vorher
+ * lag v.a. ZM strukturell zu lasch (nur ~85. Perzentil, Ø-Spieler schon bei ~74%)
+ * und TW sogar ÜBER dem in 300 Stichproben je beobachteten Maximum (0,42 vs.
+ * real max. 0,387) - für TW war die volle Punktzahl damit praktisch unerreichbar.
+ * Gemessene Verteilung (Ø / P90 / P95 / Max je Position, Rate = Rohwert/Spiele):
+ *   TW  Ø0.249 P90 0.312 P95 0.331 Max 0.387
+ *   IV  Ø0.379 P90 0.482 P95 0.522 Max 0.660
+ *   AV  Ø0.285 P90 0.361 P95 0.384 Max 0.502
+ *   ZM  Ø0.333 P90 0.471 P95 0.500 Max 0.621
  */
 const PRODUCTION_RICHTWERT: Record<Position, number> = {
   // Direkt aus dem Handoff übernommen (Torbeteiligung pro Spiel).
   ST: 0.7,
   FS: 0.5, // Handoff-Bezeichnung "OM/FL" - in unserer Positions-Liste "Flügelspieler".
-  // NICHT die Handoff-Werte (die galten für Torbeteiligung/Spiel) - eigene Richtwerte
-  // für die jeweils tatsächlich genutzte Metrik, gegen `sim_legacy_backtest.ts`
-  // kalibriert (erste Schätzung lag spürbar zu niedrig - Ø-Punktzahl über 1000
-  // simulierte Karrieren lag bei 85-90% des Maximalwerts statt einer sinnvoll
-  // differenzierenden Verteilung, siehe Kommentar an `computeLegacy`).
-  ZM: 0.45, // Ballgewinne & Pässe / Spiel.
+  // Zwischen P95 und beobachtetem Maximum der realen Verteilung (siehe Kommentar
+  // oben) - NICHT die Handoff-Werte (die galten für die pauschale
+  // Torbeteiligung/Spiel-Formel, nicht für die jeweils tatsächlich genutzte,
+  // etablierte Metrik dieser Position).
+  ZM: 0.56, // Ballgewinne & Pässe / Spiel.
   IV: 0.62, // Verhinderte Großchancen / Spiel.
   AV: 0.46, // Verhinderte Großchancen / Spiel (niedriger als IV, siehe positionFactor dort).
-  TW: 0.42, // Weiße Westen / Spiel.
+  TW: 0.36, // Weiße Westen / Spiel.
 };
 
 /**
