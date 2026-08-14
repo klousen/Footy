@@ -4531,6 +4531,7 @@ export function buildClubTenures(player: Player): ClubTenure[] {
       last.toAge = s.age;
       last.seasons += 1;
       last.avgScore += s.score;
+      last.toOverall = s.overallRating;
       if (s.promoted) last.promoted = true;
       if (s.relegated) last.relegated = true;
     } else {
@@ -4540,6 +4541,8 @@ export function buildClubTenures(player: Player): ClubTenure[] {
         toAge: s.age,
         seasons: 1,
         avgScore: s.score,
+        fromOverall: s.overallRating,
+        toOverall: s.overallRating,
         promoted: s.promoted,
         relegated: s.relegated,
         onLoan: s.onLoan,
@@ -4869,7 +4872,13 @@ export function computeLegacy(player: Player): { score: number; tier: string; ti
 
   const groupB: ScoreFactor[] = [
     { label: "Charakter & Image", points: characterPoints, max: 150 },
-    { label: "Vereinstreue", points: loyaltyPoints, max: 150, detail: `${clubChanges} Vereinswechsel · längste Station ${longestTenureSeasons} Saisons` },
+    {
+      label: "Vereinstreue",
+      points: loyaltyPoints,
+      max: 150,
+      min: -60,
+      detail: `${clubChanges} Vereinswechsel · längste Station ${longestTenureSeasons} Saisons`,
+    },
     { label: "Karriereweg & Aufstiege", points: pathPoints, max: 100, detail: `${promotions} Aufstieg(e)` },
     { label: "Auszeichnungen", points: awardPoints, max: 50, detail: awardCount > 0 ? `${awardCount}× ausgezeichnet` : "keine Auszeichnungen" },
   ];

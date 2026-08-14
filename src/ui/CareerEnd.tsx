@@ -7,6 +7,7 @@ import {
   computeCareerNarrativeState,
   detectCareerPhenotype,
   isTeamTitle,
+  overallRating,
 } from "../engine/careerEngine";
 import {
   ATTRIBUTE_LABEL,
@@ -15,6 +16,7 @@ import {
   formatMoney,
   formatTrophyList,
   LEGACY_STUFEN,
+  overallTier,
   RELATIONSHIP_LABEL,
   TRANSFER_DECISION_LABEL,
 } from "./labels";
@@ -66,6 +68,14 @@ export function CareerEnd({
   const longestTenure =
     clubTenures.length > 0 ? clubTenures.reduce((best, t) => (t.seasons > best.seasons ? t : best)) : undefined;
   const titleCount = careerTitleCount(player);
+  // Karriere-Bestwert für die Hero-Strip-Kachel (siehe Nachtrag "Hero-Strip") -
+  // dieselbe Herleitung wie an den anderen Bestwert-Stellen der Engine
+  // (`computeLegacy`/`chooseCareerTitle`/`detectCareerPhenotype`): Maximum aus
+  // aktueller Gesamtstärke UND allen historischen Saison-Werten, falls der
+  // Spieler nach dem Zenit noch abgebaut hat.
+  const peakOverall = Math.max(overallRating(player), ...player.seasonHistory.map((s) => s.overallRating));
+  const peakTier = overallTier(peakOverall);
+  const peakGlow = peakTier.className === "elite" || peakTier.className === "icon" ? " glow" : "";
   const phenotypeCtx = { distinctClubs, longestTenure, titleCount };
   const totalMinutesPlayed = player.seasonHistory.reduce((s, h) => s + h.minutesPlayed, 0);
   const totalPossibleMinutes = player.seasonHistory.reduce((s, h) => s + h.possibleMinutes, 0);
@@ -113,11 +123,29 @@ export function CareerEnd({
             {careerTitle.label}
           </p>
         )}
+        {/* Ersetzt die frühere reine Fließtext-Zeile ("Legacy-Score: X · Stufe") -
+            siehe Nachtrag "Hero-Strip": Bestwert/Legacy-Score/Titel-Auszeichnungen
+            als dreispaltige Kachelzeile, 1:1 aus footca-karriereende-v4.html
+            übernommen (nur Kachel 1 trägt eine Tier-Farbe). */}
         {legacyScore !== undefined && (
-          <p className="muted">
-            Legacy-Score: {legacyScore}
-            {legacyTier && <span className={`legacy-stufe-inline tier-${legacyTierClassName}`}> · {legacyTier}</span>}
-          </p>
+          <div className="hero-strip">
+            <div>
+              <div className={`v tier-${peakTier.className}${peakGlow}`}>{peakOverall}</div>
+              <div className="l">Bestwert · {peakTier.label}</div>
+            </div>
+            <div>
+              <div className="v">{legacyScore}</div>
+              <div className="l">Legacy · {legacyTier}</div>
+            </div>
+            <div>
+              <div className="v">
+                {titleCount}
+                <span style={{ fontSize: "19px", color: "var(--chalk-dim)" }}> / </span>
+                {awardCount}
+              </div>
+              <div className="l">Titel / Auszeichn.</div>
+            </div>
+          </div>
         )}
       </div>
 
@@ -259,42 +287,11 @@ export function CareerEnd({
         </div>
       </div>
 
+      {/* Der komplette "Karriereverlauf"-Panel (Chart + Tier-Legende + Stationsliste
+          mit OVR-Übergängen) ist Teil dieser einen Komponente (siehe Nachtrag
+          "Karriereverlauf-Chart: Konzeptwechsel, nicht Anpassung") - im v4-Mockup
+          EIN Panel statt zwei separater. */}
       <OverallScoreChart player={player} />
-
-      {clubTenures.length > 0 && (
-        <div className="panel">
-          <h3>Karriereverlauf</h3>
-          <ul className="club-tenure-list">
-            {clubTenures.map((ct, i) => (
-              <li key={i} className="club-tenure-item">
-                <span className="club-tenure-age">
-                  {ct.fromAge === ct.toAge ? `${ct.fromAge}` : `${ct.fromAge}-${ct.toAge}`}
-                </span>
-                <span className="club-tenure-club">
-                  {ct.club}
-                  {ct.onLoan && (
-                    <span className="tenure-loan-tag" title="Leihe" aria-label="Leihe">
-                      {" "}
-                      (L)
-                    </span>
-                  )}
-                  {ct.promoted && (
-                    <span className="tenure-arrow tenure-arrow-up" title="Aufstieg" aria-label="Aufstieg">
-                      ↑
-                    </span>
-                  )}
-                  {ct.relegated && (
-                    <span className="tenure-arrow tenure-arrow-down" title="Abstieg" aria-label="Abstieg">
-                      ↓
-                    </span>
-                  )}
-                </span>
-                <span className="club-tenure-score">Ø {ct.avgScore} Pkt.</span>
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
 
       {/* Drei Gruppen mit je eigener Obergrenze statt einer einzigen Flachliste
           (siehe Handoff "Karriereende-Logik neu gewichten" Abschnitt 2/3) - jede
@@ -313,23 +310,29 @@ export function CareerEnd({
                   <b>{g.total}</b> / {g.max}
                 </span>
               </div>
-              <div className="bfactor-list">
-                {g.factors.map((f, i) => (
-                  <div className="bfactor-row" key={i}>
-                    <div>
-                      <div className="n">
-                        {f.label}
-                        {f.max !== undefined && <span className="legacy-factor-max"> ({f.max} max.)</span>}
-                      </div>
+              {g.factors.map((f, i) => {
+                // Balkenbreite: negative Werte (aktuell nur "Vereinstreue") skalieren
+                // gegen die Untergrenze `f.min`, nicht gegen `f.max` (siehe
+                // Nachtrag "Legacy-Score-Balken" + `ScoreFactor.min`-Dokumentation).
+                const denom = f.points < 0 ? Math.abs(f.min ?? f.max ?? 0) : f.max ?? 0;
+                const pct = denom > 0 ? Math.min(100, (Math.abs(f.points) / denom) * 100) : 0;
+                return (
+                  <div className="lg-row" key={i}>
+                    <div className={`k${f.points === 0 ? " zero" : ""}`}>
+                      {f.label}
+                      {f.max !== undefined && <span className="legacy-factor-max"> ({f.max} max.)</span>}
                       {f.detail && <div className="sub">{f.detail}</div>}
                     </div>
-                    <span className={`delta ${f.points > 0 ? "pos" : f.points < 0 ? "neg" : "zero"}`}>
+                    <div className="lg-bar">
+                      <i className={f.points < 0 ? "neg" : undefined} style={{ width: `${pct}%` }} />
+                    </div>
+                    <span className={`v ${f.points > 0 ? "pos" : f.points < 0 ? "neg" : "nil"}`}>
                       {f.points > 0 ? "+" : ""}
                       {f.points}
                     </span>
                   </div>
-                ))}
-              </div>
+                );
+              })}
             </div>
           ))}
           {legacyScore !== undefined && legacyTier && (

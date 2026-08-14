@@ -264,11 +264,15 @@ export interface ScoreFactor {
   /** Obergrenze dieses EINZELNEN Faktors (siehe Handoff "Karriereende-Logik neu
    * gewichten" Abschnitt 2: "harte Obergrenzen") - NUR bei `computeLegacy`-Faktoren
    * gesetzt (die Saison-Bilanz aus `computeSeasonScore` kennt keine Deckelung pro
-   * Faktor), Basis für die Balkenanzeige im Legacy-Panel. Faktoren mit einem
-   * negativen Wertebereich (z.B. "Vereinstreue", -60..150) tragen hier trotzdem
-   * nur die OBERE Grenze - der Balken clamped `points` bei der Anzeige selbst auf
-   * [0, max]. */
+   * Faktor), Basis für die Balkenanzeige im Legacy-Panel (Nachtrag "Legacy-Score-
+   * Balken"): Balkenbreite = |points| / max, gedeckelt bei 100%. */
   max?: number;
+  /** Untergrenze dieses Faktors, NUR gesetzt wenn negativ erreichbar (aktuell
+   * einzig "Vereinstreue", -60..150, siehe `computeLegacy`) - bei negativem
+   * `points` bestimmt `|min|` statt `max` die Balkenbreite (siehe
+   * footca-karriereende-v4.html: Vereinstreue -45 bei einer Spanne von -60..150
+   * ergibt 75% Balkenbreite, nicht 45/150). */
+  min?: number;
 }
 
 /** Eine der drei Legacy-Score-Gruppen (siehe `computeLegacy`, Handoff "Karriereende-
@@ -291,6 +295,12 @@ export interface ClubTenure {
   toAge: number;
   seasons: number;
   avgScore: number;
+  /** Gesamtstärke zu Beginn/Ende dieser Station (erste/letzte Saison der
+   * Zugehörigkeit) - für die OVR-Übergangsanzeige im Karriereverlauf-Panel
+   * (siehe Nachtrag "Karriereverlauf-Chart: Konzeptwechsel"), tier-eingefärbt
+   * über `overallTier`. */
+  fromOverall: number;
+  toOverall: number;
   /** Ob der Verein während dieser Zugehörigkeit mindestens einmal auf-/abgestiegen ist. */
   promoted: boolean;
   relegated: boolean;
