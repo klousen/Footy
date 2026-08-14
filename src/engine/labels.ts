@@ -111,23 +111,33 @@ export const CAREER_PHENOTYPE_LABEL: Record<CareerPhenotype, string> = {
   PRESTIGE_FIGHTER: "Der Kämpfer",
 };
 
+/**
+ * Rein BESCHREIBENDE Kurztexte je Archetyp (siehe Handoff "Karriereende-Logik neu
+ * gewichten" Abschnitt 5: "Der Archetyp beschreibt, er wertet nicht. Text auf reine
+ * Beschreibung umstellen [...] Keine Formulierungen wie 'kaum', 'nie richtig',
+ * 'immerhin'.") - die Wertung (gut/schlecht) trägt ausschließlich der Karriere-Titel
+ * (siehe `chooseCareerTitle` in careerEngine.ts) bzw. die Achievements. Bewusst auch
+ * POSITIV wertende Adjektive entfernt ("bemerkenswert", "echte Weltklasse", "eine der
+ * ganz großen ..."), nicht nur negative - sonst würde z.B. ein Titel-Achievement und
+ * dieser Archetyp-Text dieselbe positive Aussage doppelt treffen.
+ */
 export const CAREER_PHENOTYPE_DESCRIPTION: Record<CareerPhenotype, string> = {
-  WONDERKIND_DELIVERED: "Das Jugendtalent hat sich bestätigt - aus dem frühen Versprechen wurde echte Weltklasse.",
-  WONDERKIND_BUST: "Das Talent war unübersehbar - der ganz große Durchbruch ist trotzdem ausgeblieben.",
-  LATE_BLOOMER: "Ein schwacher Karrierestart, dann eine echte Leistungsexplosion in der zweiten Karrierehälfte.",
-  STEADY_PROFESSIONAL: "Über die ganze Karriere hinweg solide, konstant, ohne große Ausschläge nach oben oder unten.",
-  ONE_CLUB_LEGEND: "Der gesamten aktiven Laufbahn treu geblieben - ein echtes Vereins-Urgestein.",
-  JOURNEYMAN: "Viele Stationen, viele Neuanfänge - eine Karriere mit ständig wechselnden Vereinen.",
+  WONDERKIND_DELIVERED: "Das Jugendtalent bestätigte sich - aus dem frühen Versprechen wurde Weltklasse-Niveau.",
+  WONDERKIND_BUST: "Das Talent war früh erkennbar - der ganz große Durchbruch blieb aus.",
+  LATE_BLOOMER: "Ein schwacher Start, dann ein deutlicher Leistungsanstieg in der zweiten Karrierehälfte.",
+  STEADY_PROFESSIONAL: "Über die ganze Karriere hinweg konstant, ohne große Ausschläge nach oben oder unten.",
+  ONE_CLUB_LEGEND: "Der gesamten aktiven Laufbahn bei einem einzigen Verein geblieben.",
+  JOURNEYMAN: "Mehrere Stationen bei verschiedenen Vereinen - eine Laufbahn mit häufigen Wechseln.",
   NATIONAL_TEAM_ICON: "Über Jahre hinweg fester Bestandteil der Nationalmannschaft.",
-  NATIONAL_TEAM_SNUB: "Elite-Niveau erreicht - eine Berufung zur Nationalmannschaft blieb trotzdem aus.",
-  TROPHY_COLLECTOR: "Eine der ganz großen Titel-Sammlungen des Fußballs.",
-  NEARLY_MAN: "Elite-Niveau erreicht, aber die ganz großen Titel fehlen in der Sammlung.",
-  INJURY_PRONE_SURVIVOR: "Trotz langer Verletzungsgeschichte eine bemerkenswerte Karriere hingelegt.",
-  LATE_CAREER_RESURGENCE: "Ein später Vereinswechsel brachte noch einmal spürbaren Aufschwung.",
-  BOOM_OR_BUST_MOVER: "Eine Karriere voller großer, riskanter Entscheidungen - mal ging es steil bergauf, mal spürbar bergab.",
-  CEILING_BREAKER: "Hat die eigenen Erwartungen in einzelnen Bereichen sogar übertroffen.",
-  HOMECOMER: "Ist im Laufe der Karriere zu einem prägenden früheren Verein zurückgekehrt.",
-  PRESTIGE_FIGHTER: "Hat sich früh für einen großen Verein und das Risiko entschieden - und sich nach einer harten Durststrecke zurückgekämpft.",
+  NATIONAL_TEAM_SNUB: "Elite-Niveau erreicht - eine Berufung zur Nationalmannschaft blieb aus.",
+  TROPHY_COLLECTOR: "Mehrere Mannschaftstitel in der Vereinsvitrine.",
+  NEARLY_MAN: "Elite-Niveau erreicht, die großen Titel fehlen in der Sammlung.",
+  INJURY_PRONE_SURVIVOR: "Eine lange Verletzungsgeschichte begleitete die gesamte Karriere.",
+  LATE_CAREER_RESURGENCE: "Ein später Vereinswechsel brachte einen spürbaren Aufschwung.",
+  BOOM_OR_BUST_MOVER: "Mehrere große Wechsel-Entscheidungen - mal ging es steil bergauf, mal spürbar bergab.",
+  CEILING_BREAKER: "Hat die eigenen Erwartungen in einzelnen Bereichen übertroffen.",
+  HOMECOMER: "Ist im Laufe der Karriere zu einem früheren Verein zurückgekehrt.",
+  PRESTIGE_FIGHTER: "Hat sich früh für einen großen Verein entschieden - nach einer Durststrecke folgte der Turnaround.",
 };
 
 /** Dynamische, aus ECHTEN Karrieredaten gebaute Begründung für den finalen
@@ -143,16 +153,28 @@ export const CAREER_PHENOTYPE_DESCRIPTION: Record<CareerPhenotype, string> = {
  * bewährter Fallback bestehen - kein Zwang, für jeden der 15 Phänotypen eine
  * eigene Datenkomposition zu erfinden (Vorgabe Abschnitt 10: "keine neue
  * komplexe Architektur"). */
+/** Vom Aufrufer (CareerEnd.tsx) bereits aus `buildClubTenures`/`careerTitleCount`
+ * (careerEngine.ts) abgeleitete Werte für `describeCareerPhenotype` - als Parameter
+ * statt hier neu berechnet, um keinen Ringimport auf careerEngine.ts aufzumachen
+ * (careerEngine.ts importiert bereits AUS labels.ts). Alles optional mit
+ * sinnvollem Fallback für Aufrufer, die (noch) nicht alles mitgeben. */
+export interface CareerPhenotypeContext {
+  /** Anzahl UNTERSCHIEDLICHER Vereine (siehe `distinctClubCount`). */
+  distinctClubs?: number;
+  /** Längste zusammenhängende Vereins-Station (siehe `buildClubTenures`). */
+  longestTenure?: { club: string; seasons: number };
+  /** Anzahl echter Mannschaftstitel (siehe `careerTitleCount`) - NICHT
+   * `player.careerTotals.trophies.length` (zählt auch individuelle
+   * Auszeichnungen mit, siehe Bugreport "vier verschiedene Antworten auf
+   * 'wie viele Titel'"). */
+  titleCount?: number;
+}
+
 export function describeCareerPhenotype(
   phenotype: CareerPhenotype,
   player: Player,
   narrative: CareerNarrativeState,
-  // Anzahl UNTERSCHIEDLICHER Vereine (siehe `distinctClubCount` in careerEngine.ts) -
-  // als Parameter statt hier neu berechnet, um keinen Ringimport auf careerEngine.ts
-  // aufzumachen (careerEngine.ts importiert bereits AUS labels.ts). Nur für
-  // "JOURNEYMAN"/"Zugvogel" gebraucht, daher optional mit Fallback auf
-  // `clubChangesCount` für Aufrufer, die den Wert (noch) nicht mitgeben.
-  distinctClubs?: number
+  ctx: CareerPhenotypeContext = {}
 ): string {
   switch (phenotype) {
     case "HOMECOMER": {
@@ -167,14 +189,19 @@ export function describeCareerPhenotype(
     case "JOURNEYMAN": {
       // Zählt VEREINE, nicht Wechsel (siehe Nutzer-Feedback "4 Wechsel, aber nur
       // 3 Vereine ist kein Zugvogel") - eine Rückkehr zu einem bereits bekannten
-      // Verein soll den Text nicht aufblähen.
-      const clubs = distinctClubs ?? player.clubChangesCount + 1;
-      return `${clubs} verschiedene Vereine prägten deine Laufbahn - kaum ein Umfeld, in dem du lange geblieben bist.`;
+      // Verein soll den Text nicht aufblähen. Rein beschreibend statt wertend
+      // (siehe Handoff "Karriereende-Logik neu gewichten" Abschnitt 5 - Beispiel-
+      // Formulierung von dort übernommen): benennt Vereinszahl und längste Station,
+      // ohne das als "kaum irgendwo geblieben" zu werten - das übernimmt allein der
+      // Karriere-Titel (siehe `chooseCareerTitle`).
+      const clubs = ctx.distinctClubs ?? player.clubChangesCount + 1;
+      const longestClause = ctx.longestTenure ? `, mit der längsten Station bei ${ctx.longestTenure.club} (${ctx.longestTenure.seasons} Saisons)` : "";
+      return `${clubs} verschiedene Vereine prägten die Laufbahn${longestClause}.`;
     }
     case "ONE_CLUB_LEGEND":
-      return `${player.seasonHistory.length} Saisons lang bist du ${player.club.name} treu geblieben, ohne je den Verein zu wechseln.`;
+      return `${player.seasonHistory.length} Saisons lang spieltest du ausschließlich für ${player.club.name}, ohne den Verein zu wechseln.`;
     case "TROPHY_COLLECTOR":
-      return `${player.careerTotals.trophies.length} Titel zieren deine Vitrine - eine der großen Titel-Sammlungen des Fußballs.`;
+      return `${ctx.titleCount ?? player.careerTotals.trophies.length} Mannschaftstitel in der Vereinsvitrine.`;
     case "NATIONAL_TEAM_ICON":
       return `${player.nationalTeamCaps} Länderspiele${
         player.nationalTeamGoals > 0 ? ` und ${player.nationalTeamGoals} Tore für die Nationalmannschaft` : ""
@@ -231,6 +258,39 @@ export function overallTier(overall: number): OverallTier {
   if (overall >= 60) return { label: "Solide", className: "silver" };
   if (overall >= 50) return { label: "Ausbaufähig", className: "bronze" };
   return { label: "Amateur", className: "amateur" };
+}
+
+/**
+ * Legacy-Stufe (siehe Handoff "Karriereende-Logik neu gewichten" Abschnitt 3) -
+ * rein score-basierte Einordnung des Legacy-Scores (0-1800, siehe `computeLegacy`
+ * in careerEngine.ts) in sechs Stufen. Nutzt BEWUSST dieselben sechs Tier-Farben
+ * wie `overallTier` (`className` identisch: amateur/bronze/silver/gold/elite/icon),
+ * damit die App nur EIN Farbvokabular für "wie gut" kennt, egal ob OVR oder Legacy
+ * gemeint ist. Getrennt vom neuen "Karriere-Titel" (siehe `chooseCareerTitle` in
+ * careerEngine.ts) - die Legacy-Stufe ist eine reine Punktzahl-Einordnung ohne
+ * Mindestvoraussetzungen, der Karriere-Titel dagegen ein kriterienbasiertes Badge.
+ */
+export interface LegacyStufe extends OverallTier {
+  /** 1-basierter Stufenindex (1 = niedrigste), für "Stufe X von 6"-Anzeigen. */
+  index: number;
+}
+
+/** Alle sechs Legacy-Stufen in aufsteigender Reihenfolge, inkl. der jeweiligen
+ * unteren Schwelle - Grundlage für `legacyStufeForScore` UND die Skalenleiste im
+ * Legacy-Panel (siehe CareerEnd.tsx), die alle sechs Stufen mit Schwellenwert
+ * zeigt, nicht nur die erreichte. */
+export const LEGACY_STUFEN: readonly (LegacyStufe & { threshold: number })[] = [
+  { index: 1, threshold: 0, label: "Unbekannter Profi", className: "amateur" },
+  { index: 2, threshold: 300, label: "Solider Profi", className: "bronze" },
+  { index: 3, threshold: 550, label: "Etablierter Profi", className: "silver" },
+  { index: 4, threshold: 850, label: "Aushängeschild", className: "gold" },
+  { index: 5, threshold: 1150, label: "Legende", className: "elite" },
+  { index: 6, threshold: 1450, label: "Unsterblich", className: "icon" },
+];
+
+export function legacyStufeForScore(score: number): LegacyStufe {
+  const hit = [...LEGACY_STUFEN].reverse().find((s) => score >= s.threshold) ?? LEGACY_STUFEN[0];
+  return { index: hit.index, label: hit.label, className: hit.className };
 }
 
 // -----------------------------------------------------------------------------

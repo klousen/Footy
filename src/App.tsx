@@ -27,6 +27,7 @@ import {
   buildRankingEntry,
   buildRetirementEvent,
   buildTitleWinsForSeason,
+  chooseCareerTitle,
   clubOfferTemplateId,
   computeAchievements,
   computeLegacy,
@@ -34,6 +35,7 @@ import {
   decideClubOfferInjection,
   decideNarrativeEventInjection,
   decideRoleChallengeInjection,
+  detectCareerPhenotype,
   dueStorylineTemplateIds,
   finalizeYouthClub,
   insertWithinBudget,
@@ -481,12 +483,15 @@ export default function App() {
       : (() => {
           // Gesamtstärke vorher/nachher vergleichen, damit der fußballerische Impact
           // einer Entscheidung sofort sichtbar wird (nicht nur einzelne Attribut-Punkte).
+          // Angezeigt wird bewusst NUR die Differenz (z.B. "+1"), nicht "56 → 57" (siehe
+          // Nutzer-Feedback) - die Vorher-/Nachher-Werte selbst stehen ohnehin schon im
+          // Dashboard/der Saisonbilanz, hier zählt nur der Sprung dieser Entscheidung.
           const before = overallRating(player);
           const effects = applyChoice(game, choice);
           const after = overallRating(player);
           const deltaLines = summarizeEffects(effects, player);
           if (after !== before) {
-            deltaLines.unshift(`Gesamtstärke ${before} → ${after} (${after > before ? "+" : ""}${after - before})`);
+            deltaLines.unshift(`Gesamtstärke ${after > before ? "+" : ""}${after - before}`);
           }
           return {
             choiceId: choice.id,
@@ -731,7 +736,9 @@ export default function App() {
           player={game.player}
           legacyScore={game.legacyScore}
           legacyTier={game.legacyTier}
-          legacyFactors={game.legacyFactors}
+          legacyTierClassName={game.legacyTierClassName}
+          legacyGroups={game.legacyGroups}
+          careerTitle={game.careerTitle}
           achievements={game.achievements}
           epilogue={game.epilogue}
           onNewCareer={handleNewCareerAfterEnd}
@@ -750,8 +757,14 @@ export default function App() {
 function buildCareerEndUpdate(player: NonNullable<GameState["player"]>): Partial<GameState> {
   player.retired = true;
   player.postCareerPath = pickPostCareerPath(player);
-  const { score, tier, factors } = computeLegacy(player);
+  const { score, tier, tierClassName, groups, factors } = computeLegacy(player);
   const achievements = computeAchievements(player);
+  // Karriere-Titel (siehe Handoff "Karriereende-Logik neu gewichten" Abschnitt 6):
+  // braucht den primären Archetyp, um Dimensions-Kollisionen zu vermeiden (siehe
+  // `chooseCareerTitle`) - `detectCareerPhenotype` hier einmalig aufgerufen, statt
+  // es CareerEnd.tsx ein zweites Mal berechnen zu lassen.
+  const phenotype = detectCareerPhenotype(player);
+  const careerTitle = chooseCareerTitle(player, phenotype.primary);
   addRankingEntry(buildRankingEntry(player, score));
   return {
     player: { ...player },
@@ -761,8 +774,11 @@ function buildCareerEndUpdate(player: NonNullable<GameState["player"]>): Partial
     screen: "careerEnd",
     legacyScore: score,
     legacyTier: tier,
+    legacyTierClassName: tierClassName,
     legacyFactors: factors,
+    legacyGroups: groups,
+    careerTitle,
     achievements,
-    epilogue: buildEpilogue(player, tier),
+    epilogue: buildEpilogue(player),
   };
 }

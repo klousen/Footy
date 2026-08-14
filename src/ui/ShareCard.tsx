@@ -15,21 +15,23 @@ export function ShareCard({
   legacyScore,
   legacyTier,
   achievements,
+  careerTitle,
 }: {
   player: Player;
   legacyScore?: number;
   legacyTier?: string;
   achievements?: Achievement[];
+  careerTitle?: { label: string; description: string };
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [copyStatus, setCopyStatus] = useState<"idle" | "copied" | "failed">("idle");
 
-  const data = buildShareCardData(player, legacyScore, legacyTier, achievements);
+  const data = buildShareCardData(player, legacyScore, legacyTier, achievements, careerTitle);
 
   useEffect(() => {
     if (canvasRef.current) drawShareCard(canvasRef.current, data);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [player.name, legacyScore, legacyTier, achievements]);
+  }, [player.name, legacyScore, legacyTier, achievements, careerTitle]);
 
   function handleDownload() {
     const canvas = canvasRef.current;
@@ -94,7 +96,7 @@ export function ShareCard({
 
   return (
     <div className="panel share-card-panel">
-      <h3>🎉 Karriere-Sharepic</h3>
+      <h3>Karriere-Sharepic</h3>
       <p className="muted trait-hint">
         Deine Karriere als Bild zum Teilen - lade es herunter oder öffne es in einem neuen Tab, um es zu speichern.
       </p>

@@ -1,11 +1,22 @@
-import type { Achievement, Player, ScoreFactor } from "../engine/types";
-import { buildClubTenures, computeCareerNarrativeState, detectCareerPhenotype } from "../engine/careerEngine";
+import type { Achievement, LegacyFactorGroup, Player } from "../engine/types";
+import {
+  buildClubTenures,
+  careerClubChangeCount,
+  careerPromotionCount,
+  careerTitleCount,
+  computeCareerNarrativeState,
+  detectCareerPhenotype,
+  isTeamTitle,
+  overallRating,
+} from "../engine/careerEngine";
 import {
   ATTRIBUTE_LABEL,
   CAREER_PHENOTYPE_LABEL,
   describeCareerPhenotype,
   formatMoney,
   formatTrophyList,
+  LEGACY_STUFEN,
+  overallTier,
   RELATIONSHIP_LABEL,
   TRANSFER_DECISION_LABEL,
 } from "./labels";
@@ -16,15 +27,23 @@ export function CareerEnd({
   player,
   legacyScore,
   legacyTier,
-  legacyFactors,
+  legacyTierClassName,
+  legacyGroups,
+  careerTitle,
   achievements,
   epilogue,
   onNewCareer,
 }: {
   player: Player;
   legacyScore?: number;
+  /** Legacy-STUFE (reine Punktzahl-Einordnung, siehe `legacyStufeForScore`) - NICHT
+   * das Hero-Badge, siehe `careerTitle` dafür. */
   legacyTier?: string;
-  legacyFactors?: ScoreFactor[];
+  legacyTierClassName?: string;
+  legacyGroups?: LegacyFactorGroup[];
+  /** Der kriterienbasierte "Karriere-Titel" (siehe `chooseCareerTitle` in
+   * careerEngine.ts) - das prominente Hero-Badge. */
+  careerTitle?: { label: string; description: string };
   achievements?: Achievement[];
   epilogue?: string;
   onNewCareer: () => void;
@@ -32,12 +51,37 @@ export function CareerEnd({
   const t = player.careerTotals;
   const positiveAchievements = (achievements ?? []).filter((a) => a.positive);
   const negativeAchievements = (achievements ?? []).filter((a) => !a.positive);
+  // Auszeichnungen als eigene Statistik-Zeile (siehe Master-Handoff Abschnitt 4:
+  // Torschützenkönig/Spieler der Saison/Talent der Saison/Kapitänsbinde zählen ALLE
+  // als Auszeichnung) - die Kapitänsbinde ist kein Trophäen-Eintrag mit eigenem
+  // Namen (siehe `player.nationalTeamCaptain`), wird hier deshalb als eigener
+  // String an die Trophäen-Liste angehängt, damit sie in der Anzeige auftaucht.
+  // `awardCount` deckt sich dadurch jetzt mit `careerAwardCount` (die zählt die
+  // Kapitänsbinde ebenfalls mit) - vorher zeigten Statistik/Hero-Strip und der
+  // Legacy-Faktor "Auszeichnungen" bei einer Kapitänskarriere zwei verschiedene
+  // Zahlen.
+  const individualAwards = [...t.trophies.filter((tr) => !isTeamTitle(tr)), ...(player.nationalTeamCaptain ? ["Kapitänsbinde"] : [])];
+  const awardCount = individualAwards.length;
+  const promotionCount = careerPromotionCount(player);
+  const clubChanges = careerClubChangeCount(player);
   const clubTenures = buildClubTenures(player);
   // Für "Zugvogel"/JOURNEYMAN (siehe `describeCareerPhenotype`): Anzahl
   // UNTERSCHIEDLICHER Vereine, nicht Anzahl der Wechsel - aus den bereits
   // gebauten `clubTenures` abgeleitet statt `buildClubTenures` ein zweites Mal
   // aufzurufen (siehe `distinctClubCount` in careerEngine.ts für dieselbe Logik).
   const distinctClubs = new Set(clubTenures.map((t) => t.club)).size;
+  const longestTenure =
+    clubTenures.length > 0 ? clubTenures.reduce((best, t) => (t.seasons > best.seasons ? t : best)) : undefined;
+  const titleCount = careerTitleCount(player);
+  // Karriere-Bestwert für die Hero-Strip-Kachel (siehe Nachtrag "Hero-Strip") -
+  // dieselbe Herleitung wie an den anderen Bestwert-Stellen der Engine
+  // (`computeLegacy`/`chooseCareerTitle`/`detectCareerPhenotype`): Maximum aus
+  // aktueller Gesamtstärke UND allen historischen Saison-Werten, falls der
+  // Spieler nach dem Zenit noch abgebaut hat.
+  const peakOverall = Math.max(overallRating(player), ...player.seasonHistory.map((s) => s.overallRating));
+  const peakTier = overallTier(peakOverall);
+  const peakGlow = peakTier.className === "elite" || peakTier.className === "icon" ? " glow" : "";
+  const phenotypeCtx = { distinctClubs, longestTenure, titleCount };
   const totalMinutesPlayed = player.seasonHistory.reduce((s, h) => s + h.minutesPlayed, 0);
   const totalPossibleMinutes = player.seasonHistory.reduce((s, h) => s + h.possibleMinutes, 0);
   const isGoalkeeper = player.position === "TW";
@@ -74,8 +118,40 @@ export function CareerEnd({
       <div className="hero">
         <div className="hero-badge">🏁</div>
         <h1>Karriereende</h1>
-        <p className="legacy-tier">{legacyTier}</p>
-        {legacyScore !== undefined && <p className="muted">Legacy-Score: {legacyScore}</p>}
+        {/* Der prominente Hero-Badge ist der kriterienbasierte "Karriere-Titel"
+            (siehe `chooseCareerTitle` in careerEngine.ts) - NICHT mehr die reine
+            Punktzahl-Einordnung `legacyTier` (siehe Handoff "Karriereende-Logik neu
+            gewichten" Abschnitt 6: "ein Publikumsliebling HAT ein Publikum"). Die
+            Legacy-Stufe steht stattdessen klein direkt daneben in der Score-Zeile. */}
+        {careerTitle && (
+          <p className="legacy-tier" title={careerTitle.description}>
+            {careerTitle.label}
+          </p>
+        )}
+        {/* Ersetzt die frühere reine Fließtext-Zeile ("Legacy-Score: X · Stufe") -
+            siehe Nachtrag "Hero-Strip": Bestwert/Legacy-Score/Titel-Auszeichnungen
+            als dreispaltige Kachelzeile, 1:1 aus footca-karriereende-v4.html
+            übernommen (nur Kachel 1 trägt eine Tier-Farbe). */}
+        {legacyScore !== undefined && (
+          <div className="hero-strip">
+            <div>
+              <div className={`v tier-${peakTier.className}${peakGlow}`}>{peakOverall}</div>
+              <div className="l">Bestwert · {peakTier.label}</div>
+            </div>
+            <div>
+              <div className="v">{legacyScore}</div>
+              <div className="l">Legacy · {legacyTier}</div>
+            </div>
+            <div>
+              <div className="v">
+                {titleCount}
+                <span style={{ fontSize: "19px", color: "var(--chalk-dim)" }}> / </span>
+                {awardCount}
+              </div>
+              <div className="l">Titel / Auszeichn.</div>
+            </div>
+          </div>
+        )}
       </div>
 
       <p className="epilogue">{epilogue}</p>
@@ -85,12 +161,12 @@ export function CareerEnd({
         <div className="phenotype-chips">
           <span
             className="phenotype-chip phenotype-chip-primary"
-            title={describeCareerPhenotype(phenotype.primary, player, narrativeState, distinctClubs)}
+            title={describeCareerPhenotype(phenotype.primary, player, narrativeState, phenotypeCtx)}
           >
             {CAREER_PHENOTYPE_LABEL[phenotype.primary]}
           </span>
           {phenotype.secondary.map((p) => (
-            <span key={p} className="phenotype-chip" title={describeCareerPhenotype(p, player, narrativeState, distinctClubs)}>
+            <span key={p} className="phenotype-chip" title={describeCareerPhenotype(p, player, narrativeState, phenotypeCtx)}>
               {CAREER_PHENOTYPE_LABEL[p]}
             </span>
           ))}
@@ -98,7 +174,7 @@ export function CareerEnd({
         {/* Begründung aus ECHTEN Karrieredaten statt generischem Boilerplate-Satz
             (siehe `describeCareerPhenotype` - Folgevorgabe "Transferentscheidungen:
             sichtbare Prognose + Narrative Integration" Abschnitt 9/10). */}
-        <p className="muted">{describeCareerPhenotype(phenotype.primary, player, narrativeState, distinctClubs)}</p>
+        <p className="muted">{describeCareerPhenotype(phenotype.primary, player, narrativeState, phenotypeCtx)}</p>
         {narrativeState.definingDecision && narrativeState.definingDecision.perfImpact !== null && (
           <p className="defining-decision">
             <strong>Prägende Entscheidung:</strong> {TRANSFER_DECISION_LABEL[narrativeState.definingDecision.type]} mit{" "}
@@ -124,7 +200,18 @@ export function CareerEnd({
         )}
       </div>
 
-      <ShareCard player={player} legacyScore={legacyScore} legacyTier={legacyTier} achievements={achievements} />
+      {/* Panel-Reihenfolge verbindlich laut Master-Handoff "Karriereende-Screen v4"
+          Abschnitt 2: Karrierebogen → Karriereverlauf → Sharepic → Karrierestatistik
+          → Legacy-Score → Erfolge. */}
+      <OverallScoreChart player={player} />
+
+      <ShareCard
+        player={player}
+        legacyScore={legacyScore}
+        legacyTier={legacyTier}
+        achievements={achievements}
+        careerTitle={careerTitle}
+      />
 
       <div className="panel">
         <h3>Karrierestatistik</h3>
@@ -164,8 +251,17 @@ export function CareerEnd({
               )}
             </>
           )}
+          {/* "Titel" meint hier NUR echte Mannschaftstitel (siehe `isTeamTitle`) -
+              Auszeichnungen (Torschützenkönig etc.) und Aufstiege stehen als eigene
+              Zeilen daneben, statt in derselben Zahl mitgezählt zu werden (siehe
+              Handoff "Karriereende-Logik neu gewichten" Abschnitt 1: "vier
+              verschiedene Antworten auf die Frage 'wie viele Titel'"). */}
           <span>Titel</span>
-          <span>{formatTrophyList(t.trophies)}</span>
+          <span className={titleCount === 0 ? "muted" : undefined}>{formatTrophyList(t.trophies.filter(isTeamTitle))}</span>
+          <span>Auszeichnungen</span>
+          <span className={awardCount === 0 ? "muted" : undefined}>{awardCount > 0 ? formatTrophyList(individualAwards) : "keine"}</span>
+          <span>Aufstiege</span>
+          <span className={promotionCount === 0 ? "muted" : undefined}>{promotionCount > 0 ? promotionCount : "keine"}</span>
           <span>Länderspiele</span>
           <span>
             {player.nationalTeamCaps}
@@ -184,8 +280,13 @@ export function CareerEnd({
           <span>
             {t.yellowCards}× Gelb, {t.redCards}× Rot
           </span>
+          {/* Aus der Stationsliste abgeleitet (Stationen - 1), NICHT
+              `player.clubChangesCount` - siehe `careerClubChangeCount` in
+              careerEngine.ts: Karriereverlauf, Sharepic-Stationsliste und diese
+              Zahl müssen immer exakt übereinstimmen (Handoff "Bug:
+              Stationsgruppierung"). */}
           <span>Vereinswechsel</span>
-          <span>{player.clubChangesCount}</span>
+          <span>{clubChanges}</span>
           <span>Privatleben</span>
           <span>
             {RELATIONSHIP_LABEL[player.relationshipStatus]}
@@ -196,57 +297,68 @@ export function CareerEnd({
         </div>
       </div>
 
-      <OverallScoreChart player={player} />
-
-      {clubTenures.length > 0 && (
+      {/* Drei Gruppen mit je eigener Obergrenze statt einer einzigen Flachliste
+          (siehe Handoff "Karriereende-Logik neu gewichten" Abschnitt 2/3) - jede
+          Gruppe zeigt ihre Zwischensumme, darunter die Legacy-Stufe (Punktzahl-
+          Einordnung, siehe `legacyStufeForScore`) mit einer Skalenleiste, die alle
+          sechs Stufen zeigt, nicht nur die erreichte. */}
+      {legacyGroups && legacyGroups.length > 0 && (
         <div className="panel">
-          <h3>Karriereverlauf</h3>
-          <ul className="club-tenure-list">
-            {clubTenures.map((ct, i) => (
-              <li key={i} className="club-tenure-item">
-                <span className="club-tenure-age">
-                  {ct.fromAge === ct.toAge ? `${ct.fromAge}` : `${ct.fromAge}-${ct.toAge}`}
+          <h3>Legacy-Score</h3>
+          <p className="panel-note muted">Drei Gruppen, jede mit eigener Obergrenze. Maximal erreichbar sind 1800 Punkte.</p>
+          {legacyGroups.map((g, gi) => (
+            <div className="legacy-group" key={gi}>
+              <div className="legacy-group-head">
+                <span className="legacy-group-name">{g.label}</span>
+                <span className="legacy-group-sub">
+                  <b>{g.total}</b> / {g.max}
                 </span>
-                <span className="club-tenure-club">
-                  {ct.club}
-                  {ct.onLoan && (
-                    <span className="tenure-loan-tag" title="Leihe" aria-label="Leihe">
-                      {" "}
-                      (L)
+              </div>
+              {g.factors.map((f, i) => {
+                // Balkenbreite: negative Werte (aktuell nur "Vereinstreue") skalieren
+                // gegen die Untergrenze `f.min`, nicht gegen `f.max` (siehe
+                // Nachtrag "Legacy-Score-Balken" + `ScoreFactor.min`-Dokumentation).
+                const denom = f.points < 0 ? Math.abs(f.min ?? f.max ?? 0) : f.max ?? 0;
+                const pct = denom > 0 ? Math.min(100, (Math.abs(f.points) / denom) * 100) : 0;
+                return (
+                  <div className="lg-row" key={i}>
+                    <div className={`k${f.points === 0 ? " zero" : ""}`}>
+                      {f.label}
+                      {f.max !== undefined && <span className="legacy-factor-max"> ({f.max} max.)</span>}
+                      {f.detail && <div className="sub">{f.detail}</div>}
+                    </div>
+                    <div className="lg-bar">
+                      <i className={f.points < 0 ? "neg" : undefined} style={{ width: `${pct}%` }} />
+                    </div>
+                    <span className={`v ${f.points > 0 ? "pos" : f.points < 0 ? "neg" : "nil"}`}>
+                      {f.points > 0 ? "+" : ""}
+                      {f.points}
                     </span>
-                  )}
-                  {ct.promoted && (
-                    <span className="tenure-arrow tenure-arrow-up" title="Aufstieg" aria-label="Aufstieg">
-                      ↑
-                    </span>
-                  )}
-                  {ct.relegated && (
-                    <span className="tenure-arrow tenure-arrow-down" title="Abstieg" aria-label="Abstieg">
-                      ↓
-                    </span>
-                  )}
-                </span>
-                <span className="club-tenure-score">Ø {ct.avgScore} Pkt.</span>
-              </li>
+                  </div>
+                );
+              })}
+            </div>
+          ))}
+          {legacyScore !== undefined && legacyTier && (
+            <div className="legacy-total">
+              <div className="legacy-total-name">
+                {legacyTier}
+                <small>Stufe {LEGACY_STUFEN.find((s) => s.label === legacyTier)?.index ?? "?"} von {LEGACY_STUFEN.length}</small>
+              </div>
+              <div className={`legacy-total-value tier-${legacyTierClassName ?? "amateur"}`}>
+                {legacyScore}
+                <small>von 1800</small>
+              </div>
+            </div>
+          )}
+          <div className="legacy-scale">
+            {LEGACY_STUFEN.map((s) => (
+              <div key={s.label} className={legacyTier === s.label ? `on tier-${s.className}` : undefined}>
+                <span>{s.threshold}</span>
+                {s.label}
+              </div>
             ))}
-          </ul>
-        </div>
-      )}
-
-      {legacyFactors && legacyFactors.length > 0 && (
-        <div className="panel">
-          <h3>Legacy-Score im Detail</h3>
-          <ul className="score-factors">
-            {legacyFactors.map((f, i) => (
-              <li key={i}>
-                <span>{f.label}</span>
-                <span className={f.points >= 0 ? "factor-positive" : "factor-negative"}>
-                  {f.points > 0 ? "+" : ""}
-                  {f.points}
-                </span>
-              </li>
-            ))}
-          </ul>
+          </div>
         </div>
       )}
 

@@ -261,6 +261,30 @@ export interface ScoreFactor {
    * ohne dass Spielende die Formel dahinter kennen müssen (siehe Bugreport
    * "hier ist total unklar was gemeint ist"). Wird NUR angezeigt, wenn gesetzt. */
   detail?: string;
+  /** Obergrenze dieses EINZELNEN Faktors (siehe Handoff "Karriereende-Logik neu
+   * gewichten" Abschnitt 2: "harte Obergrenzen") - NUR bei `computeLegacy`-Faktoren
+   * gesetzt (die Saison-Bilanz aus `computeSeasonScore` kennt keine Deckelung pro
+   * Faktor), Basis für die Balkenanzeige im Legacy-Panel (Nachtrag "Legacy-Score-
+   * Balken"): Balkenbreite = |points| / max, gedeckelt bei 100%. */
+  max?: number;
+  /** Untergrenze dieses Faktors, NUR gesetzt wenn negativ erreichbar (aktuell
+   * einzig "Vereinstreue", -60..150, siehe `computeLegacy`) - bei negativem
+   * `points` bestimmt `|min|` statt `max` die Balkenbreite (siehe
+   * footca-karriereende-v4.html: Vereinstreue -45 bei einer Spanne von -60..150
+   * ergibt 75% Balkenbreite, nicht 45/150). */
+  min?: number;
+}
+
+/** Eine der drei Legacy-Score-Gruppen (siehe `computeLegacy`, Handoff "Karriereende-
+ * Logik neu gewichten" Abschnitt 2: "drei Gruppen mit harten Obergrenzen") - jede
+ * Gruppe bündelt mehrere `ScoreFactor`s mit einer eigenen Zwischensumme/Obergrenze,
+ * damit das Legacy-Panel sie als eigenen Abschnitt mit Kopfzeile ("Sportliche
+ * Leistung · 242 / 1200") rendern kann statt einer einzigen langen Flachliste. */
+export interface LegacyFactorGroup {
+  label: string;
+  max: number;
+  total: number;
+  factors: ScoreFactor[];
 }
 
 /** Ein zusammenhängender Zeitraum bei einem Verein - abgeleitet aus `seasonHistory`
@@ -271,6 +295,12 @@ export interface ClubTenure {
   toAge: number;
   seasons: number;
   avgScore: number;
+  /** Gesamtstärke zu Beginn/Ende dieser Station (erste/letzte Saison der
+   * Zugehörigkeit) - für die OVR-Übergangsanzeige im Karriereverlauf-Panel
+   * (siehe Nachtrag "Karriereverlauf-Chart: Konzeptwechsel"), tier-eingefärbt
+   * über `overallTier`. */
+  fromOverall: number;
+  toOverall: number;
   /** Ob der Verein während dieser Zugehörigkeit mindestens einmal auf-/abgestiegen ist. */
   promoted: boolean;
   relegated: boolean;
@@ -280,6 +310,18 @@ export interface ClubTenure {
    * (z.B. dauerhafter Verbleib nach der Leihe) - die Kennzeichnung gilt bewusst
    * nur für diese eine Saison, nicht rückwirkend für die ganze Vereinszeit. */
   onLoan?: boolean;
+  /** Rohe Trophäen-Namen (Titel UND Auszeichnungen), die WÄHREND dieser Station
+   * gewonnen wurden - für die Trophäen-Icons in Stationsliste/Sharepic (siehe
+   * Master-Handoff "Karriereende-Screen v4" Abschnitt 6b). Direkt aus
+   * `SeasonStats.trophies` der zugehörigen Saisons übernommen - JEDE Saison trägt
+   * `club` UND `trophies` schon gemeinsam, die Vereinszuordnung ist also ohne neue
+   * Persistenz rekonstruierbar. Siehe `tenureTrophyIcons` in careerEngine.ts für
+   * die priorisierte, gruppierte Aufbereitung dieser Liste. */
+  trophies: string[];
+  /** Anzahl Aufstiege WÄHREND dieser Station (kann >1 sein bei Auf-Ab-Auf) - für
+   * die "×N"-Annotation am Aufstiegs-Icon. `promoted` oben bleibt der reine
+   * Boolean-Flag für den ↑-Pfeil in der Stationsliste. */
+  promotionCount: number;
 }
 
 /** Ergebnis der europäischen Wettbewerbsteilnahme einer Saison (siehe `europeanCup.ts`)
@@ -1262,8 +1304,21 @@ export interface GameState {
   /** Saison, in der ein Template zuletzt gezogen wurde (für Wiederholungs-Cooldown). */
   recentTemplateSeasons: Record<string, number>;
   legacyScore?: number;
+  /** Legacy-STUFE (siehe `legacyStufeForScore` in labels.ts) - rein score-basiert,
+   * NICHT der Hero-Badge (siehe `careerTitle` dafür). */
   legacyTier?: string;
+  /** Tier-Farbklasse der Legacy-Stufe (amateur/bronze/silver/gold/elite/icon) -
+   * dieselben sechs Klassen wie bei der OVR-Gesamtstärke (siehe `overallTier`). */
+  legacyTierClassName?: string;
   legacyFactors?: ScoreFactor[];
+  /** Legacy-Score nach den drei Gruppen (Sportliche Leistung/Karriereführung/
+   * Umfeld) gebündelt - Grundlage für die gruppierte Anzeige im Legacy-Panel
+   * (siehe `computeLegacy` in careerEngine.ts). */
+  legacyGroups?: LegacyFactorGroup[];
+  /** Der kriterienbasierte "Karriere-Titel" (siehe `chooseCareerTitle` in
+   * careerEngine.ts) - das prominente Hero-Badge am Karriereende, getrennt von
+   * der reinen Punktzahl-Einordnung `legacyTier`. */
+  careerTitle?: { label: string; description: string };
   achievements?: Achievement[];
   epilogue?: string;
 }
