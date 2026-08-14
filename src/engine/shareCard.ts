@@ -12,7 +12,7 @@
 import type { Achievement, Player, SeasonStats } from "./types";
 import { POSITION_LABEL } from "./types";
 import { COUNTRIES } from "./leagues";
-import { buildClubTenures, overallRating } from "./careerEngine";
+import { overallRating } from "./careerEngine";
 import { overallTier } from "./labels";
 
 /** Aufschlüsselung der Titel-Gesamtzahl nach den fünf in der Sharepic-Trophäenreihe
@@ -50,15 +50,35 @@ function computeTrophyBreakdown(player: Player): TrophyBreakdown {
 }
 
 /** Kompakte Vereinszugehörigkeit nach Alter fürs Sharepic (siehe Nutzer-Feedback
- * "Vereinszugehörigkeit nach Alter, möglichst kompakt") - EIN Zeilentext aus
- * `buildClubTenures` (dieselbe Grundlage wie der Karriereverlauf am Karriereende,
- * siehe CareerEnd.tsx), z.B. "14-17 SC Freiburg · 18-21 Hoffenheim · 22-26 Bayern".
- * Ersetzt die bisherige reine "Letzter Verein: X"-Zeile - der letzte Verein steckt
- * als letzter Zeitleisten-Eintrag ohnehin schon mit drin. */
+ * "Vereinszugehörigkeit nach Alter, möglichst kompakt") - EIN Zeilentext, z.B.
+ * "16-17 Ulm · 18-21 Hoffenheim · 22-26 Bayern". Ersetzt die bisherige reine
+ * "Letzter Verein: X"-Zeile - der letzte Verein steckt als letzter Zeitleisten-
+ * Eintrag ohnehin schon mit drin.
+ *
+ * BEWUSST eine eigene, schlanke Kopie der Merge-Logik statt `buildClubTenures`
+ * (careerEngine.ts) wiederzuverwenden: `buildClubTenures` blendet Saisons vor
+ * `PRO_DEBUT_AGE` (18) aus, weil die "offizielle" Karrierestatistik (Achievements,
+ * Wachstumschart, Karriereverlauf am Karriereende) bewusst erst mit dem ersten
+ * Profivertrag zählt. Seit "Karrierestart auf 16 Jahre verschoben" sind das aber
+ * die ERSTEN ZWEI SPIELBAREN Saisons überhaupt (mit echtem Verein/Vertrag/sogar
+ * möglichen Wechseln) - für "Vereinszugehörigkeit nach Alter" im Sharepic (den
+ * ganzen gespielten Werdegang) sollen die nicht kommentarlos fehlen (siehe
+ * Bugreport "Vereinsliste fehlt noch immer" - reproduziert mit genau diesen
+ * beiden Jugendjahren als einzigem Karriereabschnitt). */
 function buildClubTimeline(player: Player): string {
-  return buildClubTenures(player)
-    .map((t) => `${t.fromAge === t.toAge ? `${t.fromAge}` : `${t.fromAge}-${t.toAge}`} ${t.club}`)
-    .join(" · ");
+  const entries: { club: string; fromAge: number; toAge: number; onLoan: boolean }[] = [];
+  for (const s of player.seasonHistory) {
+    const last = entries[entries.length - 1];
+    // Wie `buildClubTenures`: eine Leih-Saison bildet immer einen eigenen
+    // Zeitleisten-Eintrag, verschmilzt nie mit Saisons davor/danach beim
+    // selben (Stamm-)Verein.
+    if (last && last.club === s.club && !last.onLoan && !s.onLoan) {
+      last.toAge = s.age;
+    } else {
+      entries.push({ club: s.club, fromAge: s.age, toAge: s.age, onLoan: s.onLoan });
+    }
+  }
+  return entries.map((e) => `${e.fromAge === e.toAge ? `${e.fromAge}` : `${e.fromAge}-${e.toAge}`} ${e.club}`).join(" · ");
 }
 
 /** Extrahiert die erste vierstellige Jahreszahl aus einem Saison-Label
