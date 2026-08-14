@@ -38,15 +38,22 @@
   --silver-bright: #e6ebee;
   --silver-dim: #7d858c;
 
-  /* Sechsstufige Tier-Farbskala (siehe Handoff "Karriereende-Logik neu gewichten"
-     Abschnitt 3: "Tier-Farbklassen dynamisch, nicht fix im CSS ... jede Stelle, die
-     eine Tier-Farbe zeigt, muss die passende tier-{stufe}-Klasse setzen") - EIN
-     gemeinsames Farbvokabular für "wie gut" (OVR-Gesamtstärke UND Legacy-Stufe,
-     siehe `overallTier`/`legacyStufeForScore` in labels.ts). silver/gold/elite
-     nutzen bewusst die bereits bestehenden `--silver`/`--gold`/`--gold-bright`-Token
-     (keine Farbdopplung), amateur/bronze/icon sind neu. */
+  /* Sechsstufige Tier-Farbskala - einzige Quelle der Wahrheit (siehe Master-Handoff
+     "Karriereende-Screen v4" Abschnitt 1: "Tier-Farbe wird ausschließlich dynamisch
+     per Klasse gesetzt - niemals als fixer Hex-Wert"). EIN gemeinsames Farbvokabular
+     für "wie gut" (OVR-Gesamtstärke UND Legacy-Stufe, siehe
+     `overallTier`/`legacyStufeForScore` in labels.ts). Alle sechs Stufen haben jetzt
+     einen dedizierten `--tier-*`-Token, exakt die Hex-Werte aus Abschnitt 1 der
+     Tabelle (gold/elite treffen zufällig exakt die bereits bestehenden
+     `--gold`/`--gold-bright`-Werte, silber weicht leicht vom bereits bestehenden
+     `--silver`-Token ab - `--silver` bleibt unverändert für TitleWinPopup.tsx,
+     das nicht Teil dieses Handoffs ist). Zusätzlich als `TIER_STYLE`-Konstante in
+     shareCard.ts dupliziert (Canvas kann keine CSS-Variablen lesen). */
   --tier-amateur: #6f8078;
   --tier-bronze: #b07b3e;
+  --tier-silver: #c3cfc7;
+  --tier-gold: #c9a227;
+  --tier-elite: #e6c158;
   --tier-icon: #f4ebd0;
 
   /* ---- Semantische Aliase - bestehende Komponentenklassen referenzieren
@@ -1719,6 +1726,35 @@ input:focus {
   margin: 0 0.125rem;
 }
 
+/* Trophäen-Icons je Station (siehe `tenureTrophyIcons` in careerEngine.ts,
+   Master-Handoff Abschnitt 6b) - 1:1 aus footca-karriereende-v4.html
+   (.st .c .tr) übernommen, px zu rem konvertiert. */
+.st .c .tr {
+  display: inline-flex;
+  gap: 0.3125rem;
+  margin-left: 0.4375rem;
+  vertical-align: 1px;
+}
+
+.st .c .tr-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.125rem;
+}
+
+.st .c .tr svg {
+  width: 13px;
+  height: 13px;
+  color: var(--gold-bright);
+}
+
+.st .c .tr-count {
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  font-weight: 600;
+  color: var(--gold-bright);
+}
+
 .tenure-arrow {
   display: inline-block;
   margin-left: 6px;
@@ -2143,13 +2179,13 @@ input:focus {
   color: var(--tier-bronze);
 }
 .tier-silver {
-  color: var(--silver);
+  color: var(--tier-silver);
 }
 .tier-gold {
-  color: var(--gold);
+  color: var(--tier-gold);
 }
 .tier-elite {
-  color: var(--gold-bright);
+  color: var(--tier-elite);
 }
 .tier-icon {
   color: var(--tier-icon);
@@ -2157,6 +2193,28 @@ input:focus {
 .tier-elite.glow,
 .tier-icon.glow {
   text-shadow: 0 0 22px rgba(230, 193, 88, 0.35);
+}
+
+/* Rahmenfarbe-Pendant zu `.tier-*` (siehe Master-Handoff Abschnitt 1) - für
+   Stellen, die eine Tier-Farbe als Rahmen statt Textfarbe brauchen (z.B. die
+   Sharepic-Vorschau-Rating-Box). */
+.bd-amateur {
+  border-color: var(--tier-amateur);
+}
+.bd-bronze {
+  border-color: var(--tier-bronze);
+}
+.bd-silver {
+  border-color: var(--tier-silver);
+}
+.bd-gold {
+  border-color: var(--tier-gold);
+}
+.bd-elite {
+  border-color: var(--tier-elite);
+}
+.bd-icon {
+  border-color: var(--tier-icon);
 }
 
 .legacy-stufe-inline {

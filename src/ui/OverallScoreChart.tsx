@@ -1,7 +1,43 @@
 import { Fragment, useState } from "react";
 import type { Player } from "../engine/types";
-import { buildClubTenures, PRO_DEBUT_AGE } from "../engine/careerEngine";
+import { buildClubTenures, PRO_DEBUT_AGE, tenureTrophyIcons, type TrophyIconKind } from "../engine/careerEngine";
 import { overallTier } from "../engine/labels";
+
+// SVG-Pfaddaten 1:1 aus footca-karriereende-v4.html (<symbol id="i-...">) übernommen,
+// viewBox 0 0 24 24 - für die Trophäen-Icons in der Stationsliste (siehe
+// `tenureTrophyIcons` in careerEngine.ts, Master-Handoff Abschnitt 6b).
+const TROPHY_ICON_PATHS: Record<Exclude<TrophyIconKind, "euro">, string[]> = {
+  champions: [
+    "M8 3.4h8v4.9a4 4 0 0 1-8 0V3.4Z",
+    "M8 4.6C5.1 4.6 3.4 6.2 3.4 8.3c0 2 1.5 3.3 3.4 3.5M16 4.6c2.9 0 4.6 1.6 4.6 3.7 0 2-1.5 3.3-3.4 3.5",
+    "M12 12.3v4.4M8.9 20.6h6.2l-.6-3.9H9.5l-.6 3.9Z",
+  ],
+  meister: ["M12 2.6 4.6 5.4v6.1c0 4.6 3 8.2 7.4 9.9 4.4-1.7 7.4-5.3 7.4-9.9V5.4L12 2.6Z", "m12 8.1 1.3 2.7 2.9.4-2.1 2 .5 2.9-2.6-1.4-2.6 1.4.5-2.9-2.1-2 2.9-.4L12 8.1Z"],
+  pokal: ["M7 3.6h10v5.1a5 5 0 0 1-10 0V3.6Z", "M7 5.2H4.4v1.6A3.2 3.2 0 0 0 7 9.9M17 5.2h2.6v1.6a3.2 3.2 0 0 1-2.6 3.1", "M12 13.7v3.2M8.6 20.4h6.8l-.7-3.5H9.3l-.7 3.5Z"],
+  aufstieg: ["M12 20V5.2M6.2 11 12 5.2 17.8 11"],
+  auszeichnung: ["m12 3.6 2.6 5.4 5.9.8-4.3 4.1 1 5.9-5.2-2.8-5.2 2.8 1-5.9-4.3-4.1 5.9-.8L12 3.6Z"],
+};
+
+/** Ein einzelnes Trophäen-Icon für die Stationsliste (siehe `tenureTrophyIcons`).
+ * "euro" ist ein Sonderfall (gestrichelter Kreis + Vollkreis statt Pfaden, wie im
+ * Mockup `#i-euro`), alle anderen zeichnen ihre `TROPHY_ICON_PATHS`. */
+function TrophyStationIcon({ kind }: { kind: TrophyIconKind }) {
+  if (kind === "euro") {
+    return (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round">
+        <circle cx={12} cy={12} r={8.4} strokeDasharray="1.6 3.1" />
+        <circle cx={12} cy={12} r={4.4} />
+      </svg>
+    );
+  }
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={kind === "aufstieg" ? 1.6 : 1.5} strokeLinecap="round" strokeLinejoin="round">
+      {TROPHY_ICON_PATHS[kind].map((d, i) => (
+        <path key={i} d={d} />
+      ))}
+    </svg>
+  );
+}
 
 // Sechs Gesamtstärke-Tiers (siehe `overallTier` in labels.ts) als Hintergrundbänder
 // im Chart UND als Spalten der Stationsliste darunter - siehe Nachtrag
@@ -49,13 +85,18 @@ export function OverallScoreChart({ player }: { player: Player }) {
   const values = history.map((s) => s.overallRating);
   const min = Math.min(...values);
   const max = Math.max(...values);
-  // Etwas Luft über/unter den tatsächlichen Werten - eine Bewertungsskala ist von
-  // Natur aus auf ~1-99 begrenzt und clustert meist in einer schmalen Bandbreite;
-  // bei 0 zu starten würde jede Schwankung optisch verschwinden lassen (anders als
-  // bei einem Anteils-/Mengenwert ist das hier vertretbar, siehe choosing-a-form.md).
-  const pad = Math.max(2, Math.round((max - min) * 0.2));
-  const yMin = Math.max(1, min - pad);
-  const yMax = Math.min(99, max + pad);
+  // Y-Achse auf die Zehner-Grenzen um Karriere-Tiefstwert/-Bestwert gerundet (siehe
+  // Master-Handoff "Karriereende-Screen v4" Abschnitt 6a: "Bereich dynamisch von der
+  // nächsten 10er-Grenze unter dem Karriere-Tiefstwert bis über den Bestwert,
+  // mindestens 3 Bänder") - NICHT mehr eine proportionale Polsterung wie zuvor.
+  let yMin = Math.max(0, Math.floor(min / 10) * 10);
+  let yMax = Math.min(99, Math.ceil(max / 10) * 10);
+  // Mindestens 3 Tier-Bänder sichtbar, auch bei einer sehr engen Wertespanne (z.B.
+  // kaum Wachstum über die ganze Karriere) - sonst zu wenig visueller Kontext.
+  if (yMax - yMin < 30) {
+    yMax = Math.min(99, yMin + 30);
+    if (yMax - yMin < 30) yMin = Math.max(0, yMax - 30);
+  }
 
   const W = 600;
   const H = 168;
@@ -73,12 +114,12 @@ export function OverallScoreChart({ player }: { player: Player }) {
   const y = (v: number) => padT + innerH - ((v - yMin) / (yMax - yMin)) * innerH;
   const axisBottom = padT + innerH;
 
-  // Zehner-Grenzen innerhalb des sichtbaren Bereichs für die Y-Achsen-Beschriftung
-  // (siehe Nachtrag: "Y-Achse mit den Zehner-Grenzen beschriftet" statt der
-  // früheren drei beliebig verteilten Gitterlinien).
+  // Zehner-Grenzen für die Y-Achsen-Beschriftung, INKLUSIVE der beiden Ränder
+  // (siehe Mockup: 40/50/60/70 bei yMin=40/yMax=70 - alle vier, nicht nur die
+  // beiden mittleren).
   const axisTicks: number[] = [];
-  for (let v = Math.ceil(yMin / 10) * 10; v < yMax; v += 10) {
-    if (v > yMin) axisTicks.push(v);
+  for (let v = yMin; v <= yMax; v += 10) {
+    axisTicks.push(v);
   }
 
   // Tier-Bänder auf den sichtbaren Wertebereich geclippt.
@@ -111,6 +152,9 @@ export function OverallScoreChart({ player }: { player: Player }) {
           {bands.slice(0, -1).map((b) => (
             <line key={b.className} x1={padL} x2={W - padR} y1={y(b.bottom)} y2={y(b.bottom)} className="score-chart-grid" />
           ))}
+          {/* Obere UND untere Randlinie (siehe Mockup: alle vier Zehner-Grenzen
+              40/50/60/70 bekommen eine Linie, nicht nur die inneren Bandgrenzen). */}
+          <line x1={padL} x2={W - padR} y1={padT} y2={padT} className="score-chart-grid" />
           <line x1={padL} x2={W - padR} y1={axisBottom} y2={axisBottom} className="score-chart-grid" />
 
           {axisTicks.map((v) => (
@@ -258,14 +302,24 @@ export function OverallScoreChart({ player }: { player: Player }) {
                       (L)
                     </span>
                   )}
-                  {t.promoted && (
-                    <span className="tenure-arrow tenure-arrow-up" title="Aufstieg" aria-label="Aufstieg">
-                      ↑
-                    </span>
-                  )}
+                  {/* Aufstieg wird jetzt über das Trophäen-Icon-System unten abgedeckt
+                      (siehe `tenureTrophyIcons`) statt eines eigenen ↑-Pfeils - der
+                      wäre doppelt gemoppelt. Abstieg hat keine Icon-Entsprechung
+                      (siehe Master-Handoff Abschnitt 6b: nur die sechs benannten
+                      Kategorien), behält deshalb seinen eigenen Pfeil. */}
                   {t.relegated && (
                     <span className="tenure-arrow tenure-arrow-down" title="Abstieg" aria-label="Abstieg">
                       ↓
+                    </span>
+                  )}
+                  {tenureTrophyIcons(t).length > 0 && (
+                    <span className="tr">
+                      {tenureTrophyIcons(t).map((ic) => (
+                        <span key={ic.kind} className="tr-item" title={ic.kind}>
+                          <TrophyStationIcon kind={ic.kind} />
+                          {ic.count > 1 && <span className="tr-count">×{ic.count}</span>}
+                        </span>
+                      ))}
                     </span>
                   )}
                 </div>

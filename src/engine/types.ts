@@ -310,6 +310,18 @@ export interface ClubTenure {
    * (z.B. dauerhafter Verbleib nach der Leihe) - die Kennzeichnung gilt bewusst
    * nur für diese eine Saison, nicht rückwirkend für die ganze Vereinszeit. */
   onLoan?: boolean;
+  /** Rohe Trophäen-Namen (Titel UND Auszeichnungen), die WÄHREND dieser Station
+   * gewonnen wurden - für die Trophäen-Icons in Stationsliste/Sharepic (siehe
+   * Master-Handoff "Karriereende-Screen v4" Abschnitt 6b). Direkt aus
+   * `SeasonStats.trophies` der zugehörigen Saisons übernommen - JEDE Saison trägt
+   * `club` UND `trophies` schon gemeinsam, die Vereinszuordnung ist also ohne neue
+   * Persistenz rekonstruierbar. Siehe `tenureTrophyIcons` in careerEngine.ts für
+   * die priorisierte, gruppierte Aufbereitung dieser Liste. */
+  trophies: string[];
+  /** Anzahl Aufstiege WÄHREND dieser Station (kann >1 sein bei Auf-Ab-Auf) - für
+   * die "×N"-Annotation am Aufstiegs-Icon. `promoted` oben bleibt der reine
+   * Boolean-Flag für den ↑-Pfeil in der Stationsliste. */
+  promotionCount: number;
 }
 
 /** Ergebnis der europäischen Wettbewerbsteilnahme einer Saison (siehe `europeanCup.ts`)

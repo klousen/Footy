@@ -51,11 +51,16 @@ export function CareerEnd({
   const t = player.careerTotals;
   const positiveAchievements = (achievements ?? []).filter((a) => a.positive);
   const negativeAchievements = (achievements ?? []).filter((a) => !a.positive);
-  // Auszeichnungen als eigene Statistik-Zeile (siehe Handoff Abschnitt 1) - die
-  // Trophäen-Liste selbst (Namen wie "Spieler der Saison") statt der Kapitänsbinde-
-  // erweiterten Zahl aus `careerAwardCount` (die zählt die Kapitänsbinde zusätzlich
-  // mit, hat aber keinen eigenen "Trophäen"-Namen zum Auflisten).
-  const individualAwards = t.trophies.filter((tr) => !isTeamTitle(tr));
+  // Auszeichnungen als eigene Statistik-Zeile (siehe Master-Handoff Abschnitt 4:
+  // Torschützenkönig/Spieler der Saison/Talent der Saison/Kapitänsbinde zählen ALLE
+  // als Auszeichnung) - die Kapitänsbinde ist kein Trophäen-Eintrag mit eigenem
+  // Namen (siehe `player.nationalTeamCaptain`), wird hier deshalb als eigener
+  // String an die Trophäen-Liste angehängt, damit sie in der Anzeige auftaucht.
+  // `awardCount` deckt sich dadurch jetzt mit `careerAwardCount` (die zählt die
+  // Kapitänsbinde ebenfalls mit) - vorher zeigten Statistik/Hero-Strip und der
+  // Legacy-Faktor "Auszeichnungen" bei einer Kapitänskarriere zwei verschiedene
+  // Zahlen.
+  const individualAwards = [...t.trophies.filter((tr) => !isTeamTitle(tr)), ...(player.nationalTeamCaptain ? ["Kapitänsbinde"] : [])];
   const awardCount = individualAwards.length;
   const promotionCount = careerPromotionCount(player);
   const clubChanges = careerClubChangeCount(player);
@@ -195,6 +200,11 @@ export function CareerEnd({
         )}
       </div>
 
+      {/* Panel-Reihenfolge verbindlich laut Master-Handoff "Karriereende-Screen v4"
+          Abschnitt 2: Karrierebogen → Karriereverlauf → Sharepic → Karrierestatistik
+          → Legacy-Score → Erfolge. */}
+      <OverallScoreChart player={player} />
+
       <ShareCard
         player={player}
         legacyScore={legacyScore}
@@ -247,7 +257,7 @@ export function CareerEnd({
               Handoff "Karriereende-Logik neu gewichten" Abschnitt 1: "vier
               verschiedene Antworten auf die Frage 'wie viele Titel'"). */}
           <span>Titel</span>
-          <span>{formatTrophyList(t.trophies.filter(isTeamTitle))}</span>
+          <span className={titleCount === 0 ? "muted" : undefined}>{formatTrophyList(t.trophies.filter(isTeamTitle))}</span>
           <span>Auszeichnungen</span>
           <span className={awardCount === 0 ? "muted" : undefined}>{awardCount > 0 ? formatTrophyList(individualAwards) : "keine"}</span>
           <span>Aufstiege</span>
@@ -286,12 +296,6 @@ export function CareerEnd({
           <span>{formatMoney(player.wealth)}</span>
         </div>
       </div>
-
-      {/* Der komplette "Karriereverlauf"-Panel (Chart + Tier-Legende + Stationsliste
-          mit OVR-Übergängen) ist Teil dieser einen Komponente (siehe Nachtrag
-          "Karriereverlauf-Chart: Konzeptwechsel, nicht Anpassung") - im v4-Mockup
-          EIN Panel statt zwei separater. */}
-      <OverallScoreChart player={player} />
 
       {/* Drei Gruppen mit je eigener Obergrenze statt einer einzigen Flachliste
           (siehe Handoff "Karriereende-Logik neu gewichten" Abschnitt 2/3) - jede

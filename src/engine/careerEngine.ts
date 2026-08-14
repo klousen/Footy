@@ -4532,8 +4532,12 @@ export function buildClubTenures(player: Player): ClubTenure[] {
       last.seasons += 1;
       last.avgScore += s.score;
       last.toOverall = s.overallRating;
-      if (s.promoted) last.promoted = true;
+      if (s.promoted) {
+        last.promoted = true;
+        last.promotionCount += 1;
+      }
       if (s.relegated) last.relegated = true;
+      last.trophies.push(...s.trophies);
     } else {
       tenures.push({
         club: s.club,
@@ -4546,6 +4550,8 @@ export function buildClubTenures(player: Player): ClubTenure[] {
         promoted: s.promoted,
         relegated: s.relegated,
         onLoan: s.onLoan,
+        trophies: [...s.trophies],
+        promotionCount: s.promoted ? 1 : 0,
       });
     }
   }
@@ -4553,6 +4559,35 @@ export function buildClubTenures(player: Player): ClubTenure[] {
     t.avgScore = Math.round(t.avgScore / t.seasons);
   }
   return tenures;
+}
+
+/** Eine der sechs Trophäen-Icon-Kategorien für die Stationsliste (siehe
+ * `tenureTrophyIcons`) - Reihenfolge nach Wertigkeit, siehe dort. */
+export type TrophyIconKind = "champions" | "euro" | "meister" | "pokal" | "aufstieg" | "auszeichnung";
+
+/** Priorisierte, gruppierte Trophäen-Icons für EINE Station (siehe Master-Handoff
+ * "Karriereende-Screen v4" Abschnitt 6b) - EINE gemeinsame Hilfsfunktion für
+ * Stationsliste (CareerEnd.tsx) UND Sharepic (shareCard.ts), keine zwei getrennten
+ * Implementierungen (siehe Handoff-Vorgabe dort). Reihenfolge nach Wertigkeit:
+ * Champions Cup > Euro Cup > Meister > Pokal > Aufstieg > Auszeichnung (Stern).
+ * Nur Kategorien mit mindestens einem Treffer werden zurückgegeben, mit ihrer
+ * jeweiligen Anzahl (für die "×N"-Annotation bei Mehrfachtiteln derselben
+ * Kategorie). Kapitänsbinde ist bewusst NICHT enthalten - die ist ein reiner
+ * Spieler-Flag (`player.nationalTeamCaptain`) ohne Vereins-/Saisonbezug, lässt
+ * sich also keiner einzelnen Station zuordnen (siehe Handoff: "bei fehlender
+ * Datenbasis einfach keine Icons zeigen, kein Absturz, kein Platzhalter"). */
+export function tenureTrophyIcons(tenure: ClubTenure): { kind: TrophyIconKind; count: number }[] {
+  const counts: Record<TrophyIconKind, number> = { champions: 0, euro: 0, meister: 0, pokal: 0, aufstieg: 0, auszeichnung: 0 };
+  for (const trophy of tenure.trophies) {
+    if (trophy === "Champions Cup") counts.champions += 1;
+    else if (trophy === "Europa Cup") counts.euro += 1;
+    else if (trophy === "Meisterschale" || trophy === "Zweitliga-Meisterschaft") counts.meister += 1;
+    else if (trophy === "Landespokal") counts.pokal += 1;
+    else if (INDIVIDUAL_AWARD_NAMES.has(trophy)) counts.auszeichnung += 1;
+  }
+  counts.aufstieg = tenure.promotionCount;
+  const order: TrophyIconKind[] = ["champions", "euro", "meister", "pokal", "aufstieg", "auszeichnung"];
+  return order.filter((k) => counts[k] > 0).map((k) => ({ kind: k, count: counts[k] }));
 }
 
 /** Anzahl UNTERSCHIEDLICHER Vereine der Karriere (siehe `buildClubTenures`) - bewusst
@@ -4870,8 +4905,13 @@ export function computeLegacy(player: Player): { score: number; tier: string; ti
   const awardCount = careerAwardCount(player);
   const awardPoints = Math.min(50, awardCount * 20);
 
+  // Reihenfolge 1:1 aus footca-karriereende-v4.html Abschnitt "Karriereführung"
+  // übernommen (Charakter → Karriereweg → Auszeichnungen → Vereinstreue zuletzt) -
+  // NICHT die naheliegendere Berechnungsreihenfolge oben.
   const groupB: ScoreFactor[] = [
     { label: "Charakter & Image", points: characterPoints, max: 150 },
+    { label: "Karriereweg & Aufstiege", points: pathPoints, max: 100, detail: `${promotions} Aufstieg(e)` },
+    { label: "Auszeichnungen", points: awardPoints, max: 50, detail: awardCount > 0 ? `${awardCount}× ausgezeichnet` : "keine Auszeichnungen" },
     {
       label: "Vereinstreue",
       points: loyaltyPoints,
@@ -4879,8 +4919,6 @@ export function computeLegacy(player: Player): { score: number; tier: string; ti
       min: -60,
       detail: `${clubChanges} Vereinswechsel · längste Station ${longestTenureSeasons} Saisons`,
     },
-    { label: "Karriereweg & Aufstiege", points: pathPoints, max: 100, detail: `${promotions} Aufstieg(e)` },
-    { label: "Auszeichnungen", points: awardPoints, max: 50, detail: awardCount > 0 ? `${awardCount}× ausgezeichnet` : "keine Auszeichnungen" },
   ];
 
   // ---------------------------------------------------------------------
@@ -5250,6 +5288,17 @@ const CAREER_TITLE_CANDIDATES: CareerTitleCandidate[] = [
     description: "Mindestens zweimal mit einem Verein aufgestiegen.",
     eligible: (player) => careerPromotionCount(player) >= 2,
     conflictsWith: [],
+  },
+  {
+    label: "Wandervogel",
+    description: "Mindestens sechs verschiedene Vereine in der Karriere.",
+    eligible: (_player, ctx) => ctx.distinctClubs >= 6,
+    // Beschreibt dieselbe Dimension (Karriereweg/Bewegung) wie die Wechsel-
+    // Archetypen - kollidiert deshalb praktisch immer mit dem primären Archetyp
+    // genau dann, wenn er selbst zuträfe (siehe Master-Handoff Abschnitt 9b).
+    // Bewusst trotzdem als eigener Kandidat vorhanden (laut Handoff-Tabelle
+    // gefordert), niedrigste Priorität, da meist vom Konflikt blockiert.
+    conflictsWith: MOVEMENT_PHENOTYPES,
   },
 ];
 

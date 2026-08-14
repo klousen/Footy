@@ -12,7 +12,7 @@
 import type { Achievement, Player, SeasonStats } from "./types";
 import { POSITION_LABEL } from "./types";
 import { COUNTRIES } from "./leagues";
-import { overallRating } from "./careerEngine";
+import { buildClubTenures, overallRating, tenureTrophyIcons, type TrophyIconKind } from "./careerEngine";
 import { overallTier } from "./labels";
 
 /** Aufschlüsselung der Titel-Gesamtzahl nach den fünf in der Sharepic-Trophäenreihe
@@ -209,6 +209,15 @@ export interface ShareCardData {
   highlight: CareerHighlight;
   caps: number;
   achievementLabels: string[];
+  /** Vereinsstationen für die Zeitleiste im Sharepic (siehe Master-Handoff
+   * "Karriereende-Screen v4" Abschnitt 10) - bewusst aus `buildClubTenures`
+   * (NICHT `buildClubTimeline` s.o.), damit "Stationsanzahl - 1 = Vereinswechsel"
+   * exakt mit Karriereverlauf-Chart/-Stationsliste und Karrierestatistik
+   * übereinstimmt (siehe Abschnitt 11 Akzeptanzkriterien). Auf maximal 7 Einträge
+   * gedeckelt für die Anzeige, `stationCount` behält die echte Gesamtzahl für die
+   * "+n weitere Stationen"-Zeile bzw. die Kopfzeile. */
+  stations: { ageLabel: string; club: string; icons: { kind: TrophyIconKind; count: number }[] }[];
+  stationCount: number;
 }
 
 export function buildShareCardData(
@@ -238,6 +247,12 @@ export function buildShareCardData(
       ? Math.round(gkSeasons.reduce((s, h) => s + h.savePercentage * h.matches, 0) / gkSeasons.reduce((s, h) => s + h.matches, 0))
       : 0;
   const trophyBreakdown = computeTrophyBreakdown(player);
+  const tenures = buildClubTenures(player);
+  const stations = tenures.map((tenure) => ({
+    ageLabel: tenure.fromAge === tenure.toAge ? `${tenure.fromAge}` : `${tenure.fromAge}-${tenure.toAge}`,
+    club: tenure.club,
+    icons: tenureTrophyIcons(tenure),
+  }));
   return {
     name: player.name,
     positionLabel: POSITION_LABEL[player.position],
@@ -263,6 +278,10 @@ export function buildShareCardData(
     highlight: computeCareerHighlight(player, achievements ?? []),
     caps: player.nationalTeamCaps,
     achievementLabels: topAchievements.map((a) => a.label),
+    // Maximal 7 Stationszeilen (siehe Master-Handoff Abschnitt 10), `stationCount`
+    // behält die echte Gesamtzahl für Kopfzeile/Überlauf-Hinweis.
+    stations: stations.slice(0, 7),
+    stationCount: stations.length,
   };
 }
 
@@ -274,20 +293,47 @@ export function buildShareCardData(
 const CHALK = "#e8e4d8";
 const CHALK_DIM = "#9fb3a8";
 
+// Duplikat der sechs `--tier-*`-Werte aus app.css :root (siehe Master-Handoff
+// "Karriereende-Screen v4" Abschnitt 1: "Canvas kann keine CSS-Variablen lesen -
+// Werte dort duplizieren, mit Kommentarverweis auf diese Quelle") - `accent` ist
+// die eigentliche Tier-Farbe (Zahl/Rahmen der Rating-Box), exakt dieselben Hex-
+// Werte wie `.tier-{stufe}`/`.bd-{stufe}` in app.css. `bgFrom`/`bgTo`/`accentSoft`
+// sind rein dekorative, aus `accent` abgeleitete Hintergrundtöne, keine eigene
+// Farbquelle.
 const TIER_STYLE: Record<string, { bgFrom: string; bgTo: string; accent: string; accentSoft: string }> = {
-  amateur: { bgFrom: "#16241d", bgTo: "#0b1b14", accent: CHALK_DIM, accentSoft: "rgba(159,179,168,0.14)" },
-  bronze: { bgFrom: "#2f2013", bgTo: "#0b1b14", accent: "#cd7f32", accentSoft: "rgba(205,127,50,0.18)" },
-  silver: { bgFrom: "#1c2b23", bgTo: "#0b1b14", accent: "#c9d3cb", accentSoft: "rgba(201,211,203,0.16)" },
-  gold: { bgFrom: "#2a2210", bgTo: "#0b1b14", accent: "#e6c158", accentSoft: "rgba(230,193,88,0.2)" },
-  elite: { bgFrom: "#2e2311", bgTo: "#0b1b14", accent: "#f6e3ad", accentSoft: "rgba(246,227,173,0.22)" },
-  icon: { bgFrom: "#332812", bgTo: "#050f0a", accent: "#f6e3ad", accentSoft: "rgba(246,227,173,0.28)" },
+  amateur: { bgFrom: "#16241d", bgTo: "#0b1b14", accent: "#6f8078", accentSoft: "rgba(111,128,120,0.14)" },
+  bronze: { bgFrom: "#2f2013", bgTo: "#0b1b14", accent: "#b07b3e", accentSoft: "rgba(176,123,62,0.18)" },
+  silver: { bgFrom: "#1c2b23", bgTo: "#0b1b14", accent: "#c3cfc7", accentSoft: "rgba(195,207,199,0.16)" },
+  gold: { bgFrom: "#2a2210", bgTo: "#0b1b14", accent: "#c9a227", accentSoft: "rgba(201,162,39,0.2)" },
+  elite: { bgFrom: "#2e2311", bgTo: "#0b1b14", accent: "#e6c158", accentSoft: "rgba(230,193,88,0.22)" },
+  icon: { bgFrom: "#332812", bgTo: "#050f0a", accent: "#f4ebd0", accentSoft: "rgba(244,235,208,0.28)" },
 };
 
 // Deutlich kompakteres Seitenverhältnis als die ursprüngliche 4:5-Version -
 // nahe an der quadratischen "echten Sammelkarte" aus dem card-v2-Mockup
 // (~390:395), statt eines langen Screens mit viel Weißraum am Ende.
 export const SHARE_CARD_WIDTH = 1080;
-export const SHARE_CARD_HEIGHT = 1010;
+// Höhe ohne die Vereinsstationen-Zeitleiste (siehe `computeShareCardHeight`) - war
+// vorher die feste Gesamthöhe, bevor die Zeitleiste dazukam.
+const SHARE_CARD_BASE_HEIGHT = 1010;
+
+/** Bildhöhe dynamisch nach Anzahl der gezeigten Vereinsstationen (siehe
+ * Master-Handoff "Karriereende-Screen v4" Abschnitt 10: "Höhe dynamisch
+ * (Grundhöhe ~1180px + 64px je Station)") - NICHT die dortige Formel wörtlich
+ * übernommen (die war für die kompaktere 300px-Referenzkarte kalibriert, unsere
+ * Karte ist 1080px breit mit anderen Proportionen), sondern der tatsächliche
+ * Platzbedarf DIESES Layouts: Kopfzeile + eine Zeile je Station + ggf.
+ * "+n weitere Stationen"-Zeile, exakt wie `drawStationTimeline` sie zeichnet. */
+export function computeShareCardHeight(data: ShareCardData): number {
+  const rowCount = data.stations.length;
+  const hasOverflow = data.stationCount > data.stations.length;
+  const sectionMarginTop = 22;
+  const headerH = 34;
+  const rowH = 34;
+  const overflowH = hasOverflow ? 26 : 0;
+  const sectionMarginBottom = 10;
+  return SHARE_CARD_BASE_HEIGHT + sectionMarginTop + headerH + rowH * rowCount + overflowH + sectionMarginBottom;
+}
 
 function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) {
   ctx.beginPath();
@@ -371,7 +417,7 @@ function drawRingIcon(ctx: CanvasRenderingContext2D, cx: number, cy: number, siz
   ctx.restore();
 }
 
-const TROPHY_ICON_PATHS: Record<"meister" | "pokal" | "cl" | "aufstieg", { paths: string[]; strokeWidth: number }> = {
+const TROPHY_ICON_PATHS: Record<"meister" | "pokal" | "cl" | "aufstieg" | "auszeichnung", { paths: string[]; strokeWidth: number }> = {
   meister: {
     paths: ["M12 2l7 3v5c0 5-3 8.5-7 10-4-1.5-7-5-7-10V5l7-3z", "M12 8.5l1.1 2.3 2.5.4-1.8 1.8.4 2.5-2.2-1.2-2.2 1.2.4-2.5-1.8-1.8 2.5-.4z"],
     strokeWidth: 1.4,
@@ -392,7 +438,26 @@ const TROPHY_ICON_PATHS: Record<"meister" | "pokal" | "cl" | "aufstieg", { paths
     paths: ["M12 20V6", "M6.5 11.5L12 5l5.5 6.5"],
     strokeWidth: 1.6,
   },
+  // Für die Auszeichnungen-Kategorie in der Vereinsstationen-Zeitleiste (siehe
+  // `drawStationTimeline`) - Pfaddaten 1:1 aus footca-karriereende-v4.html
+  // (<symbol id="i-stern">) übernommen, viewBox 0 0 24 24 wie die übrigen Icons.
+  auszeichnung: {
+    paths: ["m12 3.6 2.6 5.4 5.9.8-4.3 4.1 1 5.9-5.2-2.8-5.2 2.8 1-5.9-4.3-4.1 5.9-.8L12 3.6Z"],
+    strokeWidth: 1.5,
+  },
 };
+
+/** Zeichnet EIN Trophäen-Icon nach `TrophyIconKind` (siehe careerEngine.ts) -
+ * gemeinsamer Dispatcher für die Stationszeitleiste, mappt "champions" auf die
+ * bereits vorhandenen "cl"-Pfade und "euro" auf den Sonderfall `drawRingIcon`. */
+function drawTrophyIconByKind(ctx: CanvasRenderingContext2D, kind: TrophyIconKind, cx: number, cy: number, size: number, color: string) {
+  if (kind === "euro") {
+    drawRingIcon(ctx, cx, cy, size, color);
+    return;
+  }
+  const icon = TROPHY_ICON_PATHS[kind === "champions" ? "cl" : kind];
+  drawIconPaths(ctx, icon.paths, cx, cy, size, icon.strokeWidth, color);
+}
 
 interface RichWord {
   text: string;
@@ -460,12 +525,118 @@ function drawRichCenteredText(
   return lines.length;
 }
 
+/** Zeichnet die "Vereinsstationen"-Zeitleiste (siehe Master-Handoff
+ * "Karriereende-Screen v4" Abschnitt 10: "Alter rechtsbündig · gedrehte Raute auf
+ * durchgehender Achse (letzte Station = gold gefüllt) · Vereinsname +
+ * Trophäen-Icons dahinter, maximal 7 Stationszeilen, danach '+n weitere
+ * Stationen'"). `data.stations` ist bereits auf 7 gedeckelt (siehe
+ * `buildShareCardData`), `data.stationCount` trägt die echte Gesamtzahl für
+ * Kopfzeile/Überlaufhinweis. Gibt die neue `cursorY` zurück. */
+function drawStationTimeline(ctx: CanvasRenderingContext2D, data: ShareCardData, cursorY: number, PAD: number, contentW: number, style: { accent: string }): number {
+  if (data.stations.length === 0) return cursorY;
+
+  ctx.strokeStyle = "rgba(42,74,60,0.8)";
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(PAD, cursorY);
+  ctx.lineTo(PAD + contentW, cursorY);
+  ctx.stroke();
+  cursorY += 26;
+
+  // Kopfzeile: "VEREINSSTATIONEN" links, "N STATIONEN" rechts.
+  ctx.textAlign = "left";
+  ctx.fillStyle = CHALK_DIM;
+  ctx.font = '700 15px "Segoe UI", system-ui, sans-serif';
+  ctx.fillText("VEREINSSTATIONEN", PAD, cursorY);
+  ctx.textAlign = "right";
+  ctx.font = '600 13px "JetBrains Mono", monospace';
+  ctx.fillText(`${data.stationCount} STATION${data.stationCount === 1 ? "" : "EN"}`, PAD + contentW, cursorY);
+  cursorY += 20;
+
+  const ageColW = 74;
+  const markerX = PAD + ageColW + 16;
+  const clubX = markerX + 20;
+  const rowH = 34;
+  const lineTop = cursorY + rowH / 2;
+  const lineBottom = cursorY + rowH * (data.stations.length - 1) + rowH / 2;
+  ctx.strokeStyle = "rgba(42,74,60,0.8)";
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.moveTo(markerX, lineTop);
+  ctx.lineTo(markerX, lineBottom);
+  ctx.stroke();
+
+  for (let i = 0; i < data.stations.length; i++) {
+    const station = data.stations[i];
+    const rowY = cursorY + rowH * i + rowH / 2;
+    const isLastStation = i === data.stations.length - 1;
+
+    ctx.textAlign = "right";
+    ctx.fillStyle = CHALK_DIM;
+    ctx.font = '600 15px "JetBrains Mono", monospace';
+    ctx.fillText(station.ageLabel, PAD + ageColW, rowY + 5);
+
+    // Gedrehte Raute (45°) auf der durchgehenden Achse - letzte Station gefüllt.
+    ctx.save();
+    ctx.translate(markerX, rowY);
+    ctx.rotate(Math.PI / 4);
+    const markerSize = 9;
+    if (isLastStation) {
+      ctx.fillStyle = style.accent;
+      ctx.fillRect(-markerSize / 2, -markerSize / 2, markerSize, markerSize);
+    } else {
+      ctx.fillStyle = "#0b1b14";
+      ctx.fillRect(-markerSize / 2, -markerSize / 2, markerSize, markerSize);
+      ctx.strokeStyle = "rgba(42,74,60,0.9)";
+      ctx.lineWidth = 1.5;
+      ctx.strokeRect(-markerSize / 2, -markerSize / 2, markerSize, markerSize);
+    }
+    ctx.restore();
+
+    ctx.textAlign = "left";
+    const icons = station.icons;
+    const iconSize = 18;
+    const iconGap = 8;
+    const maxClubW = contentW - (clubX - PAD) - (icons.length > 0 ? icons.length * (iconSize + iconGap) : 0) - 10;
+    ctx.font = '700 20px "Segoe UI", system-ui, sans-serif';
+    ctx.fillStyle = CHALK;
+    const clubText = ellipsize(ctx, station.club, Math.max(40, maxClubW));
+    ctx.fillText(clubText, clubX, rowY + 7);
+    const clubW = ctx.measureText(clubText).width;
+
+    let iconX = clubX + clubW + 10;
+    for (const icon of icons) {
+      drawTrophyIconByKind(ctx, icon.kind, iconX + iconSize / 2, rowY, iconSize, style.accent);
+      iconX += iconSize;
+      if (icon.count > 1) {
+        ctx.font = '700 13px "JetBrains Mono", monospace';
+        ctx.fillStyle = style.accent;
+        ctx.fillText(`×${icon.count}`, iconX + 2, rowY + 5);
+        iconX += ctx.measureText(`×${icon.count}`).width + 4;
+      }
+      iconX += iconGap;
+    }
+  }
+  cursorY += rowH * data.stations.length;
+
+  if (data.stationCount > data.stations.length) {
+    ctx.textAlign = "left";
+    ctx.fillStyle = CHALK_DIM;
+    ctx.font = '500 14px "Segoe UI", system-ui, sans-serif';
+    ctx.fillText(`+${data.stationCount - data.stations.length} weitere Station${data.stationCount - data.stations.length === 1 ? "" : "en"}`, clubX, cursorY + 8);
+    cursorY += 26;
+  }
+
+  ctx.textAlign = "center";
+  return cursorY + 10;
+}
+
 /** Zeichnet die komplette Sharepic-Karte auf den übergebenen Canvas. */
 export function drawShareCard(canvas: HTMLCanvasElement, data: ShareCardData): void {
   const ctx = canvas.getContext("2d");
   if (!ctx) return;
   const W = SHARE_CARD_WIDTH;
-  const H = SHARE_CARD_HEIGHT;
+  const H = computeShareCardHeight(data);
   canvas.width = W;
   canvas.height = H;
   const style = TIER_STYLE[data.tierClassName] ?? TIER_STYLE.amateur;
@@ -652,16 +823,21 @@ export function drawShareCard(canvas: HTMLCanvasElement, data: ShareCardData): v
   const trophyColW = contentW / trophyItems.length;
   const iconSize = 48;
   const iconCy = cursorY + iconSize / 2;
+  // 0-Werte gedämpft (Icon --line, Zahl --chalk-dim) statt in der vollen
+  // Akzentfarbe - bleibt trotzdem immer fünfspaltig sichtbar, nicht ausgeblendet
+  // (siehe Master-Handoff "Karriereende-Screen v4" Abschnitt 10).
+  const LINE_COLOR = "#2a4a3c";
   for (let i = 0; i < trophyItems.length; i++) {
     const item = trophyItems[i];
     const cx = PAD + trophyColW * i + trophyColW / 2;
+    const iconColor = item.count > 0 ? style.accent : LINE_COLOR;
     if (item.key === "euroCup") {
-      drawRingIcon(ctx, cx, iconCy, iconSize, style.accent);
+      drawRingIcon(ctx, cx, iconCy, iconSize, iconColor);
     } else {
       const icon = TROPHY_ICON_PATHS[item.key];
-      drawIconPaths(ctx, icon.paths, cx, iconCy, iconSize, icon.strokeWidth, style.accent);
+      drawIconPaths(ctx, icon.paths, cx, iconCy, iconSize, icon.strokeWidth, iconColor);
     }
-    ctx.fillStyle = style.accent;
+    ctx.fillStyle = item.count > 0 ? style.accent : CHALK_DIM;
     ctx.font = '700 32px "JetBrains Mono", monospace';
     ctx.fillText(`${item.count}×`, cx, cursorY + iconSize + 38);
     ctx.fillStyle = CHALK_DIM;
@@ -681,6 +857,9 @@ export function drawShareCard(canvas: HTMLCanvasElement, data: ShareCardData): v
     const lines = drawRichCenteredText(ctx, words, W / 2, cursorY + 24, contentW - 40, 27, 36, CHALK_DIM, style.accent);
     cursorY += 24 + lines * 36 + 10;
   }
+
+  // ---- Vereinsstationen-Zeitleiste ----
+  cursorY = drawStationTimeline(ctx, data, cursorY, PAD, contentW, style);
 
   // ---- Achievement-Chips ----
   if (data.achievementLabels.length > 0) {

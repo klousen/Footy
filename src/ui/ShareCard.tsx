@@ -96,7 +96,7 @@ export function ShareCard({
 
   return (
     <div className="panel share-card-panel">
-      <h3>🎉 Karriere-Sharepic</h3>
+      <h3>Karriere-Sharepic</h3>
       <p className="muted trait-hint">
         Deine Karriere als Bild zum Teilen - lade es herunter oder öffne es in einem neuen Tab, um es zu speichern.
       </p>
