@@ -101,7 +101,14 @@ html {
 
 body {
   margin: 0;
-  background: var(--bg-app);
+  background-color: var(--bg-app);
+  background-image: repeating-linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.014) 0px,
+    rgba(255, 255, 255, 0.014) 44px,
+    transparent 44px,
+    transparent 88px
+  );
   color: var(--chalk);
   min-height: 100vh;
   position: relative;
