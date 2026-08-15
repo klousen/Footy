@@ -114,20 +114,6 @@ body {
   position: relative;
 }
 
-/* Signature-Element: dezente Spielfeld-Linien als Hintergrundtextur auf
-   jedem Screen (siehe design-tokens.md, Abschnitt 3) - angedeutete
-   Rasenstreifen + Anstoßkreis, sehr niedrige Opacity, rein dekorativ. */
-body::before {
-  content: "";
-  position: fixed;
-  inset: 0;
-  z-index: 0;
-  pointer-events: none;
-  opacity: 0.07;
-  background-image: repeating-linear-gradient(0deg, transparent 0 38px, var(--chalk) 38px 39px, transparent 39px 78px),
-    radial-gradient(circle at 50% 15%, transparent 0 60px, var(--chalk) 60px 61px, transparent 61px);
-}
-
 #root {
   position: relative;
   z-index: 1;
