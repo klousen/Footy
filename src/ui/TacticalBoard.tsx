@@ -143,13 +143,13 @@ function PitchMarkings({ goalPosition }: { goalPosition: "top" | "bottom" }) {
       <line x1={W - 4} y1={0} x2={W - 4} y2={H} stroke={L} strokeWidth={2} />
       <line x1={4} y1={g.goalLineY} x2={W - 4} y2={g.goalLineY} stroke={L} strokeWidth={2.5} />
       <path
-        d={`M 4 ${g.goalLineY - g.dir * g.cornerR} A ${g.cornerR} ${g.cornerR} 0 0 ${g.cSweep} ${4 + g.cornerR} ${g.goalLineY}`}
+        d={`M 4 ${g.goalLineY + g.dir * g.cornerR} A ${g.cornerR} ${g.cornerR} 0 0 ${g.cSweep} ${4 + g.cornerR} ${g.goalLineY}`}
         fill="none"
         stroke={L}
         strokeWidth={1.5}
       />
       <path
-        d={`M ${W - 4} ${g.goalLineY - g.dir * g.cornerR} A ${g.cornerR} ${g.cornerR} 0 0 ${g.cSweepFar} ${W - 4 - g.cornerR} ${g.goalLineY}`}
+        d={`M ${W - 4} ${g.goalLineY + g.dir * g.cornerR} A ${g.cornerR} ${g.cornerR} 0 0 ${g.cSweepFar} ${W - 4 - g.cornerR} ${g.goalLineY}`}
         fill="none"
         stroke={L}
         strokeWidth={1.5}
