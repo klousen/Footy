@@ -105,7 +105,12 @@ function computePitchGeometry(goalPosition: "top" | "bottom"): PitchGeometry {
     arcEdgeY,
     arcW,
     arcH,
-    arcSweep: flip ? 0 : 1,
+    // Bugreport: Bogen bulgte Richtung Tor statt vom Tor weg ins offene Feld (SVG-
+    // sweep-flag=1 läuft von links nach rechts über den "oberen" Halbkreis, also
+    // Richtung kleinerer y-Werte - für 'top' (Bogen unterhalb der Torlinie) muss er
+    // aber Richtung GRÖSSERER y-Werte bulgen, also sweep=0; für 'bottom' entsprechend
+    // umgekehrt sweep=1). War genau andersherum gesetzt.
+    arcSweep: flip ? 1 : 0,
     goalW,
     goalH,
     goalOuterY,
