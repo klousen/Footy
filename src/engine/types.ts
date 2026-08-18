@@ -502,6 +502,13 @@ export interface EffectDelta {
   capsDelta?: number;
   /** Länderspieltore, addiert auf `Player.nationalTeamGoals`. */
   goalsDelta?: number;
+  /** EIN Vereins-Tor/-Vorlage dieser Saison, das im Event-Text explizit als erzielt
+   * beschrieben wird (siehe `Player.pendingSeasonGoals`/`-Assists`) - NICHT dasselbe
+   * wie `goalsDelta` oben (Nationalmannschaft). Nur für Outcomes setzen, deren Text
+   * einen tatsächlichen Torabschluss/eine Vorlage behauptet, nicht für "gute Chance
+   * herausgespielt"-Formulierungen ohne bestätigten Abschluss. */
+  matchGoalDelta?: number;
+  matchAssistDelta?: number;
   /** Schützt die Kaderrolle für N weitere Saisons vor dem Abrutschen unter "Rotation". */
   roleProtectionSeasons?: number;
   /** Stärkere Variante von `roleProtectionSeasons`: garantiert für N Saisons mindestens
@@ -883,6 +890,17 @@ export interface Player {
    */
   productionReliability: number;
   morale: number; // 0-100
+  /**
+   * Sammelt Tore/Vorlagen, die während der laufenden Saison EXPLIZIT durch ein
+   * Event-Outcome vergeben wurden (siehe `EffectDelta.matchGoalDelta`/
+   * `matchAssistDelta`, z.B. taktische Board-Events in tacticalEvents.ts) - additiv
+   * zur unabhängig gewürfelten Basisproduktion in `simulateSeason`, dort am
+   * Saisonende eingerechnet und zurückgesetzt. Kein Doppelzählungs-Risiko: die
+   * `simulateSeason`-Formel bildet die "normale" Spielproduktion ab, dies hier sind
+   * bewusst zusätzliche Treffer aus einer konkreten, riskanten Entscheidung heraus.
+   */
+  pendingSeasonGoals: number;
+  pendingSeasonAssists: number;
   fitness: number; // 0-100
   reputation: number; // 0-100 (Bekanntheit)
   wealth: number; // €

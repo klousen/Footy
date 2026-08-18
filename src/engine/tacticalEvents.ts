@@ -277,12 +277,10 @@ const FLUEGEL_OPTIONS: TacticalOptionSpec[] = [
         weight: 1,
         headline: "Volltreffer!",
         type: "pos",
-        // Bewusst als "beste Chance", nicht als sicheres Tor formuliert (siehe
-        // Nutzer-Rückfrage) - der tatsächliche Torabschluss liegt beim
-        // Mitspieler und wird erst am Saisonende separat gewürfelt
-        // (`simulateSeason`), der Text darf dem nicht vorgreifen.
-        text: "hat die Flanke exakt auf den Kopf des Stürmers gebracht - die beste Chance des Spiels!",
-        effects: { reputation: 3, morale: 4, clubRelation: 1 },
+        text: "hat die Flanke exakt auf den Kopf des Stürmers gebracht - Kopfballtor!",
+        // Die Flanke selbst zählt als Vorlage (siehe `Player.pendingSeasonAssists`) -
+        // der eigentliche Torabschluss liegt beim Mitspieler.
+        effects: { reputation: 3, morale: 4, clubRelation: 1, matchAssistDelta: 1 },
       },
       {
         weight: 1,
@@ -325,11 +323,10 @@ const FLUEGEL_OPTIONS: TacticalOptionSpec[] = [
     outcomes: [
       {
         weight: 1,
-        headline: "Klasse Aktion!",
+        headline: "Traumtor!",
         type: "pos",
-        // Siehe Kommentar bei "cross" oben - kein literaler Torabschluss im Text.
-        text: "ist selbst nach innen gezogen und hat sich mit einem satten Schuss die beste Chance des Spiels herausgespielt!",
-        effects: { reputation: 4, morale: 6 },
+        text: "ist selbst nach innen gezogen und hat platziert ins lange Eck getroffen!",
+        effects: { reputation: 4, morale: 6, matchGoalDelta: 1 },
       },
       {
         weight: 1,
@@ -384,11 +381,10 @@ const LUECKE_OPTIONS: TacticalOptionSpec[] = [
     outcomes: [
       {
         weight: 1,
-        headline: "Traumpass!",
+        headline: "Traumvorlage!",
         type: "pos",
-        // Siehe Kommentar bei "cross" oben - kein literaler Torabschluss im Text.
-        text: "hat den Steckpass exakt in den Lauf gespielt - der Mitspieler taucht frei vor dem Torwart auf!",
-        effects: { reputation: 3, morale: 5, clubRelation: 1 },
+        text: "hat den Steckpass exakt in den Lauf gespielt - Vorlage zum Tor!",
+        effects: { reputation: 3, morale: 5, clubRelation: 1, matchAssistDelta: 1 },
       },
       {
         weight: 1,
@@ -639,11 +635,10 @@ const LAUFWEG_OPTIONS: TacticalOptionSpec[] = [
     outcomes: [
       {
         weight: 1,
-        headline: "Am ersten Pfosten aufgetaucht!",
+        headline: "Am ersten Pfosten getroffen!",
         type: "pos",
-        // Siehe Kommentar bei "cross" oben - kein literaler Torabschluss im Text.
-        text: "ist früh gestartet und taucht völlig frei am ersten Pfosten auf - die beste Chance des Spiels!",
-        effects: { reputation: 3, morale: 5 },
+        text: "ist früh gestartet und hat am ersten Pfosten getroffen!",
+        effects: { reputation: 3, morale: 5, matchGoalDelta: 1 },
       },
       { weight: 1, headline: "Abseits gestanden", type: "neg", text: "ist zu früh losgelaufen und stand im Abseits.", effects: { morale: -2 } },
     ],
