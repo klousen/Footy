@@ -736,10 +736,12 @@ export interface TacticalOption {
    * Attributsystem - siehe Handoff-Korrektur zu `PlayerAttributes`). */
   relevantAttributes: AttributeKey[];
   outcomes: TacticalOutcome[];
-  /** SVG-Pfad des Kreide-Pfeils auf der Taktiktafel, siehe `TacticalBoardTemplate`. */
-  boardPath: string;
-  /** Label-Position auf dem Pfeil (siehe `boardPath`). */
-  boardTagPos: [number, number];
+  /** SVG-Pfad des Kreide-Pfeils auf der Taktiktafel, siehe `TacticalBoardTemplate`.
+   * NUR bei `GameEvent.tactical.displayMode === 'board'` gesetzt - bei `'cards'`
+   * (siehe Welle 3) gibt es kein Spielfeld, daher optional. */
+  boardPath?: string;
+  /** Label-Position auf dem Pfeil (siehe `boardPath`) - nur bei `'board'`. */
+  boardTagPos?: [number, number];
 }
 
 /** Ein Spieler-Marker auf der Taktiktafel (siehe `TacticalBoardTemplate`/`GameEvent.tactical`). */
@@ -785,20 +787,19 @@ export interface GameEvent {
   description: string;
   choices: EventChoice[];
   /**
-   * NUR gesetzt bei taktischen Taktiktafel-Events (siehe `EventChoice.tacticalOption`,
+   * NUR gesetzt bei taktischen Entscheidungs-Events (siehe `EventChoice.tacticalOption`,
    * "Handoff: Taktische Entscheidungs-Events") - additiv, fehlt bei allen bestehenden
    * Events unverändert (`EventCard` fällt dann auf die klassische Choice-Liste zurück,
-   * exakt wie heute). Aktuell nur `displayMode: 'board'` implementiert (Welle 1/2 aus
-   * dem Handoff) - die `'cards'`-Variante (Welle 3) ist bewusst noch nicht gebaut, um
-   * kein ungenutztes Gerüst vorzuhalten; wird bei Bedarf als eigener Wert ergänzt.
-   * `players` ist bereits die für DIESE Ziehung final gewählte Variante (Template +
+   * exakt wie heute). Zwei Varianten (siehe Handoff §6b "Board vs. Card-Liste"):
+   * `'board'` für Events mit räumlicher Situation (Taktiktafel-SVG, `TacticalBoard.tsx`,
+   * Welle 1/2), `'cards'` für reine Rollen-/Ausführungs-Entscheidungen ohne
+   * Raumkomponente (nur Optionskarten, `TacticalCards.tsx`, Welle 3). `players` bei
+   * `'board'` ist bereits die für DIESE Ziehung final gewählte Variante (Template +
    * Spiegelung + Jitter, siehe `pickTacticalVariant` in tacticalEvents.ts).
    */
-  tactical?: {
-    displayMode: "board";
-    goalPosition: "top" | "bottom";
-    players: TacticalBoardPlayer[];
-  };
+  tactical?:
+    | { displayMode: "board"; goalPosition: "top" | "bottom"; players: TacticalBoardPlayer[] }
+    | { displayMode: "cards" };
 }
 
 export interface EventTemplate {

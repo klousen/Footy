@@ -129,6 +129,24 @@ export function buildTacticalChoices(specs: TacticalOptionSpec[], variant: Tacti
   });
 }
 
+/** Card-Liste-Gegenstück zu `buildTacticalChoices` (siehe Handoff §6b "Card-Liste-
+ * Layout", Welle 3) - für nicht-räumliche taktische Entscheidungen ohne Spielfeld.
+ * Kein Template-System nötig (siehe Handoff §3 letzter Punkt), daher kein
+ * `TacticalBoardTemplate`-Parameter und `boardPath`/`boardTagPos` bleiben unbesetzt. */
+export function buildTacticalCardChoices(specs: TacticalOptionSpec[]): EventChoice[] {
+  return specs.map((spec) => ({
+    id: spec.id,
+    label: spec.label,
+    detail: spec.detail,
+    effects: {},
+    tacticalOption: {
+      risk: spec.risk,
+      relevantAttributes: spec.relevantAttributes,
+      outcomes: spec.outcomes,
+    },
+  }));
+}
+
 // ---------------------------------------------------------------------------
 // Erfolgswahrscheinlichkeit (siehe Handoff §4 "Mix-Modell")
 // ---------------------------------------------------------------------------
@@ -1126,5 +1144,177 @@ export const TACTICAL_EVENT_TEMPLATES: EventTemplate[] = [
         tactical: { displayMode: "board", goalPosition: "bottom", players: variant.players },
       };
     },
+  },
+  // -------------------------------------------------------------------
+  // Welle 3 (Card-Liste, siehe Handoff §6b) - inkl. Migration der 3 mit
+  // Welle 1 identifizierten Bestandsevents (siehe Handoff §6c "Duplikat-
+  // Warnung"): `taktik_elfmeter`, `taktik_flanke_dribbling` und
+  // `taktik_kapitaensbinde` sind in events.ts ENTFERNT und hier 1:1 durch
+  // die attributsensitive Variante ersetzt (Option (b) aus §6b - Migration
+  // statt dauerhaftes Nebeneinander). "Elfmeterschießen: Ecke wählen" aus
+  // §6b bewusst NICHT gebaut - überschneidet sich inhaltlich stark mit dem
+  // bereits bestehenden "torwart_elfmeterheld" (ebenfalls entscheidender
+  // Elfmeter im Elfmeterschießen), das wäre ein NEUES Duplikat statt die
+  // Migration eines bestehenden - eigene Entscheidung nötig, siehe Bericht.
+  // -------------------------------------------------------------------
+  {
+    id: "taktik_cards_elfmeter",
+    category: "taktik",
+    minAge: 17,
+    maxAge: 40,
+    weight: 3,
+    // 1:1 übernommen von der migrierten "taktik_elfmeter" (Torhüter treten so gut
+    // wie nie als Elfmeterschütze an).
+    condition: (p) => p.attributes.mentalitaet > 20 && p.position !== "TW",
+    build: (player) => ({
+      category: "taktik",
+      title: "Elfmeter im Endspurt",
+      description: `Kurz vor Schluss bekommt ${player.club.name} einen Elfmeter zugesprochen. Der Stammschütze ist unsicher - übernimmst du die Verantwortung?`,
+      choices: buildTacticalCardChoices([
+        {
+          id: "uebernehmen",
+          label: "Selbst schießen",
+          detail: "Volle Verantwortung in der Crunchtime.",
+          risk: "high",
+          relevantAttributes: ["mentalitaet"],
+          outcomes: [
+            { weight: 1, headline: "Verwandelt!", type: "pos", text: "hat in der Crunchtime einen Elfmeter verwandelt.", effects: { reputation: 6, morale: 6, clubRelation: 2, matchGoalDelta: 1 } },
+            { weight: 1, headline: "Vergeben", type: "neg", text: "hat einen wichtigen Elfmeter vergeben.", effects: { morale: -8, reputation: -2 } },
+          ],
+        },
+        {
+          id: "abgeben",
+          label: "Verantwortung abgeben",
+          detail: "Kein Risiko, der Stammschütze übernimmt.",
+          risk: "low",
+          relevantAttributes: ["mentalitaet"],
+          outcomes: [{ weight: 1, headline: "Abgegeben", type: "neutral", text: "hat die Elfmeter-Verantwortung abgegeben.", effects: { clubRelation: 1 } }],
+        },
+      ]),
+      tactical: { displayMode: "cards" },
+    }),
+  },
+  {
+    id: "taktik_cards_kapitaensbinde",
+    category: "taktik",
+    minAge: 22,
+    maxAge: 40,
+    weight: 1,
+    unique: true,
+    // 1:1 übernommen von der migrierten "taktik_kapitaensbinde".
+    condition: (p) => p.clubRelation > 55 && p.reputation > 35,
+    build: (player) => ({
+      // Bewusst wie im Original: Template-`category` bleibt "taktik" (fürs Pool-
+      // Gewicht), das gebaute Event zeigt sich aber als "meilenstein" (eigenes Label).
+      category: "meilenstein",
+      title: "Angebot der Kapitänsbinde",
+      description: `Der Trainer von ${player.club.name} bietet dir die Kapitänsbinde an - mehr Verantwortung, aber auch mehr Druck.`,
+      // Beide Outcomes bewusst deterministisch (weiterhin EIN Outcome je Option, kein
+      // Würfelwurf) - das Original kannte hier keine Erfolg/Misserfolg-Unterscheidung,
+      // nur eine echte Charakterentscheidung. `risk` dient hier rein der Anzeige.
+      choices: buildTacticalCardChoices([
+        {
+          id: "annehmen",
+          label: "Kapitän werden",
+          detail: "Mehr Verantwortung, mehr Druck.",
+          risk: "mid",
+          relevantAttributes: ["charisma"],
+          outcomes: [
+            {
+              weight: 1,
+              headline: "Kapitän!",
+              type: "pos",
+              text: "wurde zum Mannschaftskapitän ernannt.",
+              effects: { attributes: { mentalitaet: 2, charisma: 1 }, reputation: 6, clubRelation: 4, traitDeltas: { fuehrung: 10 } },
+            },
+          ],
+        },
+        {
+          id: "ablehnen",
+          label: "Höflich ablehnen",
+          detail: "Verantwortung vorerst nicht übernehmen.",
+          risk: "low",
+          relevantAttributes: ["charisma"],
+          outcomes: [
+            { weight: 1, headline: "Abgelehnt", type: "neutral", text: "hat die Kapitänsbinde vorerst abgelehnt.", effects: { morale: 2, traitDeltas: { fuehrung: -2 } } },
+          ],
+        },
+      ]),
+      tactical: { displayMode: "cards" },
+    }),
+  },
+  {
+    id: "taktik_cards_flanke_dribbling",
+    category: "taktik",
+    minAge: 16,
+    maxAge: 40,
+    weight: 3,
+    // 1:1 übernommen von der migrierten "taktik_flanke_dribbling" (reines
+    // Feldspieler-Szenario, für Torhüter gibt es "torwart_glanzparade").
+    condition: (p) => p.position !== "TW",
+    build: () => ({
+      category: "taktik",
+      title: "Entscheidende Spielsituation",
+      description: "Im letzten Drittel des Spielfelds hast du eine Anspielstation, aber auch die Chance auf ein Solo.",
+      choices: buildTacticalCardChoices([
+        {
+          id: "solo",
+          label: "Dribbling wagen",
+          detail: "Volles Risiko im Alleingang.",
+          risk: "high",
+          relevantAttributes: ["technik", "tempo"],
+          outcomes: [
+            { weight: 1, headline: "Sehenswert!", type: "pos", text: "hat ein sehenswertes Solo erfolgreich abgeschlossen.", effects: { reputation: 3, morale: 4, matchGoalDelta: 1 } },
+            { weight: 1, headline: "Gescheitert", type: "neg", text: "ist mit einem riskanten Solo gescheitert.", effects: { morale: -3, clubRelation: -1 } },
+          ],
+        },
+        {
+          id: "abspielen",
+          label: "Sicher abspielen",
+          detail: "Kein Risiko, die sichere Lösung.",
+          risk: "low",
+          relevantAttributes: ["intelligenz"],
+          outcomes: [
+            { weight: 1, headline: "Sicher gelöst", type: "neutral", text: "hat sich für die sichere Lösung entschieden.", effects: { attributes: { intelligenz: 1 }, clubRelation: 1 } },
+          ],
+        },
+      ]),
+      tactical: { displayMode: "cards" },
+    }),
+  },
+  {
+    id: "taktik_cards_freistoss",
+    category: "taktik",
+    minAge: 17,
+    maxAge: 40,
+    weight: 3,
+    condition: (p) => p.position !== "TW" && p.attributes.technik > 20,
+    build: (player) => ({
+      category: "taktik",
+      title: "Freistoß in gefährlicher Position",
+      description: `${player.club.name} bekommt einen Freistoß in aussichtsreicher Position - übernimmst du selbst, oder überlässt du ihn dem Standardschützen?`,
+      choices: buildTacticalCardChoices([
+        {
+          id: "selbst",
+          label: "Selbst schießen",
+          detail: "Volles Risiko, volle Ehre.",
+          risk: "high",
+          relevantAttributes: ["technik"],
+          outcomes: [
+            { weight: 1, headline: "Direkt verwandelt!", type: "pos", text: "hat den Freistoß direkt ins Netz gezirkelt.", effects: { reputation: 5, morale: 6, matchGoalDelta: 1 } },
+            { weight: 1, headline: "Drüber gejagt", type: "neg", text: "hat den Freistoß deutlich über das Tor gesetzt.", effects: { morale: -2 } },
+          ],
+        },
+        {
+          id: "spezialist",
+          label: "Dem Standardschützen überlassen",
+          detail: "Kein Risiko, kein Ruhm.",
+          risk: "low",
+          relevantAttributes: ["technik"],
+          outcomes: [{ weight: 1, headline: "Überlassen", type: "neutral", text: "hat den Freistoß dem Standardschützen überlassen.", effects: { clubRelation: 1 } }],
+        },
+      ]),
+      tactical: { displayMode: "cards" },
+    }),
   },
 ];

@@ -2,6 +2,7 @@ import type { ChoiceFeedback, EventChoice, GameEvent, OfferCardData, Player } fr
 import { isClubOfferEvent } from "../engine/careerEngine";
 import { CATEGORY_LABEL, formatMoney } from "./labels";
 import { TacticalBoard } from "./TacticalBoard";
+import { TacticalCards } from "./TacticalCards";
 
 const KIND_ICON: Record<string, string> = {
   info: "ℹ️",
@@ -33,13 +34,17 @@ export function EventCard({
   // Label/Detail-Darstellung zurück.
   const isOffer = isClubOfferEvent(event.templateId);
   const showOfferCards = isOffer && !feedback && event.choices.some((c) => c.offerCard);
-  // Taktische Taktiktafel-Events (siehe `GameEvent.tactical`, "Handoff: Taktische
+  // Taktische Entscheidungs-Events (siehe `GameEvent.tactical`, "Handoff: Taktische
   // Entscheidungs-Events") - derselbe additive Zweig-Aufbau wie `showOfferCards`
   // oben: NUR solange noch keine Entscheidung gefallen ist, danach fällt der Code
   // ganz normal auf den klassischen Zweig samt bestehendem `.feedback-panel`
   // zurück (siehe Handoff §7 "Ergebnis-Screen folgt 1:1 dem bestehenden
-  // Sofort-Feedback-Muster" - kein eigener Ergebnisbildschirm gebaut).
-  const showTacticalBoard = !!event.tactical && !feedback && event.choices.some((c) => c.tacticalOption);
+  // Sofort-Feedback-Muster" - kein eigener Ergebnisbildschirm gebaut). Zwei
+  // Varianten je nach `displayMode` (siehe §6b), Board (Welle 1/2) und Card-Liste
+  // (Welle 3) schließen sich gegenseitig aus.
+  const showTacticalOptions = !!event.tactical && !feedback && event.choices.some((c) => c.tacticalOption);
+  const showTacticalBoard = showTacticalOptions && event.tactical?.displayMode === "board";
+  const showTacticalCards = showTacticalOptions && event.tactical?.displayMode === "cards";
 
   return (
     <div className="screen event-screen">
@@ -81,8 +86,9 @@ export function EventCard({
           <p>{event.description}</p>
 
           {showTacticalBoard && <TacticalBoard event={event} onChoose={onChoose} />}
+          {showTacticalCards && <TacticalCards event={event} onChoose={onChoose} />}
 
-          {!showTacticalBoard && !feedback && (
+          {!showTacticalOptions && !feedback && (
             <div className="event-choices">
               {event.choices.map((choice) => (
                 <button key={choice.id} className="choice-btn" onClick={() => onChoose(choice)}>

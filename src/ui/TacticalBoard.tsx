@@ -180,7 +180,7 @@ export function TacticalBoard({ event, onChoose }: { event: GameEvent; onChoose:
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const tactical = event.tactical;
   const choices = event.choices.filter((c) => c.tacticalOption);
-  if (!tactical || choices.length === 0) return null;
+  if (!tactical || tactical.displayMode !== "board" || choices.length === 0) return null;
   const selected = choices.find((c) => c.id === selectedId) ?? null;
 
   return (
@@ -207,7 +207,7 @@ export function TacticalBoard({ event, onChoose }: { event: GameEvent; onChoose:
             return (
               <path
                 key={c.id}
-                d={opt.boardPath}
+                d={opt.boardPath ?? ""}
                 className={`tactical-arrow risk-${opt.risk}${selectedId === c.id ? " selected" : ""}`}
                 onClick={() => setSelectedId(c.id)}
               />

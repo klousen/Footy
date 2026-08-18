@@ -1116,64 +1116,11 @@ export const EVENT_TEMPLATES: EventTemplate[] = [
   // ---------------------------------------------------------------------
   // TAKTIK / SPIELMOMENTE
   // ---------------------------------------------------------------------
-  {
-    id: "taktik_elfmeter",
-    category: "taktik",
-    minAge: 17,
-    maxAge: 40,
-    weight: 2,
-    // Torhüter treten so gut wie nie als Elfmeterschütze an - das bleibt Feldspielern
-    // vorbehalten.
-    condition: (p) => p.attributes.mentalitaet > 20 && p.position !== "TW",
-    build: (p) => ({
-      category: "taktik",
-      title: "Elfmeter im Endspurt",
-      description: `Kurz vor Schluss bekommt ${club(p)} einen Elfmeter zugesprochen. Der Stammschütze ist unsicher - übernimmst du die Verantwortung?`,
-      choices: [
-        {
-          id: "uebernehmen",
-          label: "Selbst schießen",
-          effects: {},
-          followUpChance: {
-            chance: 0.55,
-            success: { reputation: 6, morale: 6, clubRelation: 2, logText: "hat in der Crunchtime einen Elfmeter verwandelt.", logKind: "positive" },
-            failure: { morale: -8, reputation: -2, logText: "hat einen wichtigen Elfmeter vergeben.", logKind: "negative" },
-          },
-        },
-        {
-          id: "abgeben",
-          label: "Verantwortung abgeben",
-          effects: { clubRelation: 1, logText: "hat die Elfmeter-Verantwortung abgegeben.", logKind: "info" },
-        },
-      ],
-    }),
-  },
-  {
-    id: "taktik_kapitaensbinde",
-    category: "taktik",
-    minAge: 22,
-    maxAge: 40,
-    weight: 1,
-    unique: true,
-    condition: (p) => p.clubRelation > 55 && p.reputation > 35,
-    build: (p) => ({
-      category: "meilenstein",
-      title: "Angebot der Kapitänsbinde",
-      description: `Der Trainer von ${club(p)} bietet dir die Kapitänsbinde an - mehr Verantwortung, aber auch mehr Druck.`,
-      choices: [
-        {
-          id: "annehmen",
-          label: "Kapitän werden",
-          effects: { attributes: { mentalitaet: 2, charisma: 1 }, reputation: 6, clubRelation: 4, traitDeltas: { fuehrung: 10 }, logText: "wurde zum Mannschaftskapitän ernannt.", logKind: "milestone" },
-        },
-        {
-          id: "ablehnen",
-          label: "Höflich ablehnen",
-          effects: { morale: 2, traitDeltas: { fuehrung: -2 }, logText: "hat die Kapitänsbinde vorerst abgelehnt.", logKind: "info" },
-        },
-      ],
-    }),
-  },
+  // "taktik_elfmeter" und "taktik_kapitaensbinde" (ehemals hier) sind nach
+  // "Handoff: Taktische Entscheidungs-Events" §6c auf das taktische Card-System
+  // migriert - siehe "taktik_cards_elfmeter"/"taktik_cards_kapitaensbinde" in
+  // tacticalEvents.ts (1:1 identische Effekte, jetzt attributsensitiv statt fixer
+  // Erfolgschance).
   {
     id: "taktik_schiedsrichter",
     category: "taktik",
@@ -1203,38 +1150,8 @@ export const EVENT_TEMPLATES: EventTemplate[] = [
       ],
     }),
   },
-  {
-    id: "taktik_flanke_dribbling",
-    category: "taktik",
-    minAge: 16,
-    maxAge: 40,
-    weight: 2,
-    // Reines Feldspieler-Szenario (Ballführung im letzten Drittel) - für Torhüter
-    // gibt es das eigenständige Gegenstück "torwart_glanzparade".
-    condition: (p) => p.position !== "TW",
-    build: () => ({
-      category: "taktik",
-      title: "Entscheidende Spielsituation",
-      description: "Im letzten Drittel des Spielfelds hast du eine Anspielstation, aber auch die Chance auf ein Solo.",
-      choices: [
-        {
-          id: "solo",
-          label: "Dribbling wagen",
-          effects: {},
-          followUpChance: {
-            chance: 0.5,
-            success: { reputation: 3, morale: 4, logText: "hat ein sehenswertes Solo erfolgreich abgeschlossen.", logKind: "positive" },
-            failure: { morale: -3, clubRelation: -1, logText: "ist mit einem riskanten Solo gescheitert.", logKind: "negative" },
-          },
-        },
-        {
-          id: "abspielen",
-          label: "Sicher abspielen",
-          effects: { attributes: { intelligenz: 1 }, clubRelation: 1, logText: "hat sich für die sichere Lösung entschieden.", logKind: "info" },
-        },
-      ],
-    }),
-  },
+  // "taktik_flanke_dribbling" (ehemals hier) ist ebenfalls migriert - siehe
+  // "taktik_cards_flanke_dribbling" in tacticalEvents.ts.
 
   // ---------------------------------------------------------------------
   // NATIONALMANNSCHAFT
