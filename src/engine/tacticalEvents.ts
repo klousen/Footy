@@ -944,7 +944,7 @@ export const TACTICAL_EVENT_TEMPLATES: EventTemplate[] = [
     category: "taktik",
     minAge: 16,
     maxAge: 40,
-    weight: 3,
+    weight: 2,
     // positionScope MID/ATT (siehe Handoff §6b) - "AV" bewusst ausgenommen: die
     // Optionen (Flanke/Cutback/Dribbling im letzten Drittel) passen inhaltlich
     // nicht zur Rolle eines Verteidigers, auch wenn Außenverteidiger gelegentlich
@@ -966,7 +966,7 @@ export const TACTICAL_EVENT_TEMPLATES: EventTemplate[] = [
     category: "taktik",
     minAge: 16,
     maxAge: 40,
-    weight: 3,
+    weight: 2,
     // positionScope MID/ATT (siehe Handoff §6b), analog zum Flügel-Event oben.
     condition: (p) => p.position === "ZM" || p.position === "FS" || p.position === "ST",
     build: (_player, ctx) => {
@@ -985,7 +985,7 @@ export const TACTICAL_EVENT_TEMPLATES: EventTemplate[] = [
     category: "taktik",
     minAge: 16,
     maxAge: 40,
-    weight: 3,
+    weight: 2,
     // Reines Abwehr-Szenario (letzter Mann vor dem eigenen Tor) - für Innen-/
     // Außenverteidiger, analog zur Positionslogik bestehender `taktik_*`-Events.
     condition: (p) => p.position === "IV" || p.position === "AV",
@@ -1005,7 +1005,7 @@ export const TACTICAL_EVENT_TEMPLATES: EventTemplate[] = [
     category: "taktik",
     minAge: 16,
     maxAge: 40,
-    weight: 3,
+    weight: 2,
     condition: (p) => p.position === "TW",
     // Grobe Näherung an "Cup-/Europa-Cup-Spieltag" (siehe Handoff §5) - es gibt keine
     // vorausschauende Spielplan-Info zum Zeitpunkt der Saison-Event-Auswahl
@@ -1033,7 +1033,7 @@ export const TACTICAL_EVENT_TEMPLATES: EventTemplate[] = [
     category: "taktik",
     minAge: 16,
     maxAge: 40,
-    weight: 3,
+    weight: 2,
     // positionScope ATT (siehe Handoff §6b).
     condition: (p) => p.position === "FS" || p.position === "ST",
     build: (_player, ctx) => {
@@ -1052,7 +1052,7 @@ export const TACTICAL_EVENT_TEMPLATES: EventTemplate[] = [
     category: "taktik",
     minAge: 16,
     maxAge: 40,
-    weight: 3,
+    weight: 2,
     // positionScope MID/ATT (siehe Handoff §6b).
     condition: (p) => p.position === "ZM" || p.position === "FS" || p.position === "ST",
     build: (_player, ctx) => {
@@ -1071,7 +1071,7 @@ export const TACTICAL_EVENT_TEMPLATES: EventTemplate[] = [
     category: "taktik",
     minAge: 16,
     maxAge: 40,
-    weight: 3,
+    weight: 2,
     // positionScope DEF (siehe Handoff §6b).
     condition: (p) => p.position === "IV" || p.position === "AV",
     build: (_player, ctx) => {
@@ -1090,7 +1090,7 @@ export const TACTICAL_EVENT_TEMPLATES: EventTemplate[] = [
     category: "taktik",
     minAge: 16,
     maxAge: 40,
-    weight: 3,
+    weight: 2,
     // positionScope MID (siehe Handoff §6b).
     condition: (p) => p.position === "ZM",
     // matchContext regular+cup (siehe Handoff §6b) - gleiche Vorsaison-Proxy-
@@ -1112,7 +1112,7 @@ export const TACTICAL_EVENT_TEMPLATES: EventTemplate[] = [
     category: "taktik",
     minAge: 16,
     maxAge: 40,
-    weight: 3,
+    weight: 2,
     // positionScope DEF/MID (siehe Handoff §6b).
     condition: (p) => p.position === "IV" || p.position === "AV" || p.position === "ZM",
     build: (_player, ctx) => {
@@ -1131,7 +1131,7 @@ export const TACTICAL_EVENT_TEMPLATES: EventTemplate[] = [
     category: "taktik",
     minAge: 16,
     maxAge: 40,
-    weight: 3,
+    weight: 2,
     // positionScope DEF (siehe Handoff §6b).
     condition: (p) => p.position === "IV" || p.position === "AV",
     build: (_player, ctx) => {
@@ -1162,7 +1162,7 @@ export const TACTICAL_EVENT_TEMPLATES: EventTemplate[] = [
     category: "taktik",
     minAge: 17,
     maxAge: 40,
-    weight: 3,
+    weight: 2,
     // 1:1 übernommen von der migrierten "taktik_elfmeter" (Torhüter treten so gut
     // wie nie als Elfmeterschütze an).
     condition: (p) => p.attributes.mentalitaet > 20 && p.position !== "TW",
@@ -1248,7 +1248,7 @@ export const TACTICAL_EVENT_TEMPLATES: EventTemplate[] = [
     category: "taktik",
     minAge: 16,
     maxAge: 40,
-    weight: 3,
+    weight: 2,
     // 1:1 übernommen von der migrierten "taktik_flanke_dribbling" (reines
     // Feldspieler-Szenario, für Torhüter gibt es "torwart_glanzparade").
     condition: (p) => p.position !== "TW",
@@ -1287,7 +1287,7 @@ export const TACTICAL_EVENT_TEMPLATES: EventTemplate[] = [
     category: "taktik",
     minAge: 17,
     maxAge: 40,
-    weight: 3,
+    weight: 2,
     condition: (p) => p.position !== "TW" && p.attributes.technik > 20,
     build: (player) => ({
       category: "taktik",
