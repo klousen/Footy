@@ -532,25 +532,25 @@ const LETZTER_MANN_OPTIONS: TacticalOptionSpec[] = [
 
 const TORWART_TEMPLATES: TacticalBoardTemplate[] = [
   {
-    name: "Zentraler Durchbruch",
+    name: "Durchbruch von der rechten Eckfahne",
     players: [
       { x: 150, y: 345, type: "self", label: "TW" },
-      { x: 150, y: 175, type: "opp", label: "9" },
+      { x: 260, y: 365, type: "opp", label: "9" },
     ],
     optionPaths: {
-      rush: { path: "M 150 345 L 150 200", tagPos: [180, 270] },
-      hold_line: { path: "M 150 345 L 150 350", tagPos: [190, 345] },
+      rush: { path: "M 150 345 Q 190 330 225 320", tagPos: [230, 300] },
+      hold_line: { path: "M 150 345 Q 165 350 180 355", tagPos: [200, 355] },
     },
   },
   {
-    name: "Durchbruch von halbrechts",
+    name: "Durchbruch nach innen gezogen, Ecke im Rücken",
     players: [
       { x: 150, y: 345, type: "self", label: "TW" },
-      { x: 210, y: 190, type: "opp", label: "9" },
+      { x: 230, y: 300, type: "opp", label: "9" },
     ],
     optionPaths: {
-      rush: { path: "M 150 345 Q 175 270 205 210", tagPos: [195, 280] },
-      hold_line: { path: "M 150 345 Q 158 340 165 342", tagPos: [195, 340] },
+      rush: { path: "M 150 345 Q 180 310 205 280", tagPos: [210, 290] },
+      hold_line: { path: "M 150 345 Q 160 350 172 352", tagPos: [190, 352] },
     },
   },
 ];
@@ -558,8 +558,8 @@ const TORWART_TEMPLATES: TacticalBoardTemplate[] = [
 const TORWART_OPTIONS: TacticalOptionSpec[] = [
   {
     id: "rush",
-    label: "Aggressiv rauslaufen",
-    detail: "Den Raum eng machen, volles Risiko.",
+    label: "Entschlossen auf den Angreifer zugehen",
+    detail: "Den Winkel aktiv verkürzen - volles Risiko.",
     risk: "high",
     relevantAttributes: ["intelligenz"],
     outcomes: [
@@ -567,22 +567,22 @@ const TORWART_OPTIONS: TacticalOptionSpec[] = [
         weight: 1,
         headline: "Glänzend geklärt!",
         type: "pos",
-        text: "ist beherzt herausgelaufen und hat den Winkel perfekt verkürzt.",
+        text: "ist dem Angreifer entschlossen entgegengekommen und hat den Winkel perfekt verkürzt.",
         effects: { reputation: 3, morale: 6 },
       },
       {
         weight: 1,
         headline: "Umkurvt",
         type: "neg",
-        text: "ist herausgelaufen, wurde aber cool umkurvt.",
+        text: "ist dem Angreifer entgegengekommen, wurde aber cool umkurvt.",
         effects: { morale: -4 },
       },
     ],
   },
   {
     id: "hold_line",
-    label: "Auf der Linie bleiben",
-    detail: "Reflexe statt Risiko - auf den Schuss reagieren.",
+    label: "Kurzes Eck zumachen und stehen bleiben",
+    detail: "Position halten, die kurze Ecke zumachen und auf den Schuss reagieren.",
     risk: "low",
     relevantAttributes: ["physis"],
     outcomes: [
@@ -590,7 +590,7 @@ const TORWART_OPTIONS: TacticalOptionSpec[] = [
         weight: 1,
         headline: "Stark pariert",
         type: "pos",
-        text: "ist auf der Linie geblieben und hat reflexartig pariert.",
+        text: "hat die kurze Ecke zugemacht und den Schuss reflexartig pariert.",
         effects: { morale: 2 },
       },
       {
@@ -1018,8 +1018,9 @@ export const TACTICAL_EVENT_TEMPLATES: EventTemplate[] = [
       const variant = pickTacticalVariant(TORWART_TEMPLATES, ctx.rng);
       return {
         category: "taktik",
-        title: "Rauslaufen oder Linie halten?",
-        description: "Ein Konterläufer ist frei durch - sofortige Entscheidung gefragt.",
+        title: "Durchbruch an der Eckfahne",
+        description:
+          "Ein Angreifer umkurvt deinen Abwehrspieler in der Nähe der Eckfahne und läuft direkt auf dich zu - sofortige Entscheidung gefragt.",
         choices: buildTacticalChoices(TORWART_OPTIONS, variant),
         tactical: { displayMode: "board", goalPosition: "bottom", players: variant.players },
       };
