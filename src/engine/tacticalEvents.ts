@@ -584,6 +584,340 @@ const TORWART_OPTIONS: TacticalOptionSpec[] = [
   },
 ];
 
+// ---------------------------------------------------------------------------
+// Content: Welle 2 (siehe Handoff §6d Punkt 4) - restliche Board-Events aus
+// §6b. BEWUSSTE VEREINFACHUNG ggü. §6d Punkt 5 ("3 Templates Standard, 4 bei
+// häufig gezogenen Events"): hier durchgängig 2 handkuratierte Templates pro
+// Event (= 4 effektive Varianten durch Spiegelung, siehe `pickTacticalVariant`)
+// statt 3 - deckt eine typische Karriere ausreichend ab, hält aber den
+// Content-Umfang dieser Welle überschaubar. Auf 3 aufstocken ist jederzeit
+// möglich, ohne Struktur/Code zu ändern (siehe `TacticalBoardTemplate`).
+// ---------------------------------------------------------------------------
+
+const LAUFWEG_TEMPLATES: TacticalBoardTemplate[] = [
+  {
+    name: "Rechter Halbraum, früher Laufweg",
+    players: [
+      { x: 220, y: 275, type: "self", label: "DU" },
+      { x: 140, y: 230, type: "team", label: "7" },
+      { x: 190, y: 150, type: "opp" },
+      { x: 150, y: 100, type: "opp" },
+    ],
+    optionPaths: {
+      short: { path: "M 220 275 Q 190 190 165 110", tagPos: [230, 190] },
+      timed: { path: "M 220 275 Q 200 220 175 150", tagPos: [235, 225] },
+    },
+  },
+  {
+    name: "Zentral, Flanke von links",
+    players: [
+      { x: 160, y: 300, type: "self", label: "DU" },
+      { x: 60, y: 150, type: "team", label: "11" },
+      { x: 140, y: 160, type: "opp" },
+      { x: 180, y: 110, type: "opp" },
+    ],
+    optionPaths: {
+      short: { path: "M 160 300 Q 130 210 110 130", tagPos: [100, 210] },
+      timed: { path: "M 160 300 Q 150 240 140 175", tagPos: [175, 245] },
+    },
+  },
+];
+
+const LAUFWEG_OPTIONS: TacticalOptionSpec[] = [
+  {
+    id: "short",
+    label: "Früh in die Box starten",
+    detail: "Sofort losziehen - schneller am Ball, aber Abseitsrisiko.",
+    risk: "high",
+    relevantAttributes: ["tempo"],
+    outcomes: [
+      {
+        weight: 1,
+        headline: "Am ersten Pfosten getroffen!",
+        type: "pos",
+        text: "ist früh gestartet und hat am ersten Pfosten getroffen!",
+        effects: { reputation: 3, morale: 5 },
+      },
+      { weight: 1, headline: "Abseits gestanden", type: "neg", text: "ist zu früh losgelaufen und stand im Abseits.", effects: { morale: -2 } },
+    ],
+  },
+  {
+    id: "timed",
+    label: "Laufweg timen",
+    detail: "Kurz warten, dann punktgenau in den Rückraum starten.",
+    risk: "mid",
+    relevantAttributes: ["intelligenz"],
+    outcomes: [
+      {
+        weight: 1,
+        headline: "Punktgenau aufgetaucht",
+        type: "pos",
+        text: "ist punktgenau im Rückraum aufgetaucht und hat abgeschlossen.",
+        effects: { reputation: 2, morale: 3 },
+      },
+      { weight: 1, headline: "Zu spät gestartet", type: "neg", text: "ist eine Idee zu spät gestartet - die Chance ist vorbei.", effects: { morale: -1 } },
+    ],
+  },
+];
+
+const DOPPELPASS_TEMPLATES: TacticalBoardTemplate[] = [
+  {
+    name: "Eng gestaffelt im letzten Drittel",
+    players: [
+      { x: 150, y: 280, type: "self", label: "DU" },
+      { x: 190, y: 210, type: "team", label: "9" },
+      { x: 160, y: 230, type: "opp" },
+      { x: 120, y: 180, type: "opp" },
+    ],
+    optionPaths: {
+      doppelpass: { path: "M 150 280 Q 175 245 190 215", tagPos: [195, 240] },
+      alleingang: { path: "M 150 280 Q 130 220 110 160", tagPos: [100, 220] },
+    },
+  },
+  {
+    name: "Zwei gegen zwei am Strafraumrand",
+    players: [
+      { x: 200, y: 260, type: "self", label: "DU" },
+      { x: 140, y: 210, type: "team", label: "8" },
+      { x: 180, y: 200, type: "opp" },
+      { x: 150, y: 150, type: "opp" },
+    ],
+    optionPaths: {
+      doppelpass: { path: "M 200 260 Q 170 230 145 215", tagPos: [155, 235] },
+      alleingang: { path: "M 200 260 Q 190 190 175 130", tagPos: [210, 190] },
+    },
+  },
+];
+
+const DOPPELPASS_OPTIONS: TacticalOptionSpec[] = [
+  {
+    id: "doppelpass",
+    label: "Doppelpass spielen",
+    detail: "Ball ablegen und sofort in die Lücke starten.",
+    risk: "mid",
+    relevantAttributes: ["intelligenz"],
+    outcomes: [
+      { weight: 1, headline: "Doppelpass klappt!", type: "pos", text: "hat den Doppelpass angesetzt und kommt frei zum Abschluss.", effects: { reputation: 2, morale: 4, clubRelation: 1 } },
+      { weight: 1, headline: "Rückpass kommt nicht an", type: "neg", text: "hat den Doppelpass angesetzt, doch der Rückpass kommt nicht an.", effects: { morale: -1 } },
+    ],
+  },
+  {
+    id: "alleingang",
+    label: "Selbst durchgehen",
+    detail: "Im engen Raum das Dribbling suchen.",
+    risk: "high",
+    relevantAttributes: ["technik"],
+    outcomes: [
+      { weight: 1, headline: "Vorbei an allen!", type: "pos", text: "ist im Alleingang an mehreren Gegenspielern vorbeigezogen!", effects: { reputation: 4, morale: 6 } },
+      { weight: 1, headline: "Im Gewühl hängengeblieben", type: "neg", text: "ist im engen Raum hängengeblieben - der Ball geht verloren.", effects: { morale: -2 } },
+    ],
+  },
+];
+
+const KOPFBALLDUELL_TEMPLATES: TacticalBoardTemplate[] = [
+  {
+    name: "Flanke von rechts",
+    players: [
+      { x: 150, y: 270, type: "self", label: "DU" },
+      { x: 170, y: 240, type: "opp", label: "9" },
+      { x: 110, y: 330, type: "team" },
+    ],
+    optionPaths: {
+      vollrisiko: { path: "M 150 270 Q 165 250 175 235", tagPos: [190, 245] },
+      absichern: { path: "M 150 270 Q 140 300 130 330", tagPos: [110, 300] },
+    },
+  },
+  {
+    name: "Ecke, zweiter Pfosten",
+    players: [
+      { x: 110, y: 255, type: "self", label: "DU" },
+      { x: 140, y: 225, type: "opp", label: "9" },
+      { x: 200, y: 340, type: "team" },
+    ],
+    optionPaths: {
+      vollrisiko: { path: "M 110 255 Q 125 240 140 225", tagPos: [150, 230] },
+      absichern: { path: "M 110 255 Q 150 300 190 335", tagPos: [190, 290] },
+    },
+  },
+];
+
+const KOPFBALLDUELL_OPTIONS: TacticalOptionSpec[] = [
+  {
+    id: "vollrisiko",
+    label: "Vollrisiko im Kopfballduell",
+    detail: "Konsequent gegen den Stürmer hochgehen.",
+    risk: "high",
+    relevantAttributes: ["physis"],
+    outcomes: [
+      { weight: 1, headline: "Kopfball geklärt!", type: "pos", text: "ist konsequent hochgegangen und hat den Ball sauber geklärt.", effects: { reputation: 3, morale: 5 } },
+      { weight: 1, headline: "Kopfballduell verloren", type: "neg", text: "hat das Kopfballduell verloren - brenzlige Situation im eigenen Strafraum.", effects: { morale: -4 } },
+    ],
+  },
+  {
+    id: "absichern",
+    label: "Abwehrchef-Absicherung",
+    detail: "Nicht ins Duell gehen, stattdessen den zweiten Ball absichern.",
+    risk: "low",
+    relevantAttributes: ["intelligenz"],
+    outcomes: [
+      { weight: 1, headline: "Sauber abgesichert", type: "pos", text: "hat auf Nummer sicher gespielt und den zweiten Ball sauber abgesichert.", effects: { morale: 2 } },
+      { weight: 1, headline: "Zweiter Ball geht verloren", type: "neg", text: "hat sich abgesichert, doch der zweite Ball geht trotzdem verloren.", effects: { morale: -1 } },
+    ],
+  },
+];
+
+const OEFFNENDER_BALL_TEMPLATES: TacticalBoardTemplate[] = [
+  {
+    name: "Zentrales Mittelfeld, Raum hinter der Kette",
+    players: [
+      { x: 150, y: 300, type: "self", label: "DU" },
+      { x: 120, y: 120, type: "team", label: "9" },
+      { x: 160, y: 150, type: "opp" },
+      { x: 110, y: 90, type: "opp" },
+    ],
+    optionPaths: {
+      riskant: { path: "M 150 300 Q 130 210 120 130", tagPos: [105, 210] },
+      sicher: { path: "M 150 300 Q 165 280 155 260", tagPos: [185, 280] },
+    },
+  },
+  {
+    name: "Von halblinks aufgerückt",
+    players: [
+      { x: 110, y: 310, type: "self", label: "DU" },
+      { x: 200, y: 140, type: "team", label: "11" },
+      { x: 160, y: 160, type: "opp" },
+      { x: 210, y: 110, type: "opp" },
+    ],
+    optionPaths: {
+      riskant: { path: "M 110 310 Q 160 220 195 150", tagPos: [175, 215] },
+      sicher: { path: "M 110 310 Q 130 290 120 270", tagPos: [145, 295] },
+    },
+  },
+];
+
+const OEFFNENDER_BALL_OPTIONS: TacticalOptionSpec[] = [
+  {
+    id: "riskant",
+    label: "Scharfer Ball in die Tiefe",
+    detail: "Direkt hinter die letzte Kette spielen.",
+    risk: "high",
+    relevantAttributes: ["intelligenz"],
+    outcomes: [
+      { weight: 1, headline: "Kette ausgehebelt!", type: "pos", text: "hat die letzte Kette mit einem scharfen Ball in die Tiefe ausgehebelt.", effects: { reputation: 3, morale: 5, clubRelation: 1 } },
+      { weight: 1, headline: "Abgefangen", type: "neg", text: "hat den Ball in die Tiefe zu ungenau gespielt - abgefangen.", effects: { morale: -1 } },
+    ],
+  },
+  {
+    id: "sicher",
+    label: "Sicher im Mittelfeld halten",
+    detail: "Kein Risiko, den Ball im Mittelfeld zirkulieren lassen.",
+    risk: "low",
+    relevantAttributes: ["technik"],
+    outcomes: [{ weight: 1, headline: "Ballbesitz gehalten", type: "neutral", text: "hat den Ball sicher im Mittelfeld gehalten.", effects: {} }],
+  },
+];
+
+const KONTER_EINLEITEN_TEMPLATES: TacticalBoardTemplate[] = [
+  {
+    name: "Ballgewinn im Mittelfeld",
+    players: [
+      { x: 150, y: 260, type: "self", label: "DU" },
+      { x: 190, y: 150, type: "team", label: "8" },
+      { x: 160, y: 200, type: "opp" },
+    ],
+    optionPaths: {
+      konter: { path: "M 150 260 Q 175 205 190 155", tagPos: [210, 200] },
+      ordnung: { path: "M 150 260 Q 140 290 130 320", tagPos: [110, 295] },
+    },
+  },
+  {
+    name: "Ballgewinn am eigenen Strafraum",
+    players: [
+      { x: 150, y: 320, type: "self", label: "DU" },
+      { x: 130, y: 180, type: "team", label: "6" },
+      { x: 175, y: 270, type: "opp" },
+    ],
+    optionPaths: {
+      konter: { path: "M 150 320 Q 140 250 135 190", tagPos: [110, 250] },
+      ordnung: { path: "M 150 320 Q 165 345 175 360", tagPos: [195, 345] },
+    },
+  },
+];
+
+const KONTER_EINLEITEN_OPTIONS: TacticalOptionSpec[] = [
+  {
+    id: "konter",
+    label: "Sofort nach vorne spielen",
+    detail: "Den Gegner im Umschalten überraschen.",
+    risk: "mid",
+    relevantAttributes: ["tempo"],
+    outcomes: [
+      { weight: 1, headline: "Blitzkonter!", type: "pos", text: "hat den Ball sofort nach vorne gespielt - Blitzkonter!", effects: { reputation: 3, morale: 5 } },
+      { weight: 1, headline: "Ball zu früh verloren", type: "neg", text: "hat zu früh nach vorne gespielt - der Ball geht sofort wieder verloren.", effects: { morale: -2 } },
+    ],
+  },
+  {
+    id: "ordnung",
+    label: "Ordnung halten",
+    detail: "Rückpass, das Team erst sortieren lassen.",
+    risk: "low",
+    relevantAttributes: ["intelligenz"],
+    outcomes: [{ weight: 1, headline: "Mannschaft sortiert sich", type: "neutral", text: "hat den Ball zurückgelegt und die Mannschaft sortiert sich.", effects: {} }],
+  },
+];
+
+const KLAERUNG_TEMPLATES: TacticalBoardTemplate[] = [
+  {
+    name: "Hoher Ball in den Strafraum",
+    players: [
+      { x: 150, y: 345, type: "self", label: "DU" },
+      { x: 150, y: 300, type: "opp", label: "9" },
+      { x: 200, y: 360, type: "team" },
+    ],
+    optionPaths: {
+      klaeren: { path: "M 150 345 L 150 300", tagPos: [130, 320] },
+      kurz: { path: "M 150 345 Q 185 355 200 360", tagPos: [210, 340] },
+    },
+  },
+  {
+    name: "Rückpass unter Druck",
+    players: [
+      { x: 170, y: 355, type: "self", label: "DU" },
+      { x: 140, y: 310, type: "opp", label: "9" },
+      { x: 100, y: 370, type: "team" },
+    ],
+    optionPaths: {
+      klaeren: { path: "M 170 355 L 170 310", tagPos: [190, 330] },
+      kurz: { path: "M 170 355 Q 130 365 105 370", tagPos: [100, 345] },
+    },
+  },
+];
+
+const KLAERUNG_OPTIONS: TacticalOptionSpec[] = [
+  {
+    id: "klaeren",
+    label: "Ball weit wegschlagen",
+    detail: "Kein Risiko - konsequent aus der Gefahrenzone klären.",
+    risk: "low",
+    relevantAttributes: ["physis"],
+    outcomes: [
+      { weight: 1, headline: "Klar geklärt", type: "pos", text: "hat konsequent aus der Gefahrenzone geklärt.", effects: { morale: 2 } },
+      { weight: 1, headline: "Klärung landet beim Gegner", type: "neg", text: "hat zu unplatziert geklärt - der Ball landet direkt wieder beim Gegner.", effects: { morale: -1 } },
+    ],
+  },
+  {
+    id: "kurz",
+    label: "Kurz unter Druck abspielen",
+    detail: "Riskant, aber eröffnet sofort das eigene Spiel.",
+    risk: "high",
+    relevantAttributes: ["technik"],
+    outcomes: [
+      { weight: 1, headline: "Sauber rausgespielt!", type: "pos", text: "hat den Ball unter Druck sauber rausgespielt - starker Ballgewinn zum Aufbau.", effects: { reputation: 3, morale: 5, clubRelation: 1 } },
+      { weight: 1, headline: "Ball im eigenen Strafraum verloren", type: "neg", text: "hat sich unter Druck verspielt - brenzlige Situation im eigenen Strafraum.", effects: { morale: -6 } },
+    ],
+  },
+];
+
 export const TACTICAL_EVENT_TEMPLATES: EventTemplate[] = [
   {
     id: "taktik_board_fluegel_freigespielt",
@@ -667,6 +1001,126 @@ export const TACTICAL_EVENT_TEMPLATES: EventTemplate[] = [
         title: "Rauslaufen oder Linie halten?",
         description: "Ein Konterläufer ist frei durch - sofortige Entscheidung gefragt.",
         choices: buildTacticalChoices(TORWART_OPTIONS, variant),
+        tactical: { displayMode: "board", goalPosition: "bottom", players: variant.players },
+      };
+    },
+  },
+  // -------------------------------------------------------------------
+  // Welle 2 (siehe oben)
+  // -------------------------------------------------------------------
+  {
+    id: "taktik_board_laufweg_box",
+    category: "taktik",
+    minAge: 16,
+    maxAge: 40,
+    weight: 2,
+    // positionScope ATT (siehe Handoff §6b).
+    condition: (p) => p.position === "FS" || p.position === "ST",
+    build: (_player, ctx) => {
+      const variant = pickTacticalVariant(LAUFWEG_TEMPLATES, ctx.rng);
+      return {
+        category: "taktik",
+        title: "Laufweg in die Box",
+        description: "Der Flügelspieler zieht zur Grundlinie - jetzt zählt dein Timing im Strafraum.",
+        choices: buildTacticalChoices(LAUFWEG_OPTIONS, variant),
+        tactical: { displayMode: "board", goalPosition: "top", players: variant.players },
+      };
+    },
+  },
+  {
+    id: "taktik_board_doppelpass_alleingang",
+    category: "taktik",
+    minAge: 16,
+    maxAge: 40,
+    weight: 2,
+    // positionScope MID/ATT (siehe Handoff §6b).
+    condition: (p) => p.position === "ZM" || p.position === "FS" || p.position === "ST",
+    build: (_player, ctx) => {
+      const variant = pickTacticalVariant(DOPPELPASS_TEMPLATES, ctx.rng);
+      return {
+        category: "taktik",
+        title: "Enger Raum im letzten Drittel",
+        description: "Im Getümmel bietet sich ein Doppelpass an - oder du gehst selbst durch.",
+        choices: buildTacticalChoices(DOPPELPASS_OPTIONS, variant),
+        tactical: { displayMode: "board", goalPosition: "top", players: variant.players },
+      };
+    },
+  },
+  {
+    id: "taktik_board_kopfballduell",
+    category: "taktik",
+    minAge: 16,
+    maxAge: 40,
+    weight: 2,
+    // positionScope DEF (siehe Handoff §6b).
+    condition: (p) => p.position === "IV" || p.position === "AV",
+    build: (_player, ctx) => {
+      const variant = pickTacticalVariant(KOPFBALLDUELL_TEMPLATES, ctx.rng);
+      return {
+        category: "taktik",
+        title: "Kopfballduell im eigenen Strafraum",
+        description: "Der Flankenball kommt - volles Risiko im Zweikampf oder lieber absichern?",
+        choices: buildTacticalChoices(KOPFBALLDUELL_OPTIONS, variant),
+        tactical: { displayMode: "board", goalPosition: "bottom", players: variant.players },
+      };
+    },
+  },
+  {
+    id: "taktik_board_oeffnender_ball",
+    category: "taktik",
+    minAge: 16,
+    maxAge: 40,
+    weight: 2,
+    // positionScope MID (siehe Handoff §6b).
+    condition: (p) => p.position === "ZM",
+    // matchContext regular+cup (siehe Handoff §6b) - gleiche Vorsaison-Proxy-
+    // Gewichtung wie beim Torwart-Event oben (siehe dortiger Kommentar).
+    dynamicWeight: (p) => (p.seasonHistory.at(-1)?.europeanCup ? 1.5 : 1),
+    build: (_player, ctx) => {
+      const variant = pickTacticalVariant(OEFFNENDER_BALL_TEMPLATES, ctx.rng);
+      return {
+        category: "taktik",
+        title: "Öffnender Ball ins letzte Drittel",
+        description: "Aus dem Mittelfeld bietet sich ein Ball hinter die gegnerische Kette an.",
+        choices: buildTacticalChoices(OEFFNENDER_BALL_OPTIONS, variant),
+        tactical: { displayMode: "board", goalPosition: "top", players: variant.players },
+      };
+    },
+  },
+  {
+    id: "taktik_board_konter_einleiten",
+    category: "taktik",
+    minAge: 16,
+    maxAge: 40,
+    weight: 2,
+    // positionScope DEF/MID (siehe Handoff §6b).
+    condition: (p) => p.position === "IV" || p.position === "AV" || p.position === "ZM",
+    build: (_player, ctx) => {
+      const variant = pickTacticalVariant(KONTER_EINLEITEN_TEMPLATES, ctx.rng);
+      return {
+        category: "taktik",
+        title: "Ballgewinn - sofort Konter oder Ordnung halten?",
+        description: "Nach dem Ballgewinn bietet sich der schnelle Umschaltmoment an.",
+        choices: buildTacticalChoices(KONTER_EINLEITEN_OPTIONS, variant),
+        tactical: { displayMode: "board", goalPosition: "top", players: variant.players },
+      };
+    },
+  },
+  {
+    id: "taktik_board_klaerung_unter_druck",
+    category: "taktik",
+    minAge: 16,
+    maxAge: 40,
+    weight: 2,
+    // positionScope DEF (siehe Handoff §6b).
+    condition: (p) => p.position === "IV" || p.position === "AV",
+    build: (_player, ctx) => {
+      const variant = pickTacticalVariant(KLAERUNG_TEMPLATES, ctx.rng);
+      return {
+        category: "taktik",
+        title: "Unter Druck im eigenen Strafraum",
+        description: "Der Ball kommt scharf rein - lieber weit wegschlagen oder riskant kurz spielen?",
+        choices: buildTacticalChoices(KLAERUNG_OPTIONS, variant),
         tactical: { displayMode: "board", goalPosition: "bottom", players: variant.players },
       };
     },
