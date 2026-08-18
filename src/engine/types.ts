@@ -398,8 +398,9 @@ export interface SeasonStats {
   /** NUR für Torhüter relevant, sonst 0: Paradenquote dieser Saison in Prozent (0-100). */
   savePercentage: number;
   /** NUR für Torhüter relevant, sonst 0: im Ligaspiel gehaltene Elfmeter diese Saison
-   * (separat vom Elfmeterschießen-Event "torwart_elfmeterheld") - seltener Bonusmoment,
-   * der die Bewertung/Bekanntheit zusätzlich anhebt. */
+   * (separat vom Elfmeterschießen-Event "taktik_cards_elfmeterschiessen_ecke", ehemals
+   * "torwart_elfmeterheld" - siehe tacticalEvents.ts) - seltener Bonusmoment, der die
+   * Bewertung/Bekanntheit zusätzlich anhebt. */
   penaltiesSaved: number;
   /** NUR für Innen-/Außenverteidiger relevant, sonst 0: im letzten Moment verhinderte
    * Großchancen diese Saison (Grätsche auf der Linie, Klärung im Strafraum, entscheidender
@@ -502,6 +503,13 @@ export interface EffectDelta {
   capsDelta?: number;
   /** Länderspieltore, addiert auf `Player.nationalTeamGoals`. */
   goalsDelta?: number;
+  /** EIN Vereins-Tor/-Vorlage dieser Saison, das im Event-Text explizit als erzielt
+   * beschrieben wird (siehe `Player.pendingSeasonGoals`/`-Assists`) - NICHT dasselbe
+   * wie `goalsDelta` oben (Nationalmannschaft). Nur für Outcomes setzen, deren Text
+   * einen tatsächlichen Torabschluss/eine Vorlage behauptet, nicht für "gute Chance
+   * herausgespielt"-Formulierungen ohne bestätigten Abschluss. */
+  matchGoalDelta?: number;
+  matchAssistDelta?: number;
   /** Schützt die Kaderrolle für N weitere Saisons vor dem Abrutschen unter "Rotation". */
   roleProtectionSeasons?: number;
   /** Stärkere Variante von `roleProtectionSeasons`: garantiert für N Saisons mindestens
@@ -681,6 +689,80 @@ export interface EventChoice {
   followUpChance?: { chance: number; success: EffectDelta; failure: EffectDelta };
   /** Strukturierte Angebots-Karten-Daten, siehe `OfferCardData`. */
   offerCard?: OfferCardData;
+  /**
+   * NUR gesetzt bei taktischen Taktiktafel-Entscheidungen (siehe `GameEvent.tactical`,
+   * "Handoff: Taktische Entscheidungs-Events") - additiv, fehlt bei allen bestehenden
+   * Choices unverändert. Wenn gesetzt, bleibt `effects` bewusst `{}` (leer): der
+   * tatsächliche Effekt wird erst zur Laufzeit von `resolveTacticalOutcome`
+   * (tacticalEvents.ts) anhand des attributsensitiv gewürfelten Outcomes bestimmt -
+   * ein zweiter, eigenständiger Auflösungspfad NEBEN `followUpChance`, der diesen
+   * NICHT verändert oder ersetzt (siehe Kommentar dort).
+   */
+  tacticalOption?: TacticalOption;
+}
+
+/** Grundcharakter einer taktischen Option (Ampel-Risiko, siehe `TacticalOption`). */
+export type TacticalRisk = "low" | "mid" | "high";
+
+/**
+ * EIN möglicher Ausgang einer `TacticalOption`. Reihenfolge im `outcomes`-Array ist
+ * bewusst BEDEUTUNGSTRAGEND (siehe `resolveTacticalOutcome`): `outcomes[0]` gilt
+ * per Konvention immer als das anzustrebende/beste Ergebnis dieser Option - dessen
+ * Eintrittswahrscheinlichkeit wird von der attributsensitiven `successChance`
+ * gesteuert, alle weiteren Outcomes teilen sich den Rest proportional zu `weight`.
+ * `type` steuert NUR die Anzeige (Kopfzeilen-Farbe/Feedback-Icon), nicht die
+ * Auswahllogik - siehe Kommentar in `resolveTacticalOutcome`.
+ */
+export interface TacticalOutcome {
+  /** Relatives Gewicht unter den NICHT-besten Outcomes (Index 0 ausgenommen, siehe oben). */
+  weight: number;
+  headline: string;
+  type: "pos" | "neg" | "neutral";
+  /** Wird 1:1 wie bei bestehenden Events als `EffectDelta.logText` verwendet
+   * (`${player.name} ${text}`) - daher dritte Person, Perfekt, siehe bestehende
+   * `taktik_*`-Events in events.ts als Stilvorbild. */
+  text: string;
+  /** Wiederverwendet exakt das bestehende Effekt-/Feedback-Modell (siehe
+   * `summarizeEffects`) statt eines eigenen Delta-Anzeigeformats - `logText`/
+   * `logKind` werden von `resolveTacticalOutcome` automatisch aus `text`/`type`
+   * ergänzt, hier nicht selbst setzen. */
+  effects: EffectDelta;
+}
+
+/** Eine Option auf der Taktiktafel bzw. Card-Liste, siehe `EventChoice.tacticalOption`. */
+export interface TacticalOption {
+  risk: TacticalRisk;
+  /** 1-2 Attribute, treiben die `successChance`-Berechnung (siehe `resolveTacticalOutcome`).
+   * BEWUSST auf die 6 groben `AttributeKey`-Werte beschränkt (kein neues, feingranulares
+   * Attributsystem - siehe Handoff-Korrektur zu `PlayerAttributes`). */
+  relevantAttributes: AttributeKey[];
+  outcomes: TacticalOutcome[];
+  /** SVG-Pfad des Kreide-Pfeils auf der Taktiktafel, siehe `TacticalBoardTemplate`.
+   * NUR bei `GameEvent.tactical.displayMode === 'board'` gesetzt - bei `'cards'`
+   * (siehe Welle 3) gibt es kein Spielfeld, daher optional. */
+  boardPath?: string;
+  /** Label-Position auf dem Pfeil (siehe `boardPath`) - nur bei `'board'`. */
+  boardTagPos?: [number, number];
+}
+
+/** Ein Spieler-Marker auf der Taktiktafel (siehe `TacticalBoardTemplate`/`GameEvent.tactical`). */
+export interface TacticalBoardPlayer {
+  x: number;
+  y: number;
+  type: "self" | "team" | "opp";
+  label?: string;
+}
+
+/**
+ * Eine handkuratierte Formation für ein `board`-Event (siehe Handoff §3
+ * "Varianz-System") - `optionPaths` ordnet jeder `EventChoice.id` dieses Events
+ * den zu dieser Formation passenden Pfeil-Pfad zu (Pfad/Text/Risiko können
+ * zwischen Templates variieren, kein reines Koordinaten-Reskinning).
+ */
+export interface TacticalBoardTemplate {
+  name: string;
+  players: TacticalBoardPlayer[];
+  optionPaths: Record<string, { path: string; tagPos: [number, number] }>;
 }
 
 export type EventCategory =
@@ -705,6 +787,20 @@ export interface GameEvent {
   title: string;
   description: string;
   choices: EventChoice[];
+  /**
+   * NUR gesetzt bei taktischen Entscheidungs-Events (siehe `EventChoice.tacticalOption`,
+   * "Handoff: Taktische Entscheidungs-Events") - additiv, fehlt bei allen bestehenden
+   * Events unverändert (`EventCard` fällt dann auf die klassische Choice-Liste zurück,
+   * exakt wie heute). Zwei Varianten (siehe Handoff §6b "Board vs. Card-Liste"):
+   * `'board'` für Events mit räumlicher Situation (Taktiktafel-SVG, `TacticalBoard.tsx`,
+   * Welle 1/2), `'cards'` für reine Rollen-/Ausführungs-Entscheidungen ohne
+   * Raumkomponente (nur Optionskarten, `TacticalCards.tsx`, Welle 3). `players` bei
+   * `'board'` ist bereits die für DIESE Ziehung final gewählte Variante (Template +
+   * Spiegelung + Jitter, siehe `pickTacticalVariant` in tacticalEvents.ts).
+   */
+  tactical?:
+    | { displayMode: "board"; goalPosition: "top" | "bottom"; players: TacticalBoardPlayer[] }
+    | { displayMode: "cards" };
 }
 
 export interface EventTemplate {
@@ -796,6 +892,17 @@ export interface Player {
    */
   productionReliability: number;
   morale: number; // 0-100
+  /**
+   * Sammelt Tore/Vorlagen, die während der laufenden Saison EXPLIZIT durch ein
+   * Event-Outcome vergeben wurden (siehe `EffectDelta.matchGoalDelta`/
+   * `matchAssistDelta`, z.B. taktische Board-Events in tacticalEvents.ts) - additiv
+   * zur unabhängig gewürfelten Basisproduktion in `simulateSeason`, dort am
+   * Saisonende eingerechnet und zurückgesetzt. Kein Doppelzählungs-Risiko: die
+   * `simulateSeason`-Formel bildet die "normale" Spielproduktion ab, dies hier sind
+   * bewusst zusätzliche Treffer aus einer konkreten, riskanten Entscheidung heraus.
+   */
+  pendingSeasonGoals: number;
+  pendingSeasonAssists: number;
   fitness: number; // 0-100
   reputation: number; // 0-100 (Bekanntheit)
   wealth: number; // €

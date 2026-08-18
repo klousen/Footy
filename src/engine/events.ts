@@ -10,6 +10,11 @@ import { ATTRIBUTE_LABEL, formatMoney } from "./labels";
 // importierbar (siehe Vorgabe "Investments können zusätzlich aus passenden
 // Events heraus angeboten werden").
 import { availableInvestmentIds, investmentCost } from "./investments";
+// Taktische Taktiktafel-Events (siehe "Handoff: Taktische Entscheidungs-Events") -
+// bewusst additiv per `.concat(...)` unten angehängt, nicht in dieses riesige
+// Literal-Array gemischt, damit das Feature durch Entfernen dieser Zeile + des
+// `.concat(...)`-Aufrufs vollständig und ohne Kollateralschaden entfernbar bleibt.
+import { TACTICAL_EVENT_TEMPLATES } from "./tacticalEvents";
 
 /** Sommerpause-Event (siehe Template weiter unten) - wird NIE über die normale
  * Gewichtungs-Auswahl gezogen, sondern von App.tsx `handleStartSeason` explizit
@@ -1111,64 +1116,11 @@ export const EVENT_TEMPLATES: EventTemplate[] = [
   // ---------------------------------------------------------------------
   // TAKTIK / SPIELMOMENTE
   // ---------------------------------------------------------------------
-  {
-    id: "taktik_elfmeter",
-    category: "taktik",
-    minAge: 17,
-    maxAge: 40,
-    weight: 2,
-    // Torhüter treten so gut wie nie als Elfmeterschütze an - das bleibt Feldspielern
-    // vorbehalten.
-    condition: (p) => p.attributes.mentalitaet > 20 && p.position !== "TW",
-    build: (p) => ({
-      category: "taktik",
-      title: "Elfmeter im Endspurt",
-      description: `Kurz vor Schluss bekommt ${club(p)} einen Elfmeter zugesprochen. Der Stammschütze ist unsicher - übernimmst du die Verantwortung?`,
-      choices: [
-        {
-          id: "uebernehmen",
-          label: "Selbst schießen",
-          effects: {},
-          followUpChance: {
-            chance: 0.55,
-            success: { reputation: 6, morale: 6, clubRelation: 2, logText: "hat in der Crunchtime einen Elfmeter verwandelt.", logKind: "positive" },
-            failure: { morale: -8, reputation: -2, logText: "hat einen wichtigen Elfmeter vergeben.", logKind: "negative" },
-          },
-        },
-        {
-          id: "abgeben",
-          label: "Verantwortung abgeben",
-          effects: { clubRelation: 1, logText: "hat die Elfmeter-Verantwortung abgegeben.", logKind: "info" },
-        },
-      ],
-    }),
-  },
-  {
-    id: "taktik_kapitaensbinde",
-    category: "taktik",
-    minAge: 22,
-    maxAge: 40,
-    weight: 1,
-    unique: true,
-    condition: (p) => p.clubRelation > 55 && p.reputation > 35,
-    build: (p) => ({
-      category: "meilenstein",
-      title: "Angebot der Kapitänsbinde",
-      description: `Der Trainer von ${club(p)} bietet dir die Kapitänsbinde an - mehr Verantwortung, aber auch mehr Druck.`,
-      choices: [
-        {
-          id: "annehmen",
-          label: "Kapitän werden",
-          effects: { attributes: { mentalitaet: 2, charisma: 1 }, reputation: 6, clubRelation: 4, traitDeltas: { fuehrung: 10 }, logText: "wurde zum Mannschaftskapitän ernannt.", logKind: "milestone" },
-        },
-        {
-          id: "ablehnen",
-          label: "Höflich ablehnen",
-          effects: { morale: 2, traitDeltas: { fuehrung: -2 }, logText: "hat die Kapitänsbinde vorerst abgelehnt.", logKind: "info" },
-        },
-      ],
-    }),
-  },
+  // "taktik_elfmeter" und "taktik_kapitaensbinde" (ehemals hier) sind nach
+  // "Handoff: Taktische Entscheidungs-Events" §6c auf das taktische Card-System
+  // migriert - siehe "taktik_cards_elfmeter"/"taktik_cards_kapitaensbinde" in
+  // tacticalEvents.ts (1:1 identische Effekte, jetzt attributsensitiv statt fixer
+  // Erfolgschance).
   {
     id: "taktik_schiedsrichter",
     category: "taktik",
@@ -1198,38 +1150,8 @@ export const EVENT_TEMPLATES: EventTemplate[] = [
       ],
     }),
   },
-  {
-    id: "taktik_flanke_dribbling",
-    category: "taktik",
-    minAge: 16,
-    maxAge: 40,
-    weight: 2,
-    // Reines Feldspieler-Szenario (Ballführung im letzten Drittel) - für Torhüter
-    // gibt es das eigenständige Gegenstück "torwart_glanzparade".
-    condition: (p) => p.position !== "TW",
-    build: () => ({
-      category: "taktik",
-      title: "Entscheidende Spielsituation",
-      description: "Im letzten Drittel des Spielfelds hast du eine Anspielstation, aber auch die Chance auf ein Solo.",
-      choices: [
-        {
-          id: "solo",
-          label: "Dribbling wagen",
-          effects: {},
-          followUpChance: {
-            chance: 0.5,
-            success: { reputation: 3, morale: 4, logText: "hat ein sehenswertes Solo erfolgreich abgeschlossen.", logKind: "positive" },
-            failure: { morale: -3, clubRelation: -1, logText: "ist mit einem riskanten Solo gescheitert.", logKind: "negative" },
-          },
-        },
-        {
-          id: "abspielen",
-          label: "Sicher abspielen",
-          effects: { attributes: { intelligenz: 1 }, clubRelation: 1, logText: "hat sich für die sichere Lösung entschieden.", logKind: "info" },
-        },
-      ],
-    }),
-  },
+  // "taktik_flanke_dribbling" (ehemals hier) ist ebenfalls migriert - siehe
+  // "taktik_cards_flanke_dribbling" in tacticalEvents.ts.
 
   // ---------------------------------------------------------------------
   // NATIONALMANNSCHAFT
@@ -3291,41 +3213,10 @@ export const EVENT_TEMPLATES: EventTemplate[] = [
   // nirgends im Ereignispool vorkommt (Elfmeter, Strafraumbeherrschung,
   // Fehlgriffe sind torwartspezifische Situationen).
   // ---------------------------------------------------------------------
-  {
-    id: "torwart_elfmeterheld",
-    category: "taktik",
-    minAge: 18,
-    maxAge: 38,
-    weight: 1.3,
-    condition: (p) => p.position === "TW",
-    build: (p) => ({
-      category: "taktik",
-      title: "Elfmeterheld gesucht",
-      description: `Im Elfmeterschießen eines wichtigen Pokalspiels von ${club(p)} liegt es an dir, den entscheidenden Versuch zu parieren.`,
-      choices: [
-        {
-          id: "videostudium",
-          label: "Auf Videostudien der Schützen vertrauen",
-          effects: {},
-          followUpChance: {
-            chance: 0.55,
-            success: { reputation: 7, morale: 8, attributes: { intelligenz: 1 }, logText: "hat dank akribischer Vorbereitung den entscheidenden Elfmeter pariert und wird zum Helden.", logKind: "positive" },
-            failure: { morale: -4, logText: "hat sich trotz Vorbereitung im entscheidenden Elfmeterschießen nicht auszeichnen können.", logKind: "negative" },
-          },
-        },
-        {
-          id: "bauchgefuehl",
-          label: "Aus dem Bauch heraus reagieren",
-          effects: {},
-          followUpChance: {
-            chance: 0.4,
-            success: { reputation: 9, morale: 10, traitDeltas: { medienimage: 2 }, logText: "hat rein aus dem Bauch heraus reagiert und einen spektakulären Reflex-Save gezeigt.", logKind: "positive" },
-            failure: { morale: -6, clubRelation: -2, logText: "hat sich im entscheidenden Elfmeterschießen komplett verschätzt.", logKind: "negative" },
-          },
-        },
-      ],
-    }),
-  },
+  // "torwart_elfmeterheld" (ehemals hier) ist nach "Handoff: Taktische
+  // Entscheidungs-Events" §6b migriert - siehe "taktik_cards_elfmeterschiessen_ecke"
+  // in tacticalEvents.ts (gleiche Situation/Flavor-Text, jetzt mit dritter Option
+  // "Standardseite wählen" und attributsensitiver statt fixer Erfolgschance).
   {
     id: "torwart_strafraumbeherrschung",
     category: "taktik",
@@ -3387,8 +3278,8 @@ export const EVENT_TEMPLATES: EventTemplate[] = [
     minAge: 17,
     maxAge: 39,
     weight: 1.1,
-    // Bewusst getrennt von "torwart_elfmeterheld" (Elfmeterschießen nach 120
-    // Minuten, K.o.-Charakter) - hier geht es um einen reinen Strafstoß im
+    // Bewusst getrennt von "taktik_cards_elfmeterschiessen_ecke" (Elfmeterschießen
+    // nach 120 Minuten, K.o.-Charakter, siehe tacticalEvents.ts) - hier geht es um einen reinen Strafstoß im
     // laufenden Ligaspiel, ein deutlich häufigerer, "normalerer" Spielmoment,
     // der trotzdem als echter Boost zählen soll ("Elfmeter gehalten").
     condition: (p) => p.position === "TW",
@@ -7331,6 +7222,12 @@ export const EVENT_TEMPLATES: EventTemplate[] = [
     }),
   },
 ];
+
+// Additiv angehängt statt in die Literal-Liste oben gemischt (siehe Kommentar beim
+// Import oben) - bewusst `.push(...)` statt `.concat(...)`, weil `.concat()` auf
+// dem riesigen Array-Literal dessen kontextuelle Typisierung (`EventCategory` statt
+// `string` je Eintrag) durchbricht und hunderte Falschmeldungen erzeugt.
+EVENT_TEMPLATES.push(...TACTICAL_EVENT_TEMPLATES);
 
 export function getTemplateById(id: string): EventTemplate | undefined {
   return EVENT_TEMPLATES.find((t) => t.id === id);
