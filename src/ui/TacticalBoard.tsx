@@ -81,10 +81,14 @@ function computePitchGeometry(goalPosition: "top" | "bottom"): PitchGeometry {
   const cx = W / 2;
   const sixYardTop = flip ? goalLineY - sixYardH : goalLineY;
   const penTop = flip ? goalLineY - penH : goalLineY;
-  const penSpotY = goalLineY - dir * penSpotOffset;
+  // `dir` zeigt "ins Feld hinein" (weg von der Torlinie) - daher PLUS, nicht Minus
+  // (Bugreport: Elfmeterpunkt/Tornetz/Eckfahnen-Bögen landeten mit Minus teilweise
+  // außerhalb des 0..400-Canvas, weil das über die Torlinie hinaus statt ins Feld
+  // hinein rechnete).
+  const penSpotY = goalLineY + dir * penSpotOffset;
   const halfwayY = flip ? margin : BOARD_H - margin;
   const arcEdgeY = flip ? penTop : penTop + penH;
-  const goalOuterY = goalLineY - dir * goalH;
+  const goalOuterY = goalLineY + dir * goalH;
 
   return {
     flip,
