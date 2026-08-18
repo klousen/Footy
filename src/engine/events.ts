@@ -3213,41 +3213,10 @@ export const EVENT_TEMPLATES: EventTemplate[] = [
   // nirgends im Ereignispool vorkommt (Elfmeter, Strafraumbeherrschung,
   // Fehlgriffe sind torwartspezifische Situationen).
   // ---------------------------------------------------------------------
-  {
-    id: "torwart_elfmeterheld",
-    category: "taktik",
-    minAge: 18,
-    maxAge: 38,
-    weight: 1.3,
-    condition: (p) => p.position === "TW",
-    build: (p) => ({
-      category: "taktik",
-      title: "Elfmeterheld gesucht",
-      description: `Im Elfmeterschießen eines wichtigen Pokalspiels von ${club(p)} liegt es an dir, den entscheidenden Versuch zu parieren.`,
-      choices: [
-        {
-          id: "videostudium",
-          label: "Auf Videostudien der Schützen vertrauen",
-          effects: {},
-          followUpChance: {
-            chance: 0.55,
-            success: { reputation: 7, morale: 8, attributes: { intelligenz: 1 }, logText: "hat dank akribischer Vorbereitung den entscheidenden Elfmeter pariert und wird zum Helden.", logKind: "positive" },
-            failure: { morale: -4, logText: "hat sich trotz Vorbereitung im entscheidenden Elfmeterschießen nicht auszeichnen können.", logKind: "negative" },
-          },
-        },
-        {
-          id: "bauchgefuehl",
-          label: "Aus dem Bauch heraus reagieren",
-          effects: {},
-          followUpChance: {
-            chance: 0.4,
-            success: { reputation: 9, morale: 10, traitDeltas: { medienimage: 2 }, logText: "hat rein aus dem Bauch heraus reagiert und einen spektakulären Reflex-Save gezeigt.", logKind: "positive" },
-            failure: { morale: -6, clubRelation: -2, logText: "hat sich im entscheidenden Elfmeterschießen komplett verschätzt.", logKind: "negative" },
-          },
-        },
-      ],
-    }),
-  },
+  // "torwart_elfmeterheld" (ehemals hier) ist nach "Handoff: Taktische
+  // Entscheidungs-Events" §6b migriert - siehe "taktik_cards_elfmeterschiessen_ecke"
+  // in tacticalEvents.ts (gleiche Situation/Flavor-Text, jetzt mit dritter Option
+  // "Standardseite wählen" und attributsensitiver statt fixer Erfolgschance).
   {
     id: "torwart_strafraumbeherrschung",
     category: "taktik",
@@ -3309,8 +3278,8 @@ export const EVENT_TEMPLATES: EventTemplate[] = [
     minAge: 17,
     maxAge: 39,
     weight: 1.1,
-    // Bewusst getrennt von "torwart_elfmeterheld" (Elfmeterschießen nach 120
-    // Minuten, K.o.-Charakter) - hier geht es um einen reinen Strafstoß im
+    // Bewusst getrennt von "taktik_cards_elfmeterschiessen_ecke" (Elfmeterschießen
+    // nach 120 Minuten, K.o.-Charakter, siehe tacticalEvents.ts) - hier geht es um einen reinen Strafstoß im
     // laufenden Ligaspiel, ein deutlich häufigerer, "normalerer" Spielmoment,
     // der trotzdem als echter Boost zählen soll ("Elfmeter gehalten").
     condition: (p) => p.position === "TW",

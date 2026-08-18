@@ -1318,4 +1318,70 @@ export const TACTICAL_EVENT_TEMPLATES: EventTemplate[] = [
       tactical: { displayMode: "cards" },
     }),
   },
+  {
+    id: "taktik_cards_elfmeterschiessen_ecke",
+    category: "taktik",
+    minAge: 18,
+    maxAge: 38,
+    weight: 2,
+    // Migriert von "torwart_elfmeterheld" (siehe Handoff §6b "Elfmeterschießen: Ecke
+    // wählen" - inhaltlich dieselbe Situation, daher migriert statt dupliziert; siehe
+    // Nutzer-Entscheidung "Option 1"). "Standardseite wählen" als dritte, risikoarme
+    // Option NEU ergänzt (im Original gab es nur die beiden riskanteren Varianten),
+    // "Videostudium"/"Bauchgefühl" mit 1:1 identischem Flavor-Text übernommen.
+    condition: (p) => p.position === "TW",
+    build: () => ({
+      category: "taktik",
+      title: "Elfmeterheld gesucht",
+      description: "Im Elfmeterschießen eines wichtigen Pokalspiels liegt es an dir, dich früh für eine Ecke zu entscheiden - der nächste Versuch ist entscheidend.",
+      choices: buildTacticalCardChoices([
+        {
+          id: "standard",
+          label: "Standardseite wählen",
+          detail: "Auf die statistisch häufigere Seite setzen - sicher, aber vorhersehbar.",
+          risk: "low",
+          relevantAttributes: ["intelligenz"],
+          outcomes: [
+            { weight: 1, headline: "Richtig geraten!", type: "pos", text: "hat sich für die statistisch wahrscheinlichere Seite entschieden und den entscheidenden Elfmeter pariert.", effects: { reputation: 5, morale: 6 } },
+            { weight: 1, headline: "Falsche Seite", type: "neg", text: "hat sich für die Standardseite entschieden - der Schütze trifft auf die andere Seite.", effects: { morale: -3 } },
+          ],
+        },
+        {
+          id: "videostudium",
+          label: "Auf Videostudien der Schützen vertrauen",
+          detail: "Akribische Vorbereitung auf genau diesen Schützen.",
+          risk: "mid",
+          relevantAttributes: ["intelligenz"],
+          outcomes: [
+            {
+              weight: 1,
+              headline: "Perfekt vorbereitet!",
+              type: "pos",
+              text: "hat dank akribischer Vorbereitung den entscheidenden Elfmeter pariert und wird zum Helden.",
+              effects: { reputation: 7, morale: 8, attributes: { intelligenz: 1 } },
+            },
+            { weight: 1, headline: "Trotzdem chancenlos", type: "neg", text: "hat sich trotz Vorbereitung im entscheidenden Elfmeterschießen nicht auszeichnen können.", effects: { morale: -4 } },
+          ],
+        },
+        {
+          id: "bauchgefuehl",
+          label: "Aus dem Bauch heraus reagieren",
+          detail: "Keine Vorbereitung, volles Risiko auf den Reflex.",
+          risk: "high",
+          relevantAttributes: ["mentalitaet"],
+          outcomes: [
+            {
+              weight: 1,
+              headline: "Bauchgefühl bestätigt!",
+              type: "pos",
+              text: "hat rein aus dem Bauch heraus reagiert und einen spektakulären Reflex-Save gezeigt.",
+              effects: { reputation: 9, morale: 10, traitDeltas: { medienimage: 2 } },
+            },
+            { weight: 1, headline: "Komplett verschätzt", type: "neg", text: "hat sich im entscheidenden Elfmeterschießen komplett verschätzt.", effects: { morale: -6, clubRelation: -2 } },
+          ],
+        },
+      ]),
+      tactical: { displayMode: "cards" },
+    }),
+  },
 ];

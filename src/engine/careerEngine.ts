@@ -1217,7 +1217,8 @@ export function simulateSeason(
     const cleanSheetChancePerMatch = clamp(0.15 + (clubStrength - 50) / 180 + (savePercentage - 63) / 180, 0.05, 0.55);
     cleanSheets = Math.min(matches, Math.max(0, Math.round(matches * cleanSheetChancePerMatch * (0.75 + rng() * 0.5))));
     // Gehaltene Elfmeter im laufenden Ligaspiel (separat vom Elfmeterschießen-
-    // Event "torwart_elfmeterheld") - grob ein Elfmeter gegen den eigenen Kasten
+    // Event "taktik_cards_elfmeterschiessen_ecke", ehemals "torwart_elfmeterheld"
+    // - siehe tacticalEvents.ts) - grob ein Elfmeter gegen den eigenen Kasten
     // pro 9 Spiele, davon ein Teil gehalten je nach Paradenquote. Seltener
     // Bonusmoment, der Bewertung/Bekanntheit/Gehalt zusätzlich anhebt ("Elfmeter
     // gehalten als Boost").

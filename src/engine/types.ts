@@ -398,8 +398,9 @@ export interface SeasonStats {
   /** NUR für Torhüter relevant, sonst 0: Paradenquote dieser Saison in Prozent (0-100). */
   savePercentage: number;
   /** NUR für Torhüter relevant, sonst 0: im Ligaspiel gehaltene Elfmeter diese Saison
-   * (separat vom Elfmeterschießen-Event "torwart_elfmeterheld") - seltener Bonusmoment,
-   * der die Bewertung/Bekanntheit zusätzlich anhebt. */
+   * (separat vom Elfmeterschießen-Event "taktik_cards_elfmeterschiessen_ecke", ehemals
+   * "torwart_elfmeterheld" - siehe tacticalEvents.ts) - seltener Bonusmoment, der die
+   * Bewertung/Bekanntheit zusätzlich anhebt. */
   penaltiesSaved: number;
   /** NUR für Innen-/Außenverteidiger relevant, sonst 0: im letzten Moment verhinderte
    * Großchancen diese Saison (Grätsche auf der Linie, Klärung im Strafraum, entscheidender
