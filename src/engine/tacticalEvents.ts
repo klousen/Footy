@@ -277,7 +277,11 @@ const FLUEGEL_OPTIONS: TacticalOptionSpec[] = [
         weight: 1,
         headline: "Volltreffer!",
         type: "pos",
-        text: "hat die Flanke exakt auf den Kopf des Stürmers gebracht - Kopfballtor!",
+        // Bewusst als "beste Chance", nicht als sicheres Tor formuliert (siehe
+        // Nutzer-Rückfrage) - der tatsächliche Torabschluss liegt beim
+        // Mitspieler und wird erst am Saisonende separat gewürfelt
+        // (`simulateSeason`), der Text darf dem nicht vorgreifen.
+        text: "hat die Flanke exakt auf den Kopf des Stürmers gebracht - die beste Chance des Spiels!",
         effects: { reputation: 3, morale: 4, clubRelation: 1 },
       },
       {
@@ -321,9 +325,10 @@ const FLUEGEL_OPTIONS: TacticalOptionSpec[] = [
     outcomes: [
       {
         weight: 1,
-        headline: "Traumtor!",
+        headline: "Klasse Aktion!",
         type: "pos",
-        text: "ist selbst nach innen gezogen und hat platziert ins lange Eck getroffen!",
+        // Siehe Kommentar bei "cross" oben - kein literaler Torabschluss im Text.
+        text: "ist selbst nach innen gezogen und hat sich mit einem satten Schuss die beste Chance des Spiels herausgespielt!",
         effects: { reputation: 4, morale: 6 },
       },
       {
@@ -379,9 +384,10 @@ const LUECKE_OPTIONS: TacticalOptionSpec[] = [
     outcomes: [
       {
         weight: 1,
-        headline: "Traumvorlage!",
+        headline: "Traumpass!",
         type: "pos",
-        text: "hat den Steckpass exakt in den Lauf gespielt - Vorlage zum Tor!",
+        // Siehe Kommentar bei "cross" oben - kein literaler Torabschluss im Text.
+        text: "hat den Steckpass exakt in den Lauf gespielt - der Mitspieler taucht frei vor dem Torwart auf!",
         effects: { reputation: 3, morale: 5, clubRelation: 1 },
       },
       {
@@ -633,9 +639,10 @@ const LAUFWEG_OPTIONS: TacticalOptionSpec[] = [
     outcomes: [
       {
         weight: 1,
-        headline: "Am ersten Pfosten getroffen!",
+        headline: "Am ersten Pfosten aufgetaucht!",
         type: "pos",
-        text: "ist früh gestartet und hat am ersten Pfosten getroffen!",
+        // Siehe Kommentar bei "cross" oben - kein literaler Torabschluss im Text.
+        text: "ist früh gestartet und taucht völlig frei am ersten Pfosten auf - die beste Chance des Spiels!",
         effects: { reputation: 3, morale: 5 },
       },
       { weight: 1, headline: "Abseits gestanden", type: "neg", text: "ist zu früh losgelaufen und stand im Abseits.", effects: { morale: -2 } },
