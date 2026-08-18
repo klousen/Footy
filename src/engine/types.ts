@@ -681,6 +681,78 @@ export interface EventChoice {
   followUpChance?: { chance: number; success: EffectDelta; failure: EffectDelta };
   /** Strukturierte Angebots-Karten-Daten, siehe `OfferCardData`. */
   offerCard?: OfferCardData;
+  /**
+   * NUR gesetzt bei taktischen Taktiktafel-Entscheidungen (siehe `GameEvent.tactical`,
+   * "Handoff: Taktische Entscheidungs-Events") - additiv, fehlt bei allen bestehenden
+   * Choices unverändert. Wenn gesetzt, bleibt `effects` bewusst `{}` (leer): der
+   * tatsächliche Effekt wird erst zur Laufzeit von `resolveTacticalOutcome`
+   * (tacticalEvents.ts) anhand des attributsensitiv gewürfelten Outcomes bestimmt -
+   * ein zweiter, eigenständiger Auflösungspfad NEBEN `followUpChance`, der diesen
+   * NICHT verändert oder ersetzt (siehe Kommentar dort).
+   */
+  tacticalOption?: TacticalOption;
+}
+
+/** Grundcharakter einer taktischen Option (Ampel-Risiko, siehe `TacticalOption`). */
+export type TacticalRisk = "low" | "mid" | "high";
+
+/**
+ * EIN möglicher Ausgang einer `TacticalOption`. Reihenfolge im `outcomes`-Array ist
+ * bewusst BEDEUTUNGSTRAGEND (siehe `resolveTacticalOutcome`): `outcomes[0]` gilt
+ * per Konvention immer als das anzustrebende/beste Ergebnis dieser Option - dessen
+ * Eintrittswahrscheinlichkeit wird von der attributsensitiven `successChance`
+ * gesteuert, alle weiteren Outcomes teilen sich den Rest proportional zu `weight`.
+ * `type` steuert NUR die Anzeige (Kopfzeilen-Farbe/Feedback-Icon), nicht die
+ * Auswahllogik - siehe Kommentar in `resolveTacticalOutcome`.
+ */
+export interface TacticalOutcome {
+  /** Relatives Gewicht unter den NICHT-besten Outcomes (Index 0 ausgenommen, siehe oben). */
+  weight: number;
+  headline: string;
+  type: "pos" | "neg" | "neutral";
+  /** Wird 1:1 wie bei bestehenden Events als `EffectDelta.logText` verwendet
+   * (`${player.name} ${text}`) - daher dritte Person, Perfekt, siehe bestehende
+   * `taktik_*`-Events in events.ts als Stilvorbild. */
+  text: string;
+  /** Wiederverwendet exakt das bestehende Effekt-/Feedback-Modell (siehe
+   * `summarizeEffects`) statt eines eigenen Delta-Anzeigeformats - `logText`/
+   * `logKind` werden von `resolveTacticalOutcome` automatisch aus `text`/`type`
+   * ergänzt, hier nicht selbst setzen. */
+  effects: EffectDelta;
+}
+
+/** Eine Option auf der Taktiktafel bzw. Card-Liste, siehe `EventChoice.tacticalOption`. */
+export interface TacticalOption {
+  risk: TacticalRisk;
+  /** 1-2 Attribute, treiben die `successChance`-Berechnung (siehe `resolveTacticalOutcome`).
+   * BEWUSST auf die 6 groben `AttributeKey`-Werte beschränkt (kein neues, feingranulares
+   * Attributsystem - siehe Handoff-Korrektur zu `PlayerAttributes`). */
+  relevantAttributes: AttributeKey[];
+  outcomes: TacticalOutcome[];
+  /** SVG-Pfad des Kreide-Pfeils auf der Taktiktafel, siehe `TacticalBoardTemplate`. */
+  boardPath: string;
+  /** Label-Position auf dem Pfeil (siehe `boardPath`). */
+  boardTagPos: [number, number];
+}
+
+/** Ein Spieler-Marker auf der Taktiktafel (siehe `TacticalBoardTemplate`/`GameEvent.tactical`). */
+export interface TacticalBoardPlayer {
+  x: number;
+  y: number;
+  type: "self" | "team" | "opp";
+  label?: string;
+}
+
+/**
+ * Eine handkuratierte Formation für ein `board`-Event (siehe Handoff §3
+ * "Varianz-System") - `optionPaths` ordnet jeder `EventChoice.id` dieses Events
+ * den zu dieser Formation passenden Pfeil-Pfad zu (Pfad/Text/Risiko können
+ * zwischen Templates variieren, kein reines Koordinaten-Reskinning).
+ */
+export interface TacticalBoardTemplate {
+  name: string;
+  players: TacticalBoardPlayer[];
+  optionPaths: Record<string, { path: string; tagPos: [number, number] }>;
 }
 
 export type EventCategory =
@@ -705,6 +777,21 @@ export interface GameEvent {
   title: string;
   description: string;
   choices: EventChoice[];
+  /**
+   * NUR gesetzt bei taktischen Taktiktafel-Events (siehe `EventChoice.tacticalOption`,
+   * "Handoff: Taktische Entscheidungs-Events") - additiv, fehlt bei allen bestehenden
+   * Events unverändert (`EventCard` fällt dann auf die klassische Choice-Liste zurück,
+   * exakt wie heute). Aktuell nur `displayMode: 'board'` implementiert (Welle 1/2 aus
+   * dem Handoff) - die `'cards'`-Variante (Welle 3) ist bewusst noch nicht gebaut, um
+   * kein ungenutztes Gerüst vorzuhalten; wird bei Bedarf als eigener Wert ergänzt.
+   * `players` ist bereits die für DIESE Ziehung final gewählte Variante (Template +
+   * Spiegelung + Jitter, siehe `pickTacticalVariant` in tacticalEvents.ts).
+   */
+  tactical?: {
+    displayMode: "board";
+    goalPosition: "top" | "bottom";
+    players: TacticalBoardPlayer[];
+  };
 }
 
 export interface EventTemplate {

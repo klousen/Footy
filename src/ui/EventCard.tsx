@@ -1,6 +1,7 @@
 import type { ChoiceFeedback, EventChoice, GameEvent, OfferCardData, Player } from "../engine/types";
 import { isClubOfferEvent } from "../engine/careerEngine";
 import { CATEGORY_LABEL, formatMoney } from "./labels";
+import { TacticalBoard } from "./TacticalBoard";
 
 const KIND_ICON: Record<string, string> = {
   info: "ℹ️",
@@ -32,6 +33,13 @@ export function EventCard({
   // Label/Detail-Darstellung zurück.
   const isOffer = isClubOfferEvent(event.templateId);
   const showOfferCards = isOffer && !feedback && event.choices.some((c) => c.offerCard);
+  // Taktische Taktiktafel-Events (siehe `GameEvent.tactical`, "Handoff: Taktische
+  // Entscheidungs-Events") - derselbe additive Zweig-Aufbau wie `showOfferCards`
+  // oben: NUR solange noch keine Entscheidung gefallen ist, danach fällt der Code
+  // ganz normal auf den klassischen Zweig samt bestehendem `.feedback-panel`
+  // zurück (siehe Handoff §7 "Ergebnis-Screen folgt 1:1 dem bestehenden
+  // Sofort-Feedback-Muster" - kein eigener Ergebnisbildschirm gebaut).
+  const showTacticalBoard = !!event.tactical && !feedback && event.choices.some((c) => c.tacticalOption);
 
   return (
     <div className="screen event-screen">
@@ -72,7 +80,9 @@ export function EventCard({
           <h2>{event.title}</h2>
           <p>{event.description}</p>
 
-          {!feedback && (
+          {showTacticalBoard && <TacticalBoard event={event} onChoose={onChoose} />}
+
+          {!showTacticalBoard && !feedback && (
             <div className="event-choices">
               {event.choices.map((choice) => (
                 <button key={choice.id} className="choice-btn" onClick={() => onChoose(choice)}>

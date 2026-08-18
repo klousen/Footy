@@ -10,6 +10,11 @@ import { ATTRIBUTE_LABEL, formatMoney } from "./labels";
 // importierbar (siehe Vorgabe "Investments können zusätzlich aus passenden
 // Events heraus angeboten werden").
 import { availableInvestmentIds, investmentCost } from "./investments";
+// Taktische Taktiktafel-Events (siehe "Handoff: Taktische Entscheidungs-Events") -
+// bewusst additiv per `.concat(...)` unten angehängt, nicht in dieses riesige
+// Literal-Array gemischt, damit das Feature durch Entfernen dieser Zeile + des
+// `.concat(...)`-Aufrufs vollständig und ohne Kollateralschaden entfernbar bleibt.
+import { TACTICAL_EVENT_TEMPLATES } from "./tacticalEvents";
 
 /** Sommerpause-Event (siehe Template weiter unten) - wird NIE über die normale
  * Gewichtungs-Auswahl gezogen, sondern von App.tsx `handleStartSeason` explizit
@@ -7331,6 +7336,12 @@ export const EVENT_TEMPLATES: EventTemplate[] = [
     }),
   },
 ];
+
+// Additiv angehängt statt in die Literal-Liste oben gemischt (siehe Kommentar beim
+// Import oben) - bewusst `.push(...)` statt `.concat(...)`, weil `.concat()` auf
+// dem riesigen Array-Literal dessen kontextuelle Typisierung (`EventCategory` statt
+// `string` je Eintrag) durchbricht und hunderte Falschmeldungen erzeugt.
+EVENT_TEMPLATES.push(...TACTICAL_EVENT_TEMPLATES);
 
 export function getTemplateById(id: string): EventTemplate | undefined {
   return EVENT_TEMPLATES.find((t) => t.id === id);
