@@ -64,6 +64,9 @@ let careersWithTacticalGoals = 0;
 let totalTacticalGoals = 0;
 let totalTacticalAssists = 0;
 let totalTacticalDraws = 0;
+let totalSeasons = 0;
+let totalEventsDrawn = 0;
+const drawsByTemplateId: Record<string, number> = {};
 const careerGoalsByPosition: Record<Position, number[]> = {} as any;
 const careerTacticalGoalShareByPosition: Record<Position, number[]> = {} as any;
 for (const pos of POSITIONS) {
@@ -92,6 +95,7 @@ for (let c = 0; c < NUM_CAREERS; c++) {
     player.attributesAtSeasonStart = { ...player.attributes };
     player.traitsAtSeasonStart = { ...player.traits };
     seasonNumber++;
+    totalSeasons++;
 
     let ids = pickSeasonTemplateIds(player, usedTemplateIds, recentTemplateSeasons, seasonNumber);
     for (const storyId of dueStorylineTemplateIds(player, seasonNumber)) {
@@ -107,7 +111,9 @@ for (let c = 0; c < NUM_CAREERS; c++) {
     for (const id of ids) {
       const event = buildEventFromId(id, player, league, foreignLeagues);
       if (event.choices.length === 0) continue;
+      totalEventsDrawn++;
       const choice = pickRandom(event.choices);
+      if (event.tactical) drawsByTemplateId[event.templateId] = (drawsByTemplateId[event.templateId] ?? 0) + 1;
       if (isClubOfferEvent(event.templateId)) {
         applyClubOfferChoice(player, league, event, choice.id, foreignLeagues);
         continue;
@@ -157,6 +163,20 @@ for (let c = 0; c < NUM_CAREERS; c++) {
 }
 
 console.log(`\n=== ${NUM_CAREERS} vollständige Karrieren simuliert (Taktik-Events aktiv) ===\n`);
+
+console.log("--- Frage 0: Wie oft kommen die taktischen Board-Events überhaupt vor? ---");
+console.log(`  Simulierte Saisons insgesamt: ${totalSeasons} (Ø ${(totalSeasons / NUM_CAREERS).toFixed(1)} Saisons/Karriere)`);
+console.log(`  Events insgesamt gezogen (alle Kategorien): ${totalEventsDrawn} (Ø ${(totalEventsDrawn / totalSeasons).toFixed(2)}/Saison)`);
+console.log(
+  `  Davon taktische Board-Events (Kondition erfüllt): ${totalTacticalDraws} (${((totalTacticalDraws / totalEventsDrawn) * 100).toFixed(1)}% aller Events, Ø ${(
+    totalTacticalDraws / NUM_CAREERS
+  ).toFixed(2)}/Karriere, Ø ${(totalTacticalDraws / totalSeasons).toFixed(3)}/Saison)`
+);
+console.log("\n  Pro Event-Template:");
+for (const [id, n] of Object.entries(drawsByTemplateId).sort((a, b) => b[1] - a[1])) {
+  console.log(`    ${id.padEnd(38)} ${String(n).padStart(5)}  (Ø ${(n / NUM_CAREERS).toFixed(2)}/Karriere)`);
+}
+console.log("");
 
 console.log("--- Frage 1: successChance-Streuung nach Gesamtstärke ---");
 console.log(`(insgesamt ${totalTacticalDraws} taktische Entscheidungen gezogen)\n`);
