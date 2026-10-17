@@ -965,6 +965,219 @@ input:focus {
   color: var(--muted);
 }
 
+/* ---------------- Taktiktafel (siehe Handoff: Taktische Entscheidungs-Events) ----------------
+   Komplett additiver Block, betrifft nur die tactical Klassen unten (siehe TacticalBoard.tsx),
+   keine bestehende Klasse wird hier veraendert. Entfernbar durch Loeschen dieses Blocks plus
+   der Komponente, ohne andere Styles zu beruehren. Farb-Tokens wiederverwenden die Variablen
+   oben (bg-deep, bg-app, gold, chalk, muted, green, red, line, radius). Nur die Rasenfarben
+   sind neu, weil es dafuer noch keine bestehenden Tokens gibt, und bewusst auf tactical-board
+   beschraenkt statt global in root zu wandern. */
+
+/* Card-Liste-Variante (siehe Handoff §6b, Welle 3, `TacticalCards.tsx`) - reine
+   Options-Liste + Bestätigen-Button, kein Spielfeld. Nutzt bewusst dieselben
+   `.tactical-option-*`/`.tactical-confirm-btn`-Klassen wie `.tactical-board`
+   unten (siehe dort), nur ohne Board-spezifische Elemente. */
+.tactical-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 6px;
+}
+
+.tactical-board {
+  --tb-grass-dark: #0c2117;
+  --tb-grass-light: #102a1d;
+  --tb-white-lines: rgba(232, 228, 216, 0.85);
+  --tb-goal-net: rgba(232, 228, 216, 0.45);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 6px;
+}
+
+.tactical-board-label {
+  display: flex;
+  justify-content: space-between;
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+  text-transform: uppercase;
+}
+
+.tactical-board-hint {
+  color: var(--gold);
+  opacity: 0.9;
+}
+
+.tactical-board-frame {
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  padding: 3px;
+  background: var(--bg-app);
+}
+
+.tactical-board-svg {
+  width: 100%;
+  height: auto;
+  display: block;
+  max-height: 54vh;
+  border-radius: 2px;
+}
+
+.tactical-player {
+  fill: var(--bg-panel);
+  stroke: var(--chalk);
+  stroke-width: 1.8;
+}
+
+.tactical-player.self {
+  stroke: var(--gold);
+}
+
+.tactical-player.opp {
+  stroke: var(--red);
+  opacity: 0.85;
+}
+
+.tactical-player-num {
+  font-family: var(--font-mono);
+  font-weight: 600;
+  font-size: 8px;
+  fill: var(--chalk);
+  text-anchor: middle;
+  dominant-baseline: central;
+  pointer-events: none;
+}
+
+.tactical-player-num.self {
+  fill: var(--gold);
+}
+
+.tactical-player-num.opp {
+  fill: var(--red);
+  opacity: 0.95;
+}
+
+.tactical-arrow {
+  fill: none;
+  stroke-width: 2.5;
+  cursor: pointer;
+  stroke-linecap: round;
+  stroke-dasharray: 1 7;
+  opacity: 0.65;
+  transition: opacity 0.15s ease, stroke-width 0.15s ease;
+}
+
+.tactical-arrow:hover {
+  opacity: 0.9;
+}
+
+.tactical-arrow.selected {
+  opacity: 1;
+  stroke-width: 3;
+  stroke-dasharray: none;
+}
+
+.tactical-arrow.risk-low {
+  stroke: var(--green);
+}
+
+.tactical-arrow.risk-mid {
+  stroke: var(--gold);
+}
+
+.tactical-arrow.risk-high {
+  stroke: var(--red);
+}
+
+.tactical-options-list {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.tactical-option-row {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  background: var(--bg-deep);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 9px 11px;
+  cursor: pointer;
+  text-align: left;
+  color: var(--chalk);
+  transition: border-color 0.15s ease, background-color 0.15s ease;
+}
+
+.tactical-option-row:hover {
+  border-color: rgba(201, 162, 39, 0.4);
+}
+
+.tactical-option-row.selected {
+  border-color: var(--gold);
+  background: rgba(201, 162, 39, 0.09);
+}
+
+.tactical-option-swatch {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.tactical-option-swatch.risk-low {
+  background: var(--green);
+}
+
+.tactical-option-swatch.risk-mid {
+  background: var(--gold);
+}
+
+.tactical-option-swatch.risk-high {
+  background: var(--red);
+}
+
+.tactical-option-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.tactical-option-label {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 0.95rem;
+  line-height: 1.2;
+}
+
+.tactical-option-desc {
+  font-size: 0.75rem;
+  color: var(--muted);
+  margin-top: 1px;
+}
+
+.tactical-option-attrs {
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  color: var(--gold);
+  opacity: 0.75;
+  white-space: nowrap;
+}
+
+.tactical-confirm-btn {
+  width: 100%;
+  opacity: 0.4;
+  pointer-events: none;
+}
+
+.tactical-confirm-btn.enabled {
+  opacity: 1;
+  pointer-events: auto;
+}
+
 /* ---------------- Feedback panel ---------------- */
 
 .feedback-panel {

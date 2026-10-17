@@ -54,6 +54,7 @@ import {
   summarizeEffects,
 } from "./engine/careerEngine";
 import { LOAN_DECISION_TEMPLATE_IDS } from "./engine/loanStory";
+import { resolveTacticalOutcome } from "./engine/tacticalEvents";
 import { activateInvestment } from "./engine/investments";
 import type { PersonalInvestmentId } from "./engine/types";
 import { HOMECOMING_TEMPLATE_ID, VACATION_TEMPLATE_ID } from "./engine/events";
@@ -487,7 +488,15 @@ export default function App() {
           // Nutzer-Feedback) - die Vorher-/Nachher-Werte selbst stehen ohnehin schon im
           // Dashboard/der Saisonbilanz, hier zählt nur der Sprung dieser Entscheidung.
           const before = overallRating(player);
-          const effects = applyChoice(game, choice);
+          // Taktische Taktiktafel-Entscheidungen (siehe `EventChoice.tacticalOption`,
+          // "Handoff: Taktische Entscheidungs-Events") lösen ihren Effekt über einen
+          // eigenen, attributsensitiven Pfad auf - NICHT über `choice.effects`/
+          // `followUpChance` (die bleiben für diese Choices bewusst leer). Das
+          // Ergebnis wird als normaler `EffectDelta` in `applyChoice` eingespeist,
+          // damit Clamping/Skalierung/Feedback-Text 1:1 wie bei jedem anderen Event
+          // laufen - `applyChoice` selbst bleibt dafür unverändert.
+          const tactical = choice.tacticalOption ? resolveTacticalOutcome(player, choice.tacticalOption, rng) : null;
+          const effects = applyChoice(game, tactical ? { ...choice, effects: tactical.effects } : choice);
           const after = overallRating(player);
           const deltaLines = summarizeEffects(effects, player);
           if (after !== before) {

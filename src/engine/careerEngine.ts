@@ -274,6 +274,8 @@ export function createPlayer(
       developmentTrajectory,
       productionReliability,
       morale: 70,
+      pendingSeasonGoals: 0,
+      pendingSeasonAssists: 0,
       fitness: 90,
       reputation: 2,
       wealth: 200,
@@ -775,6 +777,11 @@ function applyEffects(player: Player, effects: EventChoice["effects"], season: n
     }
   }
   if (effects.morale) player.morale = clamp(player.morale + effects.morale, 0, 100);
+  // Siehe `Player.pendingSeasonGoals`/`-Assists` - erst am Saisonende in `simulateSeason`
+  // eingerechnet, bewusst kein sofortiger Effekt auf eine (nicht existierende) laufende
+  // Saisonstatistik.
+  if (effects.matchGoalDelta) player.pendingSeasonGoals += effects.matchGoalDelta;
+  if (effects.matchAssistDelta) player.pendingSeasonAssists += effects.matchAssistDelta;
   if (effects.fitness) player.fitness = clamp(player.fitness + effects.fitness, 0, 100);
   if (effects.reputation) player.reputation = clamp(player.reputation + effects.reputation, 0, 100);
   if (effects.wealth) player.wealth = Math.max(0, player.wealth + effects.wealth);
@@ -1173,8 +1180,20 @@ export function simulateSeason(
   // zusätzlich um den bereits durch sie geprägten Erwartungswert.
   const attackFormSpread = 0.3 + attackWeight * 0.5; // TW ~0.31 (kaum Streuung) .. ST 0.8 (echte Bock-/Flop-Saisons)
   const attackFormMultiplier = 1 - attackFormSpread / 2 + rng() * attackFormSpread;
-  const goals = Math.min(goalCap, Math.max(0, Math.round(matches * goalChancePerMatch * attackFormMultiplier)));
-  const assists = Math.max(0, Math.round(matches * assistChancePerMatch * attackFormMultiplier));
+  const simulatedGoals = Math.min(goalCap, Math.max(0, Math.round(matches * goalChancePerMatch * attackFormMultiplier)));
+  const simulatedAssists = Math.max(0, Math.round(matches * assistChancePerMatch * attackFormMultiplier));
+  // Taktische Board-Events (siehe tacticalEvents.ts) können bei bestimmten Outcomes ein
+  // im Text EXPLIZIT beschriebenes Tor/eine Vorlage vergeben - `player.pendingSeasonGoals`/
+  // `-Assists` sammeln das während der Saison (siehe `applyEffects`), hier fließt es in
+  // die Saisonstatistik ein. KEIN Doppelzählungs-Risiko: die Formel oben bildet die
+  // "normale" Spielproduktion ab, dies sind bewusst ZUSÄTZLICHE Treffer aus einer
+  // konkreten, riskanten Entscheidung heraus - der eigentliche "Payoff" dieser Events.
+  // Weiterhin an `goalCap` gedeckelt, damit die Positionsobergrenze (siehe oben) nicht
+  // durch gehäufte Tor-Events durchbrochen werden kann.
+  const goals = Math.min(goalCap, simulatedGoals + player.pendingSeasonGoals);
+  const assists = simulatedAssists + player.pendingSeasonAssists;
+  player.pendingSeasonGoals = 0;
+  player.pendingSeasonAssists = 0;
 
   const form = (player.morale - 50) / 100; // -0.5 .. 0.5
 
@@ -1198,7 +1217,8 @@ export function simulateSeason(
     const cleanSheetChancePerMatch = clamp(0.15 + (clubStrength - 50) / 180 + (savePercentage - 63) / 180, 0.05, 0.55);
     cleanSheets = Math.min(matches, Math.max(0, Math.round(matches * cleanSheetChancePerMatch * (0.75 + rng() * 0.5))));
     // Gehaltene Elfmeter im laufenden Ligaspiel (separat vom Elfmeterschießen-
-    // Event "torwart_elfmeterheld") - grob ein Elfmeter gegen den eigenen Kasten
+    // Event "taktik_cards_elfmeterschiessen_ecke", ehemals "torwart_elfmeterheld"
+    // - siehe tacticalEvents.ts) - grob ein Elfmeter gegen den eigenen Kasten
     // pro 9 Spiele, davon ein Teil gehalten je nach Paradenquote. Seltener
     // Bonusmoment, der Bewertung/Bekanntheit/Gehalt zusätzlich anhebt ("Elfmeter
     // gehalten als Boost").

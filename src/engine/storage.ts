@@ -59,6 +59,11 @@ function writeRaw(key: string, value: unknown): void {
  * für alle bestehenden Slots nachgezogen werden. */
 function normalizeGameState(state: GameState): GameState {
   if (state.player) {
+    // Ältere Spielstände kennen die taktischen Board-Events noch nicht (siehe
+    // `Player.pendingSeasonGoals`/`-Assists`) - 0 als neutraler Startwert, kein
+    // rückwirkendes Nacherfinden vergangener Torabschlüsse.
+    state.player.pendingSeasonGoals ??= 0;
+    state.player.pendingSeasonAssists ??= 0;
     state.player.activeStorylines ??= [];
     state.player.completedStorylines ??= [];
     state.player.trainingBoostSeasons ??= 0;
