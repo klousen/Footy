@@ -1,0 +1,19 @@
+:root { --bg:#0f172a; --card:#1e293b; --muted:#94a3b8; --text:#e2e8f0; --green:#22c55e; --red:#ef4444; --amber:#f59e0b; --line:#334155; }
+* { box-sizing: border-box; }
+body { margin:0; background:var(--bg); color:var(--text); font:15px/1.45 system-ui,-apple-system,Segoe UI,Roboto,sans-serif; }
+main { max-width:860px; margin:0 auto; padding:16px; }
+h1 { font-size:20px; margin:4px 0 12px; } h2 { font-size:16px; margin:24px 0 8px; color:var(--muted); text-transform:uppercase; letter-spacing:.04em; }
+.kpis { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:8px; }
+.kpi, .card { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:12px; }
+.kpi small { color:var(--muted); display:block; } .kpi b { font-size:18px; }
+.card { margin-bottom:10px; } .card header { display:flex; justify-content:space-between; gap:8px; align-items:baseline; }
+.tag { font-size:12px; padding:2px 8px; border-radius:999px; font-weight:600; }
+.BUY { background:#14532d; color:#bbf7d0; } .SELL { background:#7f1d1d; color:#fecaca; }
+.muted { color:var(--muted); font-size:13px; } ul { margin:6px 0; padding-left:18px; } li { font-size:13px; }
+.actions { display:flex; gap:8px; margin-top:8px; } form { margin:0; }
+button { border:0; border-radius:8px; padding:9px 14px; font-weight:600; font-size:14px; cursor:pointer; }
+.ok { background:var(--green); color:#052e16; } .no { background:#475569; color:#fff; } .ghost { background:transparent; color:var(--text); border:1px solid var(--line); }
+table { width:100%; border-collapse:collapse; font-size:13px; } th, td { text-align:left; padding:6px 4px; border-bottom:1px solid var(--line); white-space:nowrap; }
+th { color:var(--muted); font-weight:500; } .scroll { overflow-x:auto; }
+.pos { color:var(--green); } .neg { color:var(--red); } .warn { color:var(--amber); font-size:13px; }
+input { width:100%; padding:10px; border-radius:8px; border:1px solid var(--line); background:var(--card); color:var(--text); font-size:15px; }
